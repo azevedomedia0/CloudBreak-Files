@@ -155,7 +155,6 @@ export interface PhotoAdjustments {
 
 export type VideoConvertFormat =
   | 'mp4'
-  | 'mov'
   | 'mkv'
   | 'avi'
   | 'webm'
@@ -178,7 +177,6 @@ export function convertFormatMime(format: VideoConvertFormat): string {
     case 'aac': return 'audio/aac';
     case 'wav': return 'audio/wav';
     case 'flac': return 'audio/flac';
-    case 'mov': return 'video/quicktime';
     case 'mkv': return 'video/x-matroska';
     case 'avi': return 'video/x-msvideo';
     case 'webm': return 'video/webm';
