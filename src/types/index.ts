@@ -157,7 +157,6 @@ export type VideoConvertFormat =
   | 'mp4'
   | 'mkv'
   | 'avi'
-  | 'webm'
   | 'gif'
   | 'mp3'
   | 'aac'
@@ -179,7 +178,6 @@ export function convertFormatMime(format: VideoConvertFormat): string {
     case 'flac': return 'audio/flac';
     case 'mkv': return 'video/x-matroska';
     case 'avi': return 'video/x-msvideo';
-    case 'webm': return 'video/webm';
     default: return `video/${format}`;
   }
 }

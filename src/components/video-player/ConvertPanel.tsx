@@ -91,7 +91,6 @@ export const ConvertPanel: React.FC<ConvertPanelProps> = ({
           {[
             { id: 'mp4', label: 'MP4 (H.264 / AAC)', desc: 'Universal Cinema' },
             { id: 'mkv', label: 'MKV (H.264)', desc: 'Archive' },
-            { id: 'webm', label: 'WebM (VP9 / Opus)', desc: 'Optimized Web' },
             { id: 'avi', label: 'AVI (MPEG-4)', desc: 'Legacy Playback' },
             { id: 'gif', label: 'Animated GIF', desc: 'Loop Preview' },
             { id: 'mp3', label: 'MP3 / Audio Only', desc: 'Audio Track' },
