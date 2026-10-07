@@ -65,6 +65,8 @@ export interface FileItem {
   version: number;
   /** Set for files that live on a network share (its name) or a removable device (its id) instead of a cloud account. */
   sourceId?: string;
+  /** Plain text, or HTML for a rich document, edited in the document editor. */
+  documentBody?: string;
 }
 
 export interface FolderItem {

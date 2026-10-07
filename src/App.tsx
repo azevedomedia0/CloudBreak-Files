@@ -75,6 +75,7 @@ export default function App() {
   // Modals & Panels
   const [isQuickLookOpen, setIsQuickLookOpen] = useState<boolean>(false);
   const [editingPhotoFile, setEditingPhotoFile] = useState<FileItem | null>(null);
+  const [editingDocumentFile, setEditingDocumentFile] = useState<FileItem | null>(null);
   const [playingVideoFile, setPlayingVideoFile] = useState<FileItem | null>(null);
   const [videoPlayerInitialTab, setVideoPlayerInitialTab] = useState<'player' | 'trim' | 'convert'>('player');
   const [sharingLibrary, setSharingLibrary] = useState<SharedLibrary | null>(null);
@@ -112,7 +113,7 @@ export default function App() {
   };
 
   useGlobalShortcuts({
-    canQuickLook: !!selectedFileId && !editingPhotoFile && !playingVideoFile && !sharingLibrary,
+    canQuickLook: !!selectedFileId && !editingPhotoFile && !editingDocumentFile && !playingVideoFile && !sharingLibrary,
     onToggleSidebar: () => setIsSidebarCollapsed(prev => !prev),
     onToggleQuickLook: () => setIsQuickLookOpen(prev => !prev),
   });
@@ -265,7 +266,7 @@ export default function App() {
 
   const {
     isDraggingOver,
-    handleSavePhotoVersion, handleSaveTrimmedVideo, handleToggleEncrypt, handleDeleteFile,
+    handleSavePhotoVersion, handleSaveDocument, handleSaveTrimmedVideo, handleToggleEncrypt, handleDeleteFile,
     handleBatchEncrypt, handleBatchDelete, handleUploadFiles, handleDragOver, handleDragLeave, handleDrop,
   } = useFileActions({ setFiles, selectedFileId, setSelectedFileId, selectedAccountId, selectedFolder, showToast });
 
@@ -431,6 +432,7 @@ export default function App() {
               viewMode={viewMode}
               onSelectFile={file => setSelectedFileId(file.id)}
               onEditPhoto={file => setEditingPhotoFile(file)}
+              onOpenDocument={file => setEditingDocumentFile(file)}
               onOpenVideo={file => setPlayingVideoFile(file)}
               onShareFile={file => {
                 const firstLib = sharedLibraries[0];
@@ -468,6 +470,7 @@ export default function App() {
                 isOpen={true}
                 onClose={() => setIsInspectorOpen(false)}
                 onEditPhoto={file => setEditingPhotoFile(file)}
+                onOpenDocument={file => setEditingDocumentFile(file)}
                 onOpenVideo={(file, tab) => {
                   setPlayingVideoFile(file);
                   if (tab) setVideoPlayerInitialTab(tab);
@@ -498,6 +501,9 @@ export default function App() {
         sharedLibraries={sharedLibraries}
         setSharingLibrary={setSharingLibrary}
         editingPhotoFile={editingPhotoFile}
+        editingDocumentFile={editingDocumentFile}
+        setEditingDocumentFile={setEditingDocumentFile}
+        handleSaveDocument={handleSaveDocument}
         handleSavePhotoVersion={handleSavePhotoVersion}
         playingVideoFile={playingVideoFile}
         handleSaveTrimmedVideo={handleSaveTrimmedVideo}

@@ -3,6 +3,7 @@ import { CloudAccount, CloudProviderId, FileItem, FolderItem, SharedLibrary } fr
 import { QuickLookModal } from './QuickLookModal';
 import { PhotoNav } from './PhotoNavArrows';
 import { PhotoEditorModal } from './PhotoEditorModal';
+import { DocumentEditorModal } from './document-editor/DocumentEditorModal';
 import { VideoPlayerModal } from './VideoPlayerModal';
 import { ShareLibraryModal } from './ShareLibraryModal';
 import { VaultSecurityModal } from './VaultSecurityModal';
@@ -23,6 +24,9 @@ export interface AppModalsProps {
   sharedLibraries: SharedLibrary[];
   setSharingLibrary: (library: SharedLibrary | null) => void;
   editingPhotoFile: FileItem | null;
+  editingDocumentFile: FileItem | null;
+  setEditingDocumentFile: (file: FileItem | null) => void;
+  handleSaveDocument: (file: FileItem) => void;
   handleSavePhotoVersion: (file: FileItem, dataUrl: string) => void;
   playingVideoFile: FileItem | null;
   handleSaveTrimmedVideo: (file: FileItem) => void;
@@ -79,6 +83,9 @@ export const AppModals: React.FC<AppModalsProps> = ({
   sharedLibraries,
   setSharingLibrary,
   editingPhotoFile,
+  editingDocumentFile,
+  setEditingDocumentFile,
+  handleSaveDocument,
   handleSavePhotoVersion,
   playingVideoFile,
   handleSaveTrimmedVideo,
@@ -129,6 +136,10 @@ export const AppModals: React.FC<AppModalsProps> = ({
     isOpen={isQuickLookOpen}
     onClose={() => setIsQuickLookOpen(false)}
     onEditPhoto={file => setEditingPhotoFile(file)}
+    onOpenDocument={file => {
+      setIsQuickLookOpen(false);
+      setEditingDocumentFile(file);
+    }}
     onOpenVideo={file => setPlayingVideoFile(file)}
     onShare={file => {
       const firstLib = sharedLibraries[0];
@@ -144,6 +155,19 @@ export const AppModals: React.FC<AppModalsProps> = ({
       isOpen={true}
       onClose={() => setEditingPhotoFile(null)}
       onSaveAsVersion={handleSavePhotoVersion}
+    />
+  )}
+
+  {editingDocumentFile && (
+    <DocumentEditorModal
+      key={editingDocumentFile.id}
+      file={editingDocumentFile}
+      isOpen={true}
+      onClose={() => setEditingDocumentFile(null)}
+      onSave={updated => {
+        handleSaveDocument(updated);
+        setEditingDocumentFile(updated);
+      }}
     />
   )}
 

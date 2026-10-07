@@ -1,6 +1,7 @@
 import React from 'react';
 import { ShieldCheck, Edit3, Scissors, Play, CheckSquare, Square } from 'lucide-react';
 import { FileItem } from '../../types';
+import { isEditableDocument } from '../../utils/documentKind';
 import { FileThumbnail } from './FileThumbnail';
 import { SelectionAccent, SELECTION_CLASSES } from '../../utils/selectionAccent';
 import { formatBytes, formatTimecode } from '../../utils/format';
@@ -13,12 +14,13 @@ export interface IconsViewProps {
   iconScale: number;
   onSelectFile: (file: FileItem) => void;
   onEditPhoto: (file: FileItem) => void;
+  onOpenDocument: (file: FileItem) => void;
   onOpenVideo: (file: FileItem) => void;
   onOpenQuickLook: () => void;
   toggleSelectOne: (id: string, e: React.MouseEvent) => void;
 }
 
-export const IconsView: React.FC<IconsViewProps> = ({ accent, files, selectedFileId, selectedIds, iconScale, onSelectFile, onEditPhoto, onOpenVideo, onOpenQuickLook, toggleSelectOne }) => (
+export const IconsView: React.FC<IconsViewProps> = ({ accent, files, selectedFileId, selectedIds, iconScale, onSelectFile, onEditPhoto, onOpenDocument, onOpenVideo, onOpenQuickLook, toggleSelectOne }) => (
     <div 
       className="grid gap-4"
       style={{
@@ -36,6 +38,7 @@ export const IconsView: React.FC<IconsViewProps> = ({ accent, files, selectedFil
             onDoubleClick={() => {
               if (file.category === 'photo') onEditPhoto(file);
               else if (file.category === 'video') onOpenVideo(file);
+              else if (isEditableDocument(file)) onOpenDocument(file);
               else onOpenQuickLook();
             }}
             className={`group relative rounded-xl p-2 transition-all cursor-pointer ${
@@ -86,6 +89,18 @@ export const IconsView: React.FC<IconsViewProps> = ({ accent, files, selectedFil
                     }}
                     className="p-1 rounded-md bg-cyan-400 hover:bg-cyan-300 text-neutral-950 shadow-md font-bold"
                     title="Open Photo Studio"
+                  >
+                    <Edit3 className="w-3 h-3" />
+                  </button>
+                )}
+                {isEditableDocument(file) && (
+                  <button
+                    onClick={e => {
+                      e.stopPropagation();
+                      onOpenDocument(file);
+                    }}
+                    className="p-1 rounded-md bg-[#0060df] hover:bg-[#0250bb] text-white shadow-md font-bold"
+                    title="Edit document"
                   >
                     <Edit3 className="w-3 h-3" />
                   </button>

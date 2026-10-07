@@ -1,6 +1,7 @@
 import React from 'react';
 import { Edit3, Scissors } from 'lucide-react';
 import { FileItem } from '../../types';
+import { isEditableDocument } from '../../utils/documentKind';
 import { SelectionAccent, SELECTION_CLASSES } from '../../utils/selectionAccent';
 import { FileThumbnail } from './FileThumbnail';
 
@@ -10,10 +11,11 @@ export interface GalleryViewProps {
   selectedFile: FileItem;
   onSelectFile: (file: FileItem) => void;
   onEditPhoto: (file: FileItem) => void;
+  onOpenDocument: (file: FileItem) => void;
   onOpenVideo: (file: FileItem) => void;
 }
 
-export const GalleryView: React.FC<GalleryViewProps> = ({ accent, files, selectedFile, onSelectFile, onEditPhoto, onOpenVideo }) => (
+export const GalleryView: React.FC<GalleryViewProps> = ({ accent, files, selectedFile, onSelectFile, onEditPhoto, onOpenDocument, onOpenVideo }) => (
     <div className="h-full flex flex-col space-y-4">
       {/* Center Big Gallery Viewport */}
       <div className="flex-1 min-h-[380px] macos-glass-card rounded-2xl flex items-center justify-center relative p-6 overflow-hidden">
@@ -44,6 +46,15 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ accent, files, selecte
             >
               <Edit3 className="w-3.5 h-3.5" />
               <span>Open in Studio</span>
+            </button>
+          )}
+          {isEditableDocument(selectedFile) && (
+            <button
+              onClick={() => onOpenDocument(selectedFile)}
+              className="px-3 py-1.5 rounded-lg bg-[#0060df] hover:bg-[#0250bb] text-white font-bold text-xs flex items-center gap-1.5 shadow-lg"
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              <span>Edit document</span>
             </button>
           )}
           {selectedFile.category === 'video' && (

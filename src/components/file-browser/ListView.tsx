@@ -1,6 +1,7 @@
 import React from 'react';
 import { Image as ImageIcon, Video, FileText, Lock, ShieldCheck, Share2, Edit3, Scissors, CheckSquare, Square } from 'lucide-react';
 import { FileItem, CloudAccount, CloudProviderId } from '../../types';
+import { isEditableDocument } from '../../utils/documentKind';
 import { FileThumbnail } from './FileThumbnail';
 import { SelectionAccent, SELECTION_CLASSES } from '../../utils/selectionAccent';
 import { formatBytes, formatDate } from '../../utils/format';
@@ -12,6 +13,7 @@ export interface ListViewProps {
   selectedIds: Set<string>;
   onSelectFile: (file: FileItem) => void;
   onEditPhoto: (file: FileItem) => void;
+  onOpenDocument: (file: FileItem) => void;
   onOpenVideo: (file: FileItem) => void;
   onShareFile: (file: FileItem) => void;
   onOpenQuickLook: () => void;
@@ -20,7 +22,7 @@ export interface ListViewProps {
   getAccount: (accountId: CloudProviderId) => CloudAccount | undefined;
 }
 
-export const ListView: React.FC<ListViewProps> = ({ accent, files, selectedFileId, selectedIds, onSelectFile, onEditPhoto, onOpenVideo, onShareFile, onOpenQuickLook, toggleSelectOne, toggleSelectAll, getAccount }) => (
+export const ListView: React.FC<ListViewProps> = ({ accent, files, selectedFileId, selectedIds, onSelectFile, onEditPhoto, onOpenDocument, onOpenVideo, onShareFile, onOpenQuickLook, toggleSelectOne, toggleSelectAll, getAccount }) => (
     <div className="rounded-xl overflow-hidden border border-white/8 bg-black/20">
       <table className="w-full text-left text-xs text-neutral-300">
         <thead className="bg-white/5 border-b border-white/8 text-[11px] font-semibold text-neutral-400 uppercase tracking-wider">
@@ -56,6 +58,7 @@ export const ListView: React.FC<ListViewProps> = ({ accent, files, selectedFileI
                 onDoubleClick={() => {
                   if (file.category === 'photo') onEditPhoto(file);
                   else if (file.category === 'video') onOpenVideo(file);
+                  else if (isEditableDocument(file)) onOpenDocument(file);
                   else onOpenQuickLook();
                 }}
                 className={`cursor-pointer transition-colors ${
@@ -106,6 +109,15 @@ export const ListView: React.FC<ListViewProps> = ({ accent, files, selectedFileI
                         onClick={() => onEditPhoto(file)}
                         className="p-1 rounded hover:bg-white/10 text-cyan-400"
                         title="Edit in Studio"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {isEditableDocument(file) && (
+                      <button
+                        onClick={() => onOpenDocument(file)}
+                        className="p-1 rounded hover:bg-white/10 text-[#7cacf8]"
+                        title="Edit document"
                       >
                         <Edit3 className="w-3.5 h-3.5" />
                       </button>

@@ -21,6 +21,7 @@ interface FileBrowserProps {
   viewMode: MacViewMode;
   onSelectFile: (file: FileItem) => void;
   onEditPhoto: (file: FileItem) => void;
+  onOpenDocument: (file: FileItem) => void;
   onOpenVideo: (file: FileItem) => void;
   onShareFile: (file: FileItem) => void;
   onToggleEncrypt: (file: FileItem) => void;
@@ -43,6 +44,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   viewMode,
   onSelectFile,
   onEditPhoto,
+  onOpenDocument,
   onOpenVideo,
   onShareFile,
   onToggleEncrypt,
@@ -138,16 +140,16 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         )}
 
         {/* 1. ICONS / GRID MODE */}
-        {viewMode === 'icons' && files.length > 0 && <IconsView accent={accent} files={files} selectedFileId={selectedFileId} selectedIds={selectedIds} iconScale={iconScale} onSelectFile={onSelectFile} onEditPhoto={onEditPhoto} onOpenVideo={onOpenVideo} onOpenQuickLook={onOpenQuickLook} toggleSelectOne={toggleSelectOne} />}
+        {viewMode === 'icons' && files.length > 0 && <IconsView accent={accent} files={files} selectedFileId={selectedFileId} selectedIds={selectedIds} iconScale={iconScale} onSelectFile={onSelectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenQuickLook={onOpenQuickLook} toggleSelectOne={toggleSelectOne} />}
 
         {/* 2. LIST MODE */}
-        {viewMode === 'list' && files.length > 0 && <ListView accent={accent} files={files} selectedFileId={selectedFileId} selectedIds={selectedIds} onSelectFile={onSelectFile} onEditPhoto={onEditPhoto} onOpenVideo={onOpenVideo} onShareFile={onShareFile} onOpenQuickLook={onOpenQuickLook} toggleSelectOne={toggleSelectOne} toggleSelectAll={toggleSelectAll} getAccount={getAccount} />}
+        {viewMode === 'list' && files.length > 0 && <ListView accent={accent} files={files} selectedFileId={selectedFileId} selectedIds={selectedIds} onSelectFile={onSelectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onShareFile={onShareFile} onOpenQuickLook={onOpenQuickLook} toggleSelectOne={toggleSelectOne} toggleSelectAll={toggleSelectAll} getAccount={getAccount} />}
 
         {/* 3. COLUMNS (MILLER COLUMNS) MODE */}
-        {viewMode === 'columns' && <ColumnsView accent={accent} files={files} selectedFolder={selectedFolder} selectedFileId={selectedFileId} selectedFile={selectedFile} folders={folders} totalSize={totalSize} onSelectFile={onSelectFile} onEditPhoto={onEditPhoto} onOpenVideo={onOpenVideo} onOpenQuickLook={onOpenQuickLook} onSelectFolder={onSelectFolder} getAccount={getAccount} />}
+        {viewMode === 'columns' && <ColumnsView accent={accent} files={files} selectedFolder={selectedFolder} selectedFileId={selectedFileId} selectedFile={selectedFile} folders={folders} totalSize={totalSize} onSelectFile={onSelectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenQuickLook={onOpenQuickLook} onSelectFolder={onSelectFolder} getAccount={getAccount} />}
 
         {/* 4. GALLERY MODE */}
-        {viewMode === 'gallery' && selectedFile && <GalleryView accent={accent} files={files} selectedFile={selectedFile} onSelectFile={onSelectFile} onEditPhoto={onEditPhoto} onOpenVideo={onOpenVideo} />}
+        {viewMode === 'gallery' && selectedFile && <GalleryView accent={accent} files={files} selectedFile={selectedFile} onSelectFile={onSelectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} />}
 
       </div>
 
