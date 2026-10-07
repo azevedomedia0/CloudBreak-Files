@@ -76,9 +76,6 @@ export const QuickLookModal: React.FC<QuickLookModalProps> = ({
               <span className="text-xs font-medium text-neutral-200 truncate max-w-sm">
                 {file.name}
               </span>
-              <span className="text-[10px] font-mono text-neutral-400 bg-white/10 px-1.5 py-0.5 rounded">
-                v{file.version}
-              </span>
               {file.encryption.isEncrypted && (
                 <span className="flex items-center gap-1 text-[10px] text-cyan-300 bg-cyan-500/20 border border-cyan-400/30 px-1.5 py-0.5 rounded font-mono">
                   <ShieldCheck className="w-3 h-3" /> E2EE
