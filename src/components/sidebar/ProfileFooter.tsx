@@ -41,7 +41,7 @@ export const ProfileFooter: React.FC<ProfileFooterProps> = ({ onOpenVaultSecurit
             {incomingLibraries.length} In
           </span>
           <span className="text-purple-300 bg-purple-500/10 border border-purple-400/20 px-1 py-0.2 rounded" title="Outgoing Media Libraries Seeding">
-            {outgoingLibraries.length} Seeding
+            {outgoingLibraries.length} Out
           </span>
         </div>
       </div>
