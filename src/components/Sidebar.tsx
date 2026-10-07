@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Folder, Radio, Server, Globe, Cpu, Monitor, Download, AppWindow, Image as ImageIcon, Video, FileText, Settings, Trash2 } from 'lucide-react';
 import { CloudAccount, FolderItem, SharedLibrary, CloudProviderId, RemovableDevice } from '../types';
 import { FavoritesSection } from './sidebar/FavoritesSection';
@@ -9,6 +9,8 @@ import { CloudAccountsSection } from './sidebar/CloudAccountsSection';
 import { NetworkSection } from './sidebar/NetworkSection';
 import { ProfileFooter } from './sidebar/ProfileFooter';
 import { SidebarSectionKey } from './sidebar/sectionKey';
+import { useSectionOrder } from '../hooks/useSectionOrder';
+import { DraggableSidebarSection } from './DraggableSidebarSection';
 
 interface SidebarProps {
   accounts: CloudAccount[];
@@ -95,6 +97,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
     network?: boolean;
   }>({});
 
+  const {
+    sectionOrder,
+    draggedSection,
+    dragOverSection,
+    handleDragStart,
+    handleDragOver,
+    handleDragEnd,
+    handleDrop,
+  } = useSectionOrder();
+
   const toggleSection = (section: SidebarSectionKey) => {
     setCollapsed(prev => ({ ...prev, [section]: !prev[section] }));
   };
@@ -135,6 +147,91 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
+  // Map section keys to their component rendering
+  const sectionComponents = useMemo(() => ({
+    favorites: (
+      <FavoritesSection
+        accounts={accounts}
+        selectedAccountId={selectedAccountId}
+        onSelectAccount={onSelectAccount}
+        selectedFolderId={selectedFolderId}
+        onSelectFolder={onSelectFolder}
+        selectedLibraryId={selectedLibraryId}
+        onSelectLibrary={onSelectLibrary}
+        onAddFavorite={onAddFavorite}
+        customFavorites={customFavorites}
+        collapsed={collapsed}
+        toggleSection={toggleSection}
+      />
+    ),
+    directories: (
+      <FoldersSection
+        onSelectAccount={onSelectAccount}
+        selectedFolderId={selectedFolderId}
+        onSelectFolder={onSelectFolder}
+        onSelectLibrary={onSelectLibrary}
+        onAddNewFolder={onAddNewFolder}
+        collapsed={collapsed}
+        toggleSection={toggleSection}
+        visibleFolders={visibleFolders}
+        getFolderIcon={getFolderIcon}
+      />
+    ),
+    incomingLibraries: (
+      <IncomingLibrariesSection
+        onSelectFolder={onSelectFolder}
+        selectedLibraryId={selectedLibraryId}
+        onSelectLibrary={onSelectLibrary}
+        onAddNewSharedLibrary={onAddNewSharedLibrary}
+        onAddNewIncomingLibrary={onAddNewIncomingLibrary}
+        collapsed={collapsed}
+        toggleSection={toggleSection}
+        incomingLibraries={incomingLibraries}
+      />
+    ),
+    outgoingLibraries: (
+      <OutgoingLibrariesSection
+        onSelectFolder={onSelectFolder}
+        selectedLibraryId={selectedLibraryId}
+        onSelectLibrary={onSelectLibrary}
+        onAddNewSharedLibrary={onAddNewSharedLibrary}
+        onAddNewOutgoingLibrary={onAddNewOutgoingLibrary}
+        collapsed={collapsed}
+        toggleSection={toggleSection}
+        outgoingLibraries={outgoingLibraries}
+      />
+    ),
+    accounts: (
+      <CloudAccountsSection
+        accounts={accounts}
+        selectedAccountId={selectedAccountId}
+        onSelectAccount={onSelectAccount}
+        selectedFolderId={selectedFolderId}
+        onSelectFolder={onSelectFolder}
+        selectedLibraryId={selectedLibraryId}
+        onSelectLibrary={onSelectLibrary}
+        onOpenAddAccount={onOpenAddAccount}
+        onOpenAccountSettings={onOpenAccountSettings}
+        collapsed={collapsed}
+        toggleSection={toggleSection}
+      />
+    ),
+    network: (
+      <NetworkSection
+        onAddNetworkServer={onAddNetworkServer}
+        networkServers={networkServers}
+        removableDevices={removableDevices}
+        onEjectDevice={onEjectDevice}
+        onSelectRemovableDevice={onSelectRemovableDevice}
+        selectedRemovableDeviceId={selectedRemovableDeviceId}
+        collapsed={collapsed}
+        toggleSection={toggleSection}
+        onlineServerCount={onlineServerCount}
+        totalServerCount={totalServerCount}
+      />
+    ),
+  }), [accounts, selectedAccountId, onSelectAccount, selectedFolderId, onSelectFolder, selectedLibraryId, onSelectLibrary, onAddFavorite, customFavorites, collapsed, visibleFolders, incomingLibraries, outgoingLibraries, onAddNewSharedLibrary, onAddNewIncomingLibrary, onAddNewOutgoingLibrary, onOpenAddAccount, onOpenAccountSettings, onAddNetworkServer, networkServers, removableDevices, onEjectDevice, onSelectRemovableDevice, selectedRemovableDeviceId, onlineServerCount, totalServerCount]);
+
   if (isCollapsed) {
     return null;
   }
@@ -147,24 +244,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
       
       {/* Scrollable macOS Finder Navigation */}
       <div className="flex-1 overflow-y-auto px-3 py-2 space-y-4">
-        
-        {/* Section: FAVORITES */}
-        <FavoritesSection accounts={accounts} selectedAccountId={selectedAccountId} onSelectAccount={onSelectAccount} selectedFolderId={selectedFolderId} onSelectFolder={onSelectFolder} selectedLibraryId={selectedLibraryId} onSelectLibrary={onSelectLibrary} onAddFavorite={onAddFavorite} customFavorites={customFavorites} collapsed={collapsed} toggleSection={toggleSection} />
 
-        {/* Section: FOLDERS & DIRECTORIES */}
-        <FoldersSection onSelectAccount={onSelectAccount} selectedFolderId={selectedFolderId} onSelectFolder={onSelectFolder} onSelectLibrary={onSelectLibrary} onAddNewFolder={onAddNewFolder} collapsed={collapsed} toggleSection={toggleSection} visibleFolders={visibleFolders} getFolderIcon={getFolderIcon} />
-
-        {/* Section: INCOMING P2P MEDIA LIBRARIES (From other users via encrypted P2P protocol) */}
-        <IncomingLibrariesSection onSelectFolder={onSelectFolder} selectedLibraryId={selectedLibraryId} onSelectLibrary={onSelectLibrary} onAddNewSharedLibrary={onAddNewSharedLibrary} onAddNewIncomingLibrary={onAddNewIncomingLibrary} collapsed={collapsed} toggleSection={toggleSection} incomingLibraries={incomingLibraries} />
-
-        {/* Section: OUTGOING P2P SEEDING (Media libraries I am currently seeding to specified P2P users) */}
-        <OutgoingLibrariesSection onSelectFolder={onSelectFolder} selectedLibraryId={selectedLibraryId} onSelectLibrary={onSelectLibrary} onAddNewSharedLibrary={onAddNewSharedLibrary} onAddNewOutgoingLibrary={onAddNewOutgoingLibrary} collapsed={collapsed} toggleSection={toggleSection} outgoingLibraries={outgoingLibraries} />
-
-        {/* Section: CLOUD STORAGE LOCATIONS */}
-        <CloudAccountsSection accounts={accounts} selectedAccountId={selectedAccountId} onSelectAccount={onSelectAccount} selectedFolderId={selectedFolderId} onSelectFolder={onSelectFolder} selectedLibraryId={selectedLibraryId} onSelectLibrary={onSelectLibrary} onOpenAddAccount={onOpenAddAccount} onOpenAccountSettings={onOpenAccountSettings} collapsed={collapsed} toggleSection={toggleSection} />
-
-        {/* Section: NETWORK */}
-        <NetworkSection onAddNetworkServer={onAddNetworkServer} networkServers={networkServers} removableDevices={removableDevices} onEjectDevice={onEjectDevice} onSelectRemovableDevice={onSelectRemovableDevice} selectedRemovableDeviceId={selectedRemovableDeviceId} collapsed={collapsed} toggleSection={toggleSection} onlineServerCount={onlineServerCount} totalServerCount={totalServerCount} />
+        {/* Render sections in custom order */}
+        {sectionOrder.map((sectionKey) => (
+          <DraggableSidebarSection
+            key={sectionKey}
+            sectionKey={sectionKey}
+            isDragged={draggedSection === sectionKey}
+            isDragOver={dragOverSection === sectionKey}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDragEnd={handleDragEnd}
+            onDrop={handleDrop}
+          >
+            {sectionComponents[sectionKey as keyof typeof sectionComponents]}
+          </DraggableSidebarSection>
+        ))}
 
       </div>
 
