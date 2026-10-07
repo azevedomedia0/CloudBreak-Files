@@ -151,11 +151,11 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         {/* Clickable Breadcrumbs Path */}
         <div className="flex items-center gap-1 text-neutral-300 truncate">
           <HardDrive className="w-3 h-3 text-sky-400" />
-          <span>AetherCloud</span>
+          <button onClick={() => { onSelectFolder(null); }} className="hover:text-sky-300 transition-colors cursor-pointer">AetherCloud</button>
           <ChevronRight className="w-3 h-3 text-neutral-600" />
-          <span className="text-neutral-400">
+          <button onClick={() => { onSelectFolder(null); }} className="text-neutral-400 hover:text-sky-300 transition-colors cursor-pointer">
             {selectedLibrary ? selectedLibrary.name : selectedAccountId === 'all' ? 'All Mounted Clouds' : accounts.find(a => a.id === selectedAccountId)?.name}
-          </span>
+          </button>
           {selectedFolder && (
             <>
               <ChevronRight className="w-3 h-3 text-neutral-600" />
