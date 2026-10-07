@@ -472,15 +472,6 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
               <span>Redo</span>
             </button>
 
-            {/* Export & Save Buttons */}
-            <button
-              onClick={handleExportDownload}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-neutral-200 bg-neutral-800 border border-neutral-700 hover:bg-neutral-700 rounded-lg transition-colors"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Export</span>
-            </button>
-
             <button
               onClick={handleSaveAsVersion}
               disabled={isProcessing}
@@ -582,7 +573,7 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
           </div>
 
           {/* Right Adjustments & Presets Sidebar */}
-          <div className="w-84 md:w-96 flex flex-col border-l border-neutral-800 bg-neutral-900/95 overflow-y-auto">
+          <div className="w-84 md:w-96 h-full min-h-0 flex flex-col border-l border-neutral-800 bg-neutral-900/95 overflow-y-auto">
             
             {/* Live RGB Histogram */}
             <div className="p-4 border-b border-neutral-800 bg-neutral-950/40">
@@ -778,7 +769,7 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
 
             {/* Tab: Export Format Settings */}
             {activeTab === 'geometry' && (
-              <div className="p-4 space-y-5 flex-1">
+              <div className="p-4 flex flex-col gap-5 flex-1">
                 <div>
                   <label className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wider block mb-2">
                     Export Codec & Format
@@ -838,6 +829,15 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
                     <span className="text-cyan-400 font-medium">Original Cloud Provider</span>
                   </div>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={handleExportDownload}
+                  className="mt-auto flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-neutral-200 bg-neutral-800 border border-neutral-700 hover:bg-neutral-700 rounded-lg transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Export</span>
+                </button>
               </div>
             )}
           </div>
