@@ -4,7 +4,7 @@ import {
   Unlock, ShieldCheck, Download, Trash2, Edit3, Scissors, 
   Share2, Info, HardDrive, Sparkles, Key,
   ChevronDown, ChevronUp, ChevronRight, Minimize2, Maximize2,
-  PanelRightClose, PanelRight, Play, Pause, RotateCcw, Volume2, VolumeX, RefreshCw
+  PanelRightClose, PanelRight, Play, Pause, RotateCcw, Volume2, VolumeX
 } from 'lucide-react';
 import { FileItem, CloudAccount } from '../types';
 import { isEditableDocument } from '../utils/documentKind';
@@ -370,30 +370,31 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                   <Scissors className="w-3.5 h-3.5" />
                   <span>Edit Video</span>
                 </button>
+              ) : file.category === 'photo' ? (
+                <button
+                  type="button"
+                  onClick={() => onEditPhoto(file)}
+                  className="col-span-2 h-9 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-400/30 text-cyan-300 flex items-center justify-center gap-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer"
+                  title="Edit Photo"
+                  aria-label="Edit Photo"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  <span>Edit Photo</span>
+                </button>
               ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (isEditableDocument(file)) onOpenDocument(file);
-                      else onEditPhoto(file);
-                    }}
-                    className="h-9 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/30 text-amber-300 flex items-center justify-center transition-all shadow-xs cursor-pointer"
-                    title={isEditableDocument(file) ? "Edit document" : "Crop & Trim Photo"}
-                    aria-label={isEditableDocument(file) ? "Edit document" : "Trim"}
-                  >
-                    {isEditableDocument(file) ? <Edit3 className="w-3.5 h-3.5" /> : <Scissors className="w-3.5 h-3.5" />}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onEditPhoto(file)}
-                    className="h-9 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 border border-sky-400/30 text-sky-300 flex items-center justify-center transition-all shadow-xs cursor-pointer"
-                    title="Convert & Adjust"
-                    aria-label="Convert"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                  </button>
-                </>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isEditableDocument(file)) onOpenDocument(file);
+                    else onEditPhoto(file);
+                  }}
+                  className="col-span-2 h-9 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/30 text-amber-300 flex items-center justify-center gap-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer"
+                  title={isEditableDocument(file) ? 'Edit document' : 'Open'}
+                  aria-label={isEditableDocument(file) ? 'Edit document' : 'Open'}
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  <span>{isEditableDocument(file) ? 'Edit Document' : 'Open'}</span>
+                </button>
               )}
 
               {/* Button 3: Share Library */}
