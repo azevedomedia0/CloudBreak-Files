@@ -56,6 +56,7 @@ export interface AppModalsProps {
   isConnectServerOpen: boolean;
   setIsConnectServerOpen: (open: boolean) => void;
   handleAddNetworkServer: (name: string, address: string, protocol: string) => void;
+  handleDisconnectAccount?: (accountId: string) => void;
 }
 
 /** Every modal the app can open. Each one renders nothing while it is closed. */
@@ -105,6 +106,7 @@ export const AppModals: React.FC<AppModalsProps> = ({
   isConnectServerOpen,
   setIsConnectServerOpen,
   handleAddNetworkServer,
+  handleDisconnectAccount,
 }) => (
   <>
   {/* macOS Quick Look Preview Modal (Spacebar) */}
@@ -200,6 +202,11 @@ export const AppModals: React.FC<AppModalsProps> = ({
         setIntegratingAccount(null);
       }}
       onShowToast={showToast}
+      onDisconnect={accountId => {
+        setAccounts(prev => prev.filter(a => a.id !== accountId));
+        setIntegratingAccount(null);
+        handleDisconnectAccount?.(accountId);
+      }}
     />
   )}
 

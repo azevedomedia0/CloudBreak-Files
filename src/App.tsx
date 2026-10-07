@@ -163,6 +163,13 @@ export default function App() {
     showToast(`Connected to server "${name}"`);
   };
 
+  const handleDisconnectAccount = (accountId: string) => {
+    const account = accounts.find(a => a.id === accountId);
+    if (account) {
+      showToast(`Disconnected ${account.name} from AetherCloud`);
+    }
+  };
+
   // Notification Action Handlers
   const handleAcceptLibraryNotification = (notificationId: string) => {
     const notif = notifications.find(n => n.id === notificationId);
@@ -448,6 +455,7 @@ export default function App() {
         isConnectServerOpen={isConnectServerOpen}
         setIsConnectServerOpen={setIsConnectServerOpen}
         handleAddNetworkServer={handleAddNetworkServer}
+        handleDisconnectAccount={handleDisconnectAccount}
       />
 
     </div>

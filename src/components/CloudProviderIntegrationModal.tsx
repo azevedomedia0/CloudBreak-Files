@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import {
-  X, Check, Shield, ShieldCheck, Key, Globe, 
+  X, Check, Shield, ShieldCheck, Key, Globe,
   ExternalLink, Server, RefreshCw, Lock, Sparkles,
-  Sliders, Link2, HardDrive, CheckCircle2, AlertCircle
+  Sliders, Link2, HardDrive, CheckCircle2, AlertCircle, Unlink
 } from 'lucide-react';
 import { CloudAccount } from '../types';
 import { formatBytes } from '../utils/format';
@@ -13,6 +13,7 @@ interface CloudProviderIntegrationModalProps {
   onClose: () => void;
   onUpdateAccount?: (updated: CloudAccount) => void;
   onShowToast?: (message: string) => void;
+  onDisconnect?: (accountId: string) => void;
 }
 
 export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationModalProps> = ({
@@ -21,6 +22,7 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
   onClose,
   onUpdateAccount,
   onShowToast,
+  onDisconnect,
 }) => {
   if (!isOpen || !account) return null;
 
@@ -66,6 +68,14 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
     onUpdateAccount?.(updated);
     onShowToast?.(`Updated ${updated.name} integration settings`);
     onClose();
+  };
+
+  const handleDisconnect = () => {
+    if (confirm(`Are you sure you want to disconnect ${account.name} from AetherCloud? This will stop syncing but won't delete any files.`)) {
+      onDisconnect?.(account.id);
+      onShowToast?.(`Disconnected ${account.name}`);
+      onClose();
+    }
   };
 
   const pct = Math.min(100, Math.round((account.usedBytes / account.totalBytes) * 100));
@@ -341,21 +351,32 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
           )}
 
           {/* Dialog Action Buttons */}
-          <div className="flex items-center justify-end gap-2 pt-4 border-t border-[#252837]">
+          <div className="flex items-center justify-between pt-4 border-t border-[#252837]">
             <button
               type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-lg bg-[#1a1d29] hover:bg-[#222635] text-neutral-300 text-xs font-medium transition-colors cursor-pointer"
+              onClick={handleDisconnect}
+              className="px-4 py-2 rounded-lg bg-red-950/50 hover:bg-red-900/60 border border-red-800/60 text-red-300 hover:text-red-100 text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer"
+              title={`Disconnect ${account.name} from AetherCloud`}
             >
-              Cancel
+              <Unlink className="w-3.5 h-3.5" />
+              <span>Disconnect Account</span>
             </button>
-            <button
-              type="submit"
-              className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
-            >
-              <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-              <span>Save & Apply Integration</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 rounded-lg bg-[#1a1d29] hover:bg-[#222635] text-neutral-300 text-xs font-medium transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+              >
+                <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                <span>Save & Apply Integration</span>
+              </button>
+            </div>
           </div>
         </form>
 
