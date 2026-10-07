@@ -267,6 +267,7 @@ export default function App() {
   const {
     isDraggingOver,
     handleSavePhotoVersion, handleSaveDocument, handleSaveTrimmedVideo, handleToggleEncrypt, handleDeleteFile,
+    handleRenameFile, handleDuplicateFiles, handleCopyFileNames, handleToggleTag,
     handleBatchEncrypt, handleBatchDelete, handleUploadFiles, handleDragOver, handleDragLeave, handleDrop,
   } = useFileActions({ setFiles, selectedFileId, setSelectedFileId, selectedAccountId, selectedFolder, showToast });
 
@@ -442,6 +443,10 @@ export default function App() {
               onDeleteFile={handleDeleteFile}
               onBatchEncrypt={handleBatchEncrypt}
               onBatchDelete={handleBatchDelete}
+              onRenameFile={handleRenameFile}
+              onDuplicateFiles={handleDuplicateFiles}
+              onCopyFiles={handleCopyFileNames}
+              onToggleTag={handleToggleTag}
               onOpenQuickLook={() => setIsQuickLookOpen(true)}
               folders={folders}
               onSelectFolder={selectFolder}

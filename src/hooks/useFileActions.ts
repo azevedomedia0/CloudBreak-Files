@@ -11,6 +11,18 @@ interface Options {
   showToast: (msg: string) => void;
 }
 
+function nextCopyName(name: string, taken: Set<string>): string {
+  const dot = name.lastIndexOf('.');
+  const hasExt = dot > 0 && dot < name.length - 1;
+  const base = hasExt ? name.slice(0, dot) : name;
+  const ext = hasExt ? name.slice(dot) : '';
+  const first = `${base} copy${ext}`;
+  if (!taken.has(first)) return first;
+  let n = 2;
+  while (taken.has(`${base} copy ${n}${ext}`)) n += 1;
+  return `${base} copy ${n}${ext}`;
+}
+
 /** File list actions: save versions, encrypt flags, delete, upload and drag-and-drop. */
 export function useFileActions({
   setFiles,
@@ -93,6 +105,68 @@ export function useFileActions({
       })
     );
     showToast(`Marked ${fileIds.length} assets as encrypted (demo flag, file bytes are not encrypted yet)`);
+  };
+
+  const handleRenameFile = (fileId: string, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setFiles(prev => prev.map(f => (
+      f.id === fileId ? { ...f, name: trimmed, updatedAt: new Date().toISOString() } : f
+    )));
+  };
+
+  const handleDuplicateFiles = (sources: FileItem[]): string[] => {
+    const createdIds: string[] = [];
+    setFiles(prev => {
+      const names = new Set(prev.map(f => f.name));
+      const copies = sources.map((file, index) => {
+        const name = nextCopyName(file.name, names);
+        names.add(name);
+        const id = `file-copy-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`;
+        createdIds.push(id);
+        return {
+          ...file,
+          id,
+          name,
+          updatedAt: new Date().toISOString(),
+          version: 1,
+          starred: false,
+          tags: [...file.tags],
+          encryption: { ...file.encryption },
+        };
+      });
+      const insertAt = Math.max(0, ...sources.map(source => prev.findIndex(f => f.id === source.id)));
+      const next = [...prev];
+      next.splice(insertAt + 1, 0, ...copies);
+      return next;
+    });
+    if (createdIds[0]) setSelectedFileId(createdIds[0]);
+    showToast(sources.length === 1 ? `Duplicated ${sources[0].name}` : `Duplicated ${sources.length} items`);
+    return createdIds;
+  };
+
+  const handleCopyFileNames = async (sources: FileItem[]) => {
+    const text = sources.map(file => file.name).join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast(sources.length === 1 ? `Copied “${sources[0].name}”` : `Copied ${sources.length} items`);
+    } catch {
+      showToast('Could not copy to the clipboard');
+    }
+  };
+
+  const handleToggleTag = (fileIds: string[], tag: string) => {
+    setFiles(prev => {
+      const targets = prev.filter(file => fileIds.includes(file.id));
+      const allHave = targets.length > 0 && targets.every(file => file.tags.includes(tag));
+      return prev.map(file => {
+        if (!fileIds.includes(file.id)) return file;
+        const tags = allHave
+          ? file.tags.filter(item => item !== tag)
+          : file.tags.includes(tag) ? file.tags : [...file.tags, tag];
+        return { ...file, tags };
+      });
+    });
   };
 
   // Batch Delete
@@ -196,6 +270,10 @@ export function useFileActions({
     handleSaveTrimmedVideo,
     handleToggleEncrypt,
     handleDeleteFile,
+    handleRenameFile,
+    handleDuplicateFiles,
+    handleCopyFileNames,
+    handleToggleTag,
     handleBatchEncrypt,
     handleBatchDelete,
     handleUploadFiles,

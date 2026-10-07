@@ -17,12 +17,13 @@ export interface ListViewProps {
   onOpenVideo: (file: FileItem) => void;
   onShareFile: (file: FileItem) => void;
   onOpenQuickLook: () => void;
+  onFileContextMenu: (file: FileItem, event: React.MouseEvent) => void;
   toggleSelectOne: (id: string, e: React.MouseEvent) => void;
   toggleSelectAll: () => void;
   getAccount: (accountId: CloudProviderId) => CloudAccount | undefined;
 }
 
-export const ListView: React.FC<ListViewProps> = ({ accent, files, selectedFileId, selectedIds, onSelectFile, onEditPhoto, onOpenDocument, onOpenVideo, onShareFile, onOpenQuickLook, toggleSelectOne, toggleSelectAll, getAccount }) => (
+export const ListView: React.FC<ListViewProps> = ({ accent, files, selectedFileId, selectedIds, onSelectFile, onEditPhoto, onOpenDocument, onOpenVideo, onShareFile, onOpenQuickLook, onFileContextMenu, toggleSelectOne, toggleSelectAll, getAccount }) => (
     <div className="rounded-xl overflow-hidden border border-white/8 bg-black/20">
       <table className="w-full text-left text-xs text-neutral-300">
         <thead className="bg-white/5 border-b border-white/8 text-[11px] font-semibold text-neutral-400 uppercase tracking-wider">
@@ -55,6 +56,7 @@ export const ListView: React.FC<ListViewProps> = ({ accent, files, selectedFileI
               <tr
                 key={file.id}
                 onClick={() => onSelectFile(file)}
+                onContextMenu={event => onFileContextMenu(file, event)}
                 onDoubleClick={() => {
                   if (file.category === 'photo') onEditPhoto(file);
                   else if (file.category === 'video') onOpenVideo(file);

@@ -13,12 +13,16 @@ export interface GalleryViewProps {
   onEditPhoto: (file: FileItem) => void;
   onOpenDocument: (file: FileItem) => void;
   onOpenVideo: (file: FileItem) => void;
+  onFileContextMenu: (file: FileItem, event: React.MouseEvent) => void;
 }
 
-export const GalleryView: React.FC<GalleryViewProps> = ({ accent, files, selectedFile, onSelectFile, onEditPhoto, onOpenDocument, onOpenVideo }) => (
+export const GalleryView: React.FC<GalleryViewProps> = ({ accent, files, selectedFile, onSelectFile, onEditPhoto, onOpenDocument, onOpenVideo, onFileContextMenu }) => (
     <div className="h-full flex flex-col space-y-4">
       {/* Center Big Gallery Viewport */}
-      <div className="flex-1 min-h-[380px] macos-glass-card rounded-2xl flex items-center justify-center relative p-6 overflow-hidden">
+      <div
+        className="flex-1 min-h-[380px] macos-glass-card rounded-2xl flex items-center justify-center relative p-6 overflow-hidden"
+        onContextMenu={event => onFileContextMenu(selectedFile, event)}
+      >
         {selectedFile.category === 'photo' && (
           <img
             src={selectedFile.url}
@@ -77,6 +81,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ accent, files, selecte
             <div
               key={file.id}
               onClick={() => onSelectFile(file)}
+              onContextMenu={event => onFileContextMenu(file, event)}
               className={`h-full aspect-video rounded-lg overflow-hidden border shrink-0 cursor-pointer relative transition-all ${
                 isActive
                   ? SELECTION_CLASSES[accent].galleryRing

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Folder, Lock, Trash2, ChevronRight, HardDrive } from 'lucide-react';
 import { FileItem, CloudAccount, FolderItem, SharedLibrary, CloudProviderId } from '../types';
 import { MacViewMode } from './MacFinderToolbar';
@@ -7,6 +7,9 @@ import { IconsView } from './file-browser/IconsView';
 import { ListView } from './file-browser/ListView';
 import { ColumnsView } from './file-browser/ColumnsView';
 import { GalleryView } from './file-browser/GalleryView';
+import { FileContextMenu, FileRenameField } from './file-browser/FileContextMenu';
+import { FileGetInfo } from './file-browser/FileGetInfo';
+import { isEditableDocument } from '../utils/documentKind';
 import { accentForSelection } from '../utils/selectionAccent';
 
 interface FileBrowserProps {
@@ -28,6 +31,10 @@ interface FileBrowserProps {
   onDeleteFile: (fileId: string) => void;
   onBatchEncrypt: (fileIds: string[]) => void;
   onBatchDelete: (fileIds: string[]) => void;
+  onRenameFile: (fileId: string, name: string) => void;
+  onDuplicateFiles: (files: FileItem[]) => string[];
+  onCopyFiles: (files: FileItem[]) => void;
+  onToggleTag: (fileIds: string[], tag: string) => void;
   onOpenQuickLook: () => void;
   folders: FolderItem[];
   onSelectFolder: (folderId: string | null) => void;
@@ -51,12 +58,20 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   onDeleteFile,
   onBatchEncrypt,
   onBatchDelete,
+  onRenameFile,
+  onDuplicateFiles,
+  onCopyFiles,
+  onToggleTag,
   onOpenQuickLook,
   folders,
   onSelectFolder,
 }) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [iconScale, setIconScale] = useState<number>(100); // 75 to 150%
+  const [contextMenu, setContextMenu] = useState<{ file: FileItem; x: number; y: number } | null>(null);
+  const [renaming, setRenaming] = useState<{ file: FileItem; x: number; y: number } | null>(null);
+  const [infoFileId, setInfoFileId] = useState<string | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   const selectedFile = files.find(f => f.id === selectedFileId) || files[0] || null;
   const accent = accentForSelection(selectedLibrary, selectedSourceId);
@@ -84,9 +99,85 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   };
 
   const totalSize = files.reduce((acc, f) => acc + f.sizeBytes, 0);
+  const infoFile = infoFileId ? files.find(file => file.id === infoFileId) || null : null;
+
+  const selectFile = (file: FileItem) => {
+    onSelectFile(file);
+    rootRef.current?.focus({ preventScroll: true });
+  };
+
+  const targetsFor = (file: FileItem) => (
+    selectedIds.has(file.id) && selectedIds.size > 1
+      ? files.filter(item => selectedIds.has(item.id))
+      : [file]
+  );
+
+  const openFile = (file: FileItem) => {
+    selectFile(file);
+    if (file.category === 'photo') onEditPhoto(file);
+    else if (file.category === 'video') onOpenVideo(file);
+    else if (isEditableDocument(file)) onOpenDocument(file);
+    else onOpenQuickLook();
+  };
+
+  const quickLook = (file: FileItem) => {
+    selectFile(file);
+    onOpenQuickLook();
+  };
+
+  const trashFiles = (items: FileItem[]) => {
+    if (items.length > 1) onBatchDelete(items.map(item => item.id));
+    else if (items[0]) onDeleteFile(items[0].id);
+    setSelectedIds(new Set());
+  };
+
+  const duplicateFiles = (items: FileItem[]) => {
+    const ids = onDuplicateFiles(items);
+    if (ids.length) setSelectedIds(new Set(ids));
+  };
+
+  const openContextMenu = (file: FileItem, event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!selectedIds.has(file.id)) setSelectedIds(new Set([file.id]));
+    selectFile(file);
+    setRenaming(null);
+    setContextMenu({ file, x: event.clientX, y: event.clientY });
+  };
+
+  const onBrowserKeyDown = (event: React.KeyboardEvent) => {
+    if (contextMenu || renaming || infoFileId) return;
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+    const file = files.find(item => item.id === selectedFileId);
+    if (!file) return;
+    const meta = event.metaKey || event.ctrlKey;
+    const targets = targetsFor(file);
+    if (meta && event.key.toLowerCase() === 'i') {
+      event.preventDefault();
+      setInfoFileId(file.id);
+    } else if (meta && event.key.toLowerCase() === 'd') {
+      event.preventDefault();
+      duplicateFiles(targets);
+    } else if (meta && event.key.toLowerCase() === 'c') {
+      event.preventDefault();
+      onCopyFiles(targets);
+    } else if (meta && (event.key === 'Backspace' || event.key === 'Delete')) {
+      event.preventDefault();
+      trashFiles(targets);
+    } else if (event.key === 'Enter' && targets.length === 1) {
+      event.preventDefault();
+      const rect = rootRef.current?.getBoundingClientRect();
+      setRenaming({ file, x: (rect?.left ?? 80) + 48, y: (rect?.top ?? 80) + 48 });
+    }
+  };
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden select-none relative">
+    <div
+      ref={rootRef}
+      tabIndex={0}
+      onKeyDown={onBrowserKeyDown}
+      className="flex-1 flex flex-col h-full overflow-hidden select-none relative outline-none"
+    >
       
       {/* Batch Selection Banner */}
       {selectedIds.size > 0 && (
@@ -140,16 +231,16 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         )}
 
         {/* 1. ICONS / GRID MODE */}
-        {viewMode === 'icons' && files.length > 0 && <IconsView accent={accent} files={files} selectedFileId={selectedFileId} selectedIds={selectedIds} iconScale={iconScale} onSelectFile={onSelectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenQuickLook={onOpenQuickLook} toggleSelectOne={toggleSelectOne} />}
+        {viewMode === 'icons' && files.length > 0 && <IconsView accent={accent} files={files} selectedFileId={selectedFileId} selectedIds={selectedIds} iconScale={iconScale} onSelectFile={selectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenQuickLook={onOpenQuickLook} onFileContextMenu={openContextMenu} toggleSelectOne={toggleSelectOne} />}
 
         {/* 2. LIST MODE */}
-        {viewMode === 'list' && files.length > 0 && <ListView accent={accent} files={files} selectedFileId={selectedFileId} selectedIds={selectedIds} onSelectFile={onSelectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onShareFile={onShareFile} onOpenQuickLook={onOpenQuickLook} toggleSelectOne={toggleSelectOne} toggleSelectAll={toggleSelectAll} getAccount={getAccount} />}
+        {viewMode === 'list' && files.length > 0 && <ListView accent={accent} files={files} selectedFileId={selectedFileId} selectedIds={selectedIds} onSelectFile={selectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onShareFile={onShareFile} onOpenQuickLook={onOpenQuickLook} onFileContextMenu={openContextMenu} toggleSelectOne={toggleSelectOne} toggleSelectAll={toggleSelectAll} getAccount={getAccount} />}
 
         {/* 3. COLUMNS (MILLER COLUMNS) MODE */}
-        {viewMode === 'columns' && <ColumnsView accent={accent} files={files} selectedFolder={selectedFolder} selectedFileId={selectedFileId} selectedFile={selectedFile} folders={folders} totalSize={totalSize} onSelectFile={onSelectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenQuickLook={onOpenQuickLook} onSelectFolder={onSelectFolder} getAccount={getAccount} />}
+        {viewMode === 'columns' && <ColumnsView accent={accent} files={files} selectedFolder={selectedFolder} selectedFileId={selectedFileId} selectedFile={selectedFile} folders={folders} totalSize={totalSize} onSelectFile={selectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenQuickLook={onOpenQuickLook} onFileContextMenu={openContextMenu} onSelectFolder={onSelectFolder} getAccount={getAccount} />}
 
         {/* 4. GALLERY MODE */}
-        {viewMode === 'gallery' && selectedFile && <GalleryView accent={accent} files={files} selectedFile={selectedFile} onSelectFile={onSelectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} />}
+        {viewMode === 'gallery' && selectedFile && <GalleryView accent={accent} files={files} selectedFile={selectedFile} onSelectFile={selectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onFileContextMenu={openContextMenu} />}
 
       </div>
 
@@ -196,6 +287,40 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
           )}
         </div>
       </div>
+
+      {contextMenu && (
+        <FileContextMenu
+          file={contextMenu.file}
+          targets={targetsFor(contextMenu.file)}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
+          onOpen={openFile}
+          onQuickLook={quickLook}
+          onGetInfo={file => setInfoFileId(file.id)}
+          onRename={file => setRenaming({ file, x: contextMenu.x, y: contextMenu.y })}
+          onDuplicate={duplicateFiles}
+          onCopy={onCopyFiles}
+          onShare={onShareFile}
+          onTrash={trashFiles}
+          onToggleTag={(items, tag) => onToggleTag(items.map(item => item.id), tag)}
+        />
+      )}
+
+      {renaming && (
+        <FileRenameField
+          file={renaming.file}
+          x={renaming.x}
+          y={renaming.y}
+          onCommit={name => {
+            onRenameFile(renaming.file.id, name);
+            setRenaming(null);
+          }}
+          onCancel={() => setRenaming(null)}
+        />
+      )}
+
+      {infoFile && <FileGetInfo file={infoFile} onClose={() => setInfoFileId(null)} />}
 
     </div>
   );
