@@ -245,6 +245,18 @@ export default function App() {
         }
       : null;
 
+  // Video navigation for playback controls
+  const videoFiles = filteredFiles.filter(f => f.category === 'video');
+  const videoIndex = selectedFile?.category === 'video' ? videoFiles.findIndex(f => f.id === selectedFile.id) : -1;
+  const canPreviousMedia = videoIndex > 0;
+  const canNextMedia = videoIndex >= 0 && videoIndex < videoFiles.length - 1;
+  const onPreviousMedia = () => {
+    if (videoIndex > 0) setSelectedFileId(videoFiles[videoIndex - 1].id);
+  };
+  const onNextMedia = () => {
+    if (videoIndex >= 0 && videoIndex < videoFiles.length - 1) setSelectedFileId(videoFiles[videoIndex + 1].id);
+  };
+
   const {
     isDraggingOver,
     handleSavePhotoVersion, handleSaveTrimmedVideo, handleToggleEncrypt, handleDeleteFile,
@@ -451,6 +463,10 @@ export default function App() {
         playingVideoFile={playingVideoFile}
         handleSaveTrimmedVideo={handleSaveTrimmedVideo}
         videoPlayerInitialTab={videoPlayerInitialTab}
+        canPreviousMedia={canPreviousMedia}
+        canNextMedia={canNextMedia}
+        onPreviousMedia={onPreviousMedia}
+        onNextMedia={onNextMedia}
         sharingLibrary={sharingLibrary}
         setSharedLibraries={setSharedLibraries}
         isVaultSecurityOpen={isVaultSecurityOpen}

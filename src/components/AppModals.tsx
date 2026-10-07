@@ -27,6 +27,10 @@ export interface AppModalsProps {
   playingVideoFile: FileItem | null;
   handleSaveTrimmedVideo: (file: FileItem) => void;
   videoPlayerInitialTab: 'player' | 'trim' | 'convert';
+  canPreviousMedia?: boolean;
+  canNextMedia?: boolean;
+  onPreviousMedia?: () => void;
+  onNextMedia?: () => void;
   sharingLibrary: SharedLibrary | null;
   setSharedLibraries: React.Dispatch<React.SetStateAction<SharedLibrary[]>>;
   isVaultSecurityOpen: boolean;
@@ -79,6 +83,10 @@ export const AppModals: React.FC<AppModalsProps> = ({
   playingVideoFile,
   handleSaveTrimmedVideo,
   videoPlayerInitialTab,
+  canPreviousMedia,
+  canNextMedia,
+  onPreviousMedia,
+  onNextMedia,
   sharingLibrary,
   setSharedLibraries,
   isVaultSecurityOpen,
@@ -149,6 +157,10 @@ export const AppModals: React.FC<AppModalsProps> = ({
       initialTab={videoPlayerInitialTab}
       accounts={accounts}
       folders={folders}
+      canPreviousMedia={canPreviousMedia}
+      canNextMedia={canNextMedia}
+      onPreviousMedia={onPreviousMedia}
+      onNextMedia={onNextMedia}
     />
   )}
 

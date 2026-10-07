@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Play, Pause, Rewind, FastForward, Volume2, Volume1, VolumeX, Repeat, StepBack, StepForward } from 'lucide-react';
+import { Play, Pause, Rewind, FastForward, Volume2, Volume1, VolumeX, Repeat, StepBack, StepForward, Shuffle } from 'lucide-react';
 import { formatTimecode } from '../../utils/format';
 
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
@@ -21,6 +21,10 @@ interface PlaybackControlsProps {
   onToggleMute: () => void;
   onToggleLoop: () => void;
   onChangeSpeed: (rate: number) => void;
+  onPreviousMedia?: () => void;
+  onNextMedia?: () => void;
+  canPreviousMedia?: boolean;
+  canNextMedia?: boolean;
 }
 
 const iconButton = 'w-8 h-8 flex items-center justify-center rounded-full text-white/80 hover:text-white hover:bg-white/10 active:scale-95 transition-all';
@@ -28,8 +32,10 @@ const iconButton = 'w-8 h-8 flex items-center justify-center rounded-full text-w
 export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   visible, isPlaying, currentTime, duration, volume, isMuted, isLooping, playbackRate,
   onTogglePlay, onSeek, onSkip, onStepFrame, onVolumeChange, onToggleMute, onToggleLoop, onChangeSpeed,
+  onPreviousMedia, onNextMedia, canPreviousMedia = false, canNextMedia = false,
 }) => {
   const [speedOpen, setSpeedOpen] = useState(false);
+  const [isShuffled, setIsShuffled] = useState(false);
   const effectiveVolume = isMuted ? 0 : volume;
   const VolumeIcon = effectiveVolume === 0 ? VolumeX : effectiveVolume < 0.5 ? Volume1 : Volume2;
   const progressPct = duration > 0 ? (currentTime / duration) * 100 : 0;
@@ -79,7 +85,12 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
         </div>
 
         <div className="flex items-center justify-center gap-1">
-          <button onClick={() => onStepFrame(-1)} className={iconButton} title="Previous frame">
+          <button
+            onClick={() => onPreviousMedia?.()}
+            disabled={!canPreviousMedia}
+            className={`${iconButton} disabled:opacity-40 disabled:cursor-not-allowed`}
+            title="Previous media"
+          >
             <StepBack className="w-4 h-4" />
           </button>
           <button onClick={() => onSkip(-10)} className={iconButton} title="Back 10 seconds">
@@ -95,12 +106,24 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
           <button onClick={() => onSkip(10)} className={iconButton} title="Forward 10 seconds">
             <FastForward className="w-4 h-4 fill-current" />
           </button>
-          <button onClick={() => onStepFrame(1)} className={iconButton} title="Next frame">
+          <button
+            onClick={() => onNextMedia?.()}
+            disabled={!canNextMedia}
+            className={`${iconButton} disabled:opacity-40 disabled:cursor-not-allowed`}
+            title="Next media"
+          >
             <StepForward className="w-4 h-4" />
           </button>
         </div>
 
         <div className="flex items-center justify-end gap-1 relative">
+          <button
+            onClick={() => setIsShuffled(!isShuffled)}
+            className={`${iconButton} ${isShuffled ? '!text-white bg-white/20' : ''}`}
+            title="Shuffle"
+          >
+            <Shuffle className="w-4 h-4" />
+          </button>
           <button
             onClick={onToggleLoop}
             className={`${iconButton} ${isLooping ? '!text-white bg-white/20' : ''}`}
