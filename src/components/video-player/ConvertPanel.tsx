@@ -90,7 +90,6 @@ export const ConvertPanel: React.FC<ConvertPanelProps> = ({
         <div className="grid grid-cols-2 gap-2">
           {[
             { id: 'mp4', label: 'MP4 (H.264 / AAC)', desc: 'Universal Cinema' },
-            { id: 'mov', label: 'MOV (ProRes)', desc: 'Editing Master' },
             { id: 'mkv', label: 'MKV (H.264)', desc: 'Archive' },
             { id: 'webm', label: 'WebM (VP9 / Opus)', desc: 'Optimized Web' },
             { id: 'avi', label: 'AVI (MPEG-4)', desc: 'Legacy Playback' },
