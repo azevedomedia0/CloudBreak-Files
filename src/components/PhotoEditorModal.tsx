@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
-  X, RotateCw, RotateCcw, FlipHorizontal, FlipVertical,
-  Sliders, Wand2, Download, Save, Undo2, Redo2, Check,
+  X, RotateCw, FlipHorizontal, FlipVertical,
+  Sliders, Wand2, Download, Save, Undo2, Redo2, Eye, Check,
   Sparkles, Layers, ZoomIn, ZoomOut, Maximize2, Crop
 } from 'lucide-react';
 import { FileItem, PhotoAdjustments } from '../types';
@@ -89,6 +89,7 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
   const [adjustments, setAdjustments] = useState<PhotoAdjustments>(DEFAULT_ADJUSTMENTS);
   const [activeTab, setActiveTab] = useState<'adjust' | 'presets' | 'geometry'>('adjust');
   const [activePreset, setActivePreset] = useState<string>('natural');
+  const [compareMode, setCompareMode] = useState<boolean>(false);
   const [zoomLevel, setZoomLevel] = useState<number>(100);
   const [exportFormat, setExportFormat] = useState<'image/jpeg' | 'image/png' | 'image/webp'>('image/jpeg');
   const [exportQuality, setExportQuality] = useState<number>(0.92);
@@ -106,17 +107,19 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
 
-  // Load image on file change
+  // Load image on file change. Reopening or switching photos clears history.
   useEffect(() => {
-    if (!isOpen) return;
     pastRef.current = [];
     futureRef.current = [];
     sessionRef.current = null;
-    adjustmentsRef.current = DEFAULT_ADJUSTMENTS;
-    presetRef.current = 'natural';
     setCanUndo(false);
     setCanRedo(false);
-    setAdjustments(DEFAULT_ADJUSTMENTS);
+    setCompareMode(false);
+    if (!isOpen) return;
+    const fresh = { ...DEFAULT_ADJUSTMENTS };
+    adjustmentsRef.current = fresh;
+    presetRef.current = 'natural';
+    setAdjustments(fresh);
     setActivePreset('natural');
     setZoomLevel(100);
 
@@ -134,7 +137,7 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
     if (imgRef.current) {
       renderImage();
     }
-  }, [adjustments]);
+  }, [adjustments, compareMode]);
 
   const pushPast = () => {
     pastRef.current.push({
@@ -159,9 +162,9 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
     setCanUndo(pastRef.current.length > 0);
   };
 
-  const updateAdj = (
-    key: keyof PhotoAdjustments,
-    value: PhotoAdjustments[keyof PhotoAdjustments],
+  const updateAdj = <K extends keyof PhotoAdjustments>(
+    key: K,
+    value: PhotoAdjustments[K],
     coalesce = false,
   ) => {
     if (adjustmentsRef.current[key] === value) return;
@@ -175,7 +178,9 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
     } else {
       sessionRef.current = { key: sessionKey, at: now };
     }
-    writeEdit({ ...adjustmentsRef.current, [key]: value }, '');
+    const next: PhotoAdjustments = { ...adjustmentsRef.current };
+    next[key] = value;
+    writeEdit(next, '');
   };
 
   const applyPreset = (preset: typeof PRESETS[0]) => {
@@ -216,13 +221,6 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
     setActivePreset(next.activePreset);
     setCanUndo(true);
     setCanRedo(futureRef.current.length > 0);
-  };
-
-  const resetAdjustments = () => {
-    if (adjustmentsEqual(DEFAULT_ADJUSTMENTS, adjustmentsRef.current) && presetRef.current === 'natural') return;
-    sessionRef.current = null;
-    pushPast();
-    writeEdit({ ...DEFAULT_ADJUSTMENTS }, 'natural');
   };
 
   const undoRef = useRef(undo);
@@ -271,6 +269,14 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
     ctx.translate(targetWidth / 2, targetHeight / 2);
     ctx.rotate((adjustments.rotation * Math.PI) / 180);
     ctx.scale(adjustments.flipH ? -1 : 1, adjustments.flipV ? -1 : 1);
+
+    if (compareMode) {
+      // Raw unmodified image in compare mode
+      ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
+      ctx.restore();
+      drawHistogram(ctx, canvas);
+      return;
+    }
 
     // Apply color and tone filters
     const exp = 1 + adjustments.exposure / 100;
@@ -436,14 +442,24 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Compare Toggle */}
             <button
               type="button"
-              onClick={resetAdjustments}
-              title="Reset adjustments"
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors border bg-neutral-800 text-neutral-300 border-neutral-700 hover:bg-neutral-750"
+              onMouseDown={() => setCompareMode(true)}
+              onMouseUp={() => setCompareMode(false)}
+              onMouseLeave={() => setCompareMode(false)}
+              onTouchStart={() => setCompareMode(true)}
+              onTouchEnd={() => setCompareMode(false)}
+              onTouchCancel={() => setCompareMode(false)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors border ${
+                compareMode
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                  : 'bg-neutral-800 text-neutral-300 border-neutral-700 hover:bg-neutral-750'
+              }`}
+              title="Hold to preview Original"
             >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Reset</span>
+              <Eye className="w-3.5 h-3.5" />
+              <span>{compareMode ? 'Original' : 'Hold Compare'}</span>
             </button>
 
             <button
@@ -521,21 +537,21 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
                   <Crop className="w-4 h-4" />
                 </button>
                 <button
-                  onClick={() => updateAdj('rotation', (adjustments.rotation + 90) % 360)}
+                  onClick={() => updateAdj('rotation', (adjustmentsRef.current.rotation + 90) % 360)}
                   className="p-1 hover:text-white rounded"
                   title="Rotate CW 90°"
                 >
                   <RotateCw className="w-4 h-4" />
                 </button>
                 <button
-                  onClick={() => updateAdj('flipH', !adjustments.flipH)}
+                  onClick={() => updateAdj('flipH', !adjustmentsRef.current.flipH)}
                   className={`p-1 rounded ${adjustments.flipH ? 'text-cyan-400' : 'hover:text-white'}`}
                   title="Flip Horizontal"
                 >
                   <FlipHorizontal className="w-4 h-4" />
                 </button>
                 <button
-                  onClick={() => updateAdj('flipV', !adjustments.flipV)}
+                  onClick={() => updateAdj('flipV', !adjustmentsRef.current.flipV)}
                   className={`p-1 rounded ${adjustments.flipV ? 'text-cyan-400' : 'hover:text-white'}`}
                   title="Flip Vertical"
                 >
