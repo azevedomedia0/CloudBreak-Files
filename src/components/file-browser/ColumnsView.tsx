@@ -118,11 +118,6 @@ export const ColumnsView: React.FC<ColumnsViewProps> = ({ accent, files, selecte
         <div className="w-80 md:w-96 macos-glass-card rounded-xl flex flex-col shrink-0 overflow-y-auto p-4 space-y-4">
           <div className="aspect-video rounded-lg overflow-hidden bg-black/50 border border-white/10 flex items-center justify-center relative shadow-lg">
             <FileThumbnail file={selectedFile} className="w-full h-full" />
-            {selectedFile.encryption.isEncrypted && (
-              <div className="absolute top-2 right-2 text-[10px] text-cyan-300 bg-black/80 px-2 py-0.5 rounded font-mono border border-cyan-500/40">
-                AES-256 E2EE
-              </div>
-            )}
           </div>
 
           <div>

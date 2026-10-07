@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldCheck, Edit3, Scissors, Play, CheckSquare, Square } from 'lucide-react';
+import { Edit3, Scissors, Play, CheckSquare, Square } from 'lucide-react';
 import { FileItem } from '../../types';
 import { isEditableDocument } from '../../utils/documentKind';
 import { FileThumbnail } from './FileThumbnail';
@@ -62,14 +62,6 @@ export const IconsView: React.FC<IconsViewProps> = ({ accent, files, selectedFil
               >
                 {isSelected ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
               </button>
-
-              {/* E2EE Lock */}
-              {file.encryption.isEncrypted && (
-                <div className="absolute top-2 right-2 flex items-center gap-1 text-[9px] text-cyan-300 bg-black/75 border border-cyan-500/30 px-1.5 py-0.5 rounded backdrop-blur-md font-mono">
-                  <ShieldCheck className="w-2.5 h-2.5 text-cyan-400" />
-                  <span>AES</span>
-                </div>
-              )}
 
               {/* Video Duration */}
               {file.videoMeta && (
