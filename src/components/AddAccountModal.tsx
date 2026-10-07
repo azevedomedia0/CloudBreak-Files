@@ -14,8 +14,6 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
   onAddAccount,
 }) => {
   const [provider, setProvider] = useState<'Google Drive' | 'Dropbox' | 'OneDrive' | 'MEGA Drive' | 'Nextcloud' | 'Encrypted Vault'>('Google Drive');
-  const [accountName, setAccountName] = useState('');
-  const [accountIdentifier, setAccountIdentifier] = useState('');
 
   if (!isOpen) return null;
 
@@ -31,9 +29,9 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
 
     const newAccount: CloudAccount = {
       id,
-      name: accountName.trim() || `${provider} Account`,
+      name: `${provider} Account`,
       provider,
-      email: accountIdentifier.trim() || `user@${provider.toLowerCase().replace(/\s+/g, '')}.com`,
+      email: `user@${provider.toLowerCase().replace(/\s+/g, '')}.com`,
       avatarColor: colors[Math.floor(Math.random() * colors.length)],
       usedBytes: 1.2 * 1024 * 1024 * 1024,
       totalBytes: 500 * 1024 * 1024 * 1024,
@@ -102,34 +100,6 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
                 </button>
               ))}
             </div>
-          </div>
-
-          {/* Account Label */}
-          <div>
-            <label className="text-xs font-medium text-neutral-300 block mb-1.5">
-              Account Label / Display Name
-            </label>
-            <input
-              type="text"
-              value={accountName}
-              onChange={e => setAccountName(e.target.value)}
-              placeholder="e.g. Master Production S3 or Work Drive"
-              className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-cyan-500"
-            />
-          </div>
-
-          {/* Bucket or Email */}
-          <div>
-            <label className="text-xs font-medium text-neutral-300 block mb-1.5">
-              Account Email / Identifier
-            </label>
-            <input
-              type="text"
-              value={accountIdentifier}
-              onChange={e => setAccountIdentifier(e.target.value)}
-              placeholder={provider === 'Nextcloud' ? 'https://cloud.example.org or user@nextcloud' : provider === 'OneDrive' ? 'user@onedrive.live.com' : provider === 'MEGA Drive' ? 'user@mega.nz' : 'account@company.com'}
-              className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-cyan-500"
-            />
           </div>
 
           <div className="pt-2 flex justify-end gap-2">
