@@ -33,7 +33,7 @@ export const NetworkSection: React.FC<NetworkSectionProps> = ({ onAddNetworkServ
             e.stopPropagation();
             onAddNetworkServer?.();
           }}
-          className="w-4 h-4 flex items-center justify-center bg-transparent text-neutral-400 hover:text-sky-300 transition-colors"
+          className="w-4 h-4 flex items-center justify-center bg-transparent text-neutral-400 hover:text-orange-300 transition-colors"
           title="Connect to Server (SMB/NFS)"
           aria-label="Connect to Server (SMB/NFS)"
         >
@@ -128,7 +128,7 @@ export const NetworkSection: React.FC<NetworkSectionProps> = ({ onAddNetworkServ
                   className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-neutral-300 hover:bg-white/5 hover:text-white transition-colors group text-left"
                 >
                   <div className="flex items-center gap-2 truncate">
-                    <Icon className="w-4 h-4 text-sky-400 shrink-0" />
+                    <Icon className="w-4 h-4 text-orange-400 shrink-0" />
                     <div className="truncate">
                       <div className="truncate font-medium leading-tight">{net.name}</div>
                       <div className="text-[9px] text-neutral-500 truncate font-mono">{net.desc}</div>
