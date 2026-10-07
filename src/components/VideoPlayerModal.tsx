@@ -389,9 +389,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                 </div>
               )}
 
-              {activeTab === 'trim' ? (
-                <TrimPanel duration={duration} currentTime={currentTime} fps={file.videoMeta?.framerate || 30} isPlaying={isPlaying} onTogglePlay={togglePlay} onSeek={seek} trimStart={trimStart} setTrimStart={setTrimStart} trimEnd={trimEnd} setTrimEnd={setTrimEnd} playTrimLoop={playTrimLoop} onContinue={continueToConvert} />
-              ) : (
+              {activeTab === 'player' ? (
                 <PlaybackControls
                   visible={controlsVisible || !isPlaying}
                   isPlaying={isPlaying}
@@ -413,6 +411,21 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                   onNextMedia={onNextMedia}
                   canPreviousMedia={canPreviousMedia}
                   canNextMedia={canNextMedia}
+                />
+              ) : (
+                <TrimPanel
+                  duration={duration}
+                  currentTime={currentTime}
+                  fps={file.videoMeta?.framerate || 30}
+                  isPlaying={isPlaying}
+                  onTogglePlay={togglePlay}
+                  onSeek={seek}
+                  trimStart={trimStart}
+                  setTrimStart={setTrimStart}
+                  trimEnd={trimEnd}
+                  setTrimEnd={setTrimEnd}
+                  playTrimLoop={playTrimLoop}
+                  onContinue={activeTab === 'trim' ? continueToConvert : undefined}
                 />
               )}
             </div>
