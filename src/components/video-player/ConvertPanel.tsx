@@ -114,10 +114,11 @@ export const ConvertPanel: React.FC<ConvertPanelProps> = ({
       {convertOptions.format !== 'mp3' && (
         <div>
           <label className={labelClass}>Resolution</label>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {[
               { id: '720p', label: '720p (HD)' },
               { id: '1080p', label: '1080p (FHD)' },
+              { id: '2k', label: '2K (1440p)' },
               { id: '4k', label: '4K UHD (2160p)' },
             ].map(res => (
               <button

@@ -248,7 +248,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const handleSaveConvertedToCloud = () => {
     const ext = convertOptions.format;
     const folder = folders.find(f => f.id === destination.folderId);
-    const resolutionScale = convertOptions.resolution === '4k' ? 1.6 : convertOptions.resolution === '720p' ? 0.5 : 0.8;
+    const resolutionScale = convertOptions.resolution === '4k' ? 1.6 : convertOptions.resolution === '2k' ? 1.2 : convertOptions.resolution === '720p' ? 0.5 : 0.8;
     const convertedFile: FileItem = {
       ...file,
       id: `file-conv-${Date.now()}`,
