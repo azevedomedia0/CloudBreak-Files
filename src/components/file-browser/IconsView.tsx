@@ -17,10 +17,11 @@ export interface IconsViewProps {
   onOpenDocument: (file: FileItem) => void;
   onOpenVideo: (file: FileItem) => void;
   onOpenQuickLook: () => void;
+  onFileContextMenu: (file: FileItem, event: React.MouseEvent) => void;
   toggleSelectOne: (id: string, e: React.MouseEvent) => void;
 }
 
-export const IconsView: React.FC<IconsViewProps> = ({ accent, files, selectedFileId, selectedIds, iconScale, onSelectFile, onEditPhoto, onOpenDocument, onOpenVideo, onOpenQuickLook, toggleSelectOne }) => (
+export const IconsView: React.FC<IconsViewProps> = ({ accent, files, selectedFileId, selectedIds, iconScale, onSelectFile, onEditPhoto, onOpenDocument, onOpenVideo, onOpenQuickLook, onFileContextMenu, toggleSelectOne }) => (
     <div 
       className="grid gap-4"
       style={{
@@ -35,6 +36,7 @@ export const IconsView: React.FC<IconsViewProps> = ({ accent, files, selectedFil
           <div
             key={file.id}
             onClick={() => onSelectFile(file)}
+            onContextMenu={event => onFileContextMenu(file, event)}
             onDoubleClick={() => {
               if (file.category === 'photo') onEditPhoto(file);
               else if (file.category === 'video') onOpenVideo(file);

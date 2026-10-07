@@ -19,11 +19,12 @@ export interface ColumnsViewProps {
   onOpenDocument: (file: FileItem) => void;
   onOpenVideo: (file: FileItem) => void;
   onOpenQuickLook: () => void;
+  onFileContextMenu: (file: FileItem, event: React.MouseEvent) => void;
   onSelectFolder: (folderId: string | null) => void;
   getAccount: (accountId: CloudProviderId) => CloudAccount | undefined;
 }
 
-export const ColumnsView: React.FC<ColumnsViewProps> = ({ accent, files, selectedFolder, selectedFileId, selectedFile, folders, totalSize, onSelectFile, onEditPhoto, onOpenDocument, onOpenVideo, onOpenQuickLook, onSelectFolder, getAccount }) => (
+export const ColumnsView: React.FC<ColumnsViewProps> = ({ accent, files, selectedFolder, selectedFileId, selectedFile, folders, totalSize, onSelectFile, onEditPhoto, onOpenDocument, onOpenVideo, onOpenQuickLook, onFileContextMenu, onSelectFolder, getAccount }) => (
     <div className="h-full flex gap-3 overflow-x-auto min-h-[480px]">
       {/* Col 1: Local Files & Folders */}
       <div className="w-64 macos-glass-card rounded-xl flex flex-col shrink-0 overflow-hidden">
@@ -90,6 +91,7 @@ export const ColumnsView: React.FC<ColumnsViewProps> = ({ accent, files, selecte
               <button
                 key={file.id}
                 onClick={() => onSelectFile(file)}
+                onContextMenu={event => onFileContextMenu(file, event)}
                 onDoubleClick={() => {
                   if (file.category === 'photo') onEditPhoto(file);
                   else if (file.category === 'video') onOpenVideo(file);
@@ -115,7 +117,10 @@ export const ColumnsView: React.FC<ColumnsViewProps> = ({ accent, files, selecte
 
       {/* Col 3: Miller Columns Live Preview & Inspector Pane */}
       {selectedFile && (
-        <div className="w-80 md:w-96 macos-glass-card rounded-xl flex flex-col shrink-0 overflow-y-auto p-4 space-y-4">
+        <div
+          className="w-80 md:w-96 macos-glass-card rounded-xl flex flex-col shrink-0 overflow-y-auto p-4 space-y-4"
+          onContextMenu={event => onFileContextMenu(selectedFile, event)}
+        >
           <div className="aspect-video rounded-lg overflow-hidden bg-black/50 border border-white/10 flex items-center justify-center relative shadow-lg">
             <FileThumbnail file={selectedFile} className="w-full h-full" />
           </div>
