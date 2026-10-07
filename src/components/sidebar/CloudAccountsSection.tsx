@@ -44,7 +44,7 @@ export const CloudAccountsSection: React.FC<CloudAccountsSectionProps> = ({ acco
 
       {!collapsed.accounts && (
         <div className="space-y-0.5">
-          {accounts.map(acc => {
+          {accounts.filter(acc => acc.status !== 'offline').map(acc => {
             const isSelected = selectedAccountId === acc.id && !selectedLibraryId && !selectedFolderId;
             const pct = Math.min(100, Math.round((acc.usedBytes / acc.totalBytes) * 100));
 
