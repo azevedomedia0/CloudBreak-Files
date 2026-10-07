@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   X, RotateCw, RotateCcw, FlipHorizontal, FlipVertical,
   Sliders, Wand2, Download, Save, Undo2, Redo2, Check,
-  Sparkles, Layers, ZoomIn, ZoomOut, Maximize2, ShieldCheck, Crop
+  Sparkles, Layers, ZoomIn, ZoomOut, Maximize2, Crop
 } from 'lucide-react';
 import { FileItem, PhotoAdjustments } from '../types';
 
@@ -428,11 +428,6 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
                 <h2 className="text-sm font-semibold text-neutral-100 truncate max-w-md">
                   {file.name}
                 </h2>
-                {file.encryption.isEncrypted && (
-                  <span className="flex items-center gap-1 text-[11px] text-cyan-400 bg-cyan-950/40 border border-cyan-800/50 px-2 py-0.5 rounded">
-                    <ShieldCheck className="w-3 h-3" /> E2EE Active
-                  </span>
-                )}
               </div>
               <p className="text-xs text-neutral-500">
                 Studio Grading Suite · {file.photoExif?.dimensions?.width || '4K'}×{file.photoExif?.dimensions?.height || 'HD'} · {file.photoExif?.camera || 'Pro RAW'}
