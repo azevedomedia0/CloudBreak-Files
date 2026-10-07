@@ -1,0 +1,87 @@
+import React from 'react';
+import { FileText, Edit3, Scissors } from 'lucide-react';
+import { FileItem } from '../../types';
+
+export interface GalleryViewProps {
+  files: FileItem[];
+  selectedFile: FileItem;
+  onSelectFile: (file: FileItem) => void;
+  onEditPhoto: (file: FileItem) => void;
+  onOpenVideo: (file: FileItem) => void;
+}
+
+export const GalleryView: React.FC<GalleryViewProps> = ({ files, selectedFile, onSelectFile, onEditPhoto, onOpenVideo }) => (
+    <div className="h-full flex flex-col space-y-4">
+      {/* Center Big Gallery Viewport */}
+      <div className="flex-1 min-h-[380px] macos-glass-card rounded-2xl flex items-center justify-center relative p-6 overflow-hidden">
+        {selectedFile.category === 'photo' && (
+          <img
+            src={selectedFile.url}
+            alt={selectedFile.name}
+            className="max-h-full max-w-full object-contain rounded-xl shadow-2xl"
+          />
+        )}
+        {selectedFile.category === 'video' && (
+          <video
+            src={selectedFile.url}
+            controls
+            className="max-h-full max-w-full rounded-xl shadow-2xl"
+          />
+        )}
+        {selectedFile.category !== 'photo' && selectedFile.category !== 'video' && (
+          <div className="flex flex-col items-center gap-2 text-neutral-400">
+            <FileText className="w-16 h-16 text-cyan-400" />
+            <span className="font-mono text-sm">{selectedFile.name}</span>
+          </div>
+        )}
+
+        {/* Action Floating Buttons */}
+        <div className="absolute top-4 right-4 flex items-center gap-2">
+          {selectedFile.category === 'photo' && (
+            <button
+              onClick={() => onEditPhoto(selectedFile)}
+              className="px-3 py-1.5 rounded-lg bg-cyan-400 hover:bg-cyan-300 text-neutral-950 font-bold text-xs flex items-center gap-1.5 shadow-lg"
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              <span>Open in Studio</span>
+            </button>
+          )}
+          {selectedFile.category === 'video' && (
+            <button
+              onClick={() => onOpenVideo(selectedFile)}
+              className="px-3 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-xs flex items-center gap-1.5 shadow-lg"
+            >
+              <Scissors className="w-3.5 h-3.5" />
+              <span>Open Cinema Suite</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Bottom macOS Scrubber Reel */}
+      <div className="h-28 overflow-x-auto flex gap-3 p-2.5 macos-glass-card rounded-xl">
+        {files.map(file => {
+          const isActive = selectedFile.id === file.id;
+          return (
+            <div
+              key={file.id}
+              onClick={() => onSelectFile(file)}
+              className={`h-full aspect-video rounded-lg overflow-hidden border shrink-0 cursor-pointer relative transition-all ${
+                isActive
+                  ? 'ring-2 ring-sky-400 border-sky-400 scale-102 shadow-lg'
+                  : 'border-white/10 opacity-60 hover:opacity-100 hover:border-white/20'
+              }`}
+            >
+              {file.thumbnailUrl ? (
+                <img src={file.thumbnailUrl} alt={file.name} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full bg-black/60 flex items-center justify-center text-xs text-neutral-500 font-mono">
+                  {file.category}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+);
