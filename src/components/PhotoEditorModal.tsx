@@ -5,12 +5,14 @@ import {
   Sparkles, Layers, ZoomIn, ZoomOut, Maximize2, Crop
 } from 'lucide-react';
 import { FileItem, PhotoAdjustments } from '../types';
+import { PhotoNav, PhotoNavArrows } from './PhotoNavArrows';
 
 interface PhotoEditorModalProps {
   file: FileItem;
   isOpen: boolean;
   onClose: () => void;
   onSaveAsVersion: (updatedFile: FileItem, dataUrl: string) => void;
+  photoNav?: PhotoNav | null;
 }
 
 const DEFAULT_ADJUSTMENTS: PhotoAdjustments = {
@@ -85,6 +87,7 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
   isOpen,
   onClose,
   onSaveAsVersion,
+  photoNav = null,
 }) => {
   const [adjustments, setAdjustments] = useState<PhotoAdjustments>(DEFAULT_ADJUSTMENTS);
   const [activeTab, setActiveTab] = useState<'adjust' | 'presets' | 'geometry'>('adjust');
@@ -249,6 +252,23 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !photoNav) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+      if (event.key === 'ArrowLeft' && photoNav.hasPrev) {
+        event.preventDefault();
+        photoNav.onPrev();
+      } else if (event.key === 'ArrowRight' && photoNav.hasNext) {
+        event.preventDefault();
+        photoNav.onNext();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isOpen, photoNav]);
 
   // Render Image onto canvas with CSS filter & pixel transformations
   const renderImage = () => {
@@ -501,7 +521,8 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
           
           {/* Canvas Viewport Area */}
           <div className="flex-1 flex flex-col items-center justify-center p-4 bg-neutral-950/60 relative overflow-hidden select-none">
-            
+            {photoNav && <PhotoNavArrows nav={photoNav} />}
+
             {/* Canvas Container with dynamic zoom */}
             <div 
               className="flex items-center justify-center w-full h-full transition-transform duration-100 ease-out"
