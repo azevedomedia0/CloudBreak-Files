@@ -247,15 +247,17 @@ export default function App() {
 
   // Video navigation for playback controls
   const videoFiles = filteredFiles.filter(f => f.category === 'video');
-  const videoIndex = selectedFile?.category === 'video' ? videoFiles.findIndex(f => f.id === selectedFile.id) : -1;
+  const videoIndex = playingVideoFile ? videoFiles.findIndex(f => f.id === playingVideoFile.id) : -1;
   const canPreviousMedia = videoIndex > 0;
   const canNextMedia = videoIndex >= 0 && videoIndex < videoFiles.length - 1;
-  const onPreviousMedia = () => {
-    if (videoIndex > 0) setSelectedFileId(videoFiles[videoIndex - 1].id);
+  const playVideoAt = (index: number) => {
+    const next = videoFiles[index];
+    if (!next) return;
+    setSelectedFileId(next.id);
+    setPlayingVideoFile(next);
   };
-  const onNextMedia = () => {
-    if (videoIndex >= 0 && videoIndex < videoFiles.length - 1) setSelectedFileId(videoFiles[videoIndex + 1].id);
-  };
+  const onPreviousMedia = () => playVideoAt(videoIndex - 1);
+  const onNextMedia = () => playVideoAt(videoIndex + 1);
 
   const {
     isDraggingOver,
