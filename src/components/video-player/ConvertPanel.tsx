@@ -1,6 +1,6 @@
 import React from 'react';
 import { RefreshCw, Check, Sparkles, HardDrive, Monitor, Scissors, FolderOpen } from 'lucide-react';
-import { VideoConvertOptions, FileItem, CloudAccount, CloudProviderId, FolderItem } from '../../types';
+import { VideoConvertOptions, FileItem, CloudAccount, CloudProviderId, FolderItem, isAudioConvertFormat } from '../../types';
 import { formatTimecode } from '../../utils/format';
 
 export interface SaveDestination {
@@ -90,9 +90,15 @@ export const ConvertPanel: React.FC<ConvertPanelProps> = ({
         <div className="grid grid-cols-2 gap-2">
           {[
             { id: 'mp4', label: 'MP4 (H.264 / AAC)', desc: 'Universal Cinema' },
+            { id: 'mov', label: 'MOV (ProRes)', desc: 'Editing Master' },
+            { id: 'mkv', label: 'MKV (H.264)', desc: 'Archive' },
             { id: 'webm', label: 'WebM (VP9 / Opus)', desc: 'Optimized Web' },
+            { id: 'avi', label: 'AVI (MPEG-4)', desc: 'Legacy Playback' },
             { id: 'gif', label: 'Animated GIF', desc: 'Loop Preview' },
             { id: 'mp3', label: 'MP3 / Audio Only', desc: 'Audio Track' },
+            { id: 'aac', label: 'AAC', desc: 'Compact Audio' },
+            { id: 'wav', label: 'WAV', desc: 'Uncompressed Audio' },
+            { id: 'flac', label: 'FLAC', desc: 'Lossless Audio' },
           ].map(fmt => (
             <button
               key={fmt.id}
@@ -111,7 +117,7 @@ export const ConvertPanel: React.FC<ConvertPanelProps> = ({
       </div>
 
       {/* Resolution if not audio */}
-      {convertOptions.format !== 'mp3' && (
+      {!isAudioConvertFormat(convertOptions.format) && (
         <div>
           <label className={labelClass}>Resolution</label>
           <div className="grid grid-cols-2 gap-2">
