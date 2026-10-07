@@ -359,34 +359,42 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
 
           {!collapsedSections.actions && (
             <div className="grid grid-cols-4 gap-2">
-              {/* Button 1: Trim */}
-              <button
-                type="button"
-                onClick={() => {
-                  if (file.category === 'video') onOpenVideo(file, 'trim');
-                  else if (isEditableDocument(file)) onOpenDocument(file);
-                  else onEditPhoto(file);
-                }}
-                className="h-9 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/30 text-amber-300 flex items-center justify-center transition-all shadow-xs cursor-pointer"
-                title={file.category === 'video' ? "Trim Video (Cinema Suite)" : isEditableDocument(file) ? "Edit document" : "Crop & Trim Photo"}
-                aria-label={isEditableDocument(file) ? "Edit document" : "Trim"}
-              >
-                {isEditableDocument(file) ? <Edit3 className="w-4 h-4" /> : <Scissors className="w-4 h-4" />}
-              </button>
-
-              {/* Button 2: Convert */}
-              <button
-                type="button"
-                onClick={() => {
-                  if (file.category === 'video') onOpenVideo(file, 'convert');
-                  else onEditPhoto(file);
-                }}
-                className="h-9 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 border border-sky-400/30 text-sky-300 flex items-center justify-center transition-all shadow-xs cursor-pointer"
-                title={file.category === 'video' ? "Convert Video (Format & Quality)" : "Convert & Adjust"}
-                aria-label="Convert"
-              >
-                <RefreshCw className="w-4 h-4" />
-              </button>
+              {file.category === 'video' ? (
+                <button
+                  type="button"
+                  onClick={() => onOpenVideo(file, 'trim')}
+                  className="col-span-2 h-9 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/30 text-amber-300 flex items-center justify-center gap-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer"
+                  title="Edit Video"
+                  aria-label="Edit Video"
+                >
+                  <Scissors className="w-3.5 h-3.5" />
+                  <span>Edit Video</span>
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isEditableDocument(file)) onOpenDocument(file);
+                      else onEditPhoto(file);
+                    }}
+                    className="h-9 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/30 text-amber-300 flex items-center justify-center transition-all shadow-xs cursor-pointer"
+                    title={isEditableDocument(file) ? "Edit document" : "Crop & Trim Photo"}
+                    aria-label={isEditableDocument(file) ? "Edit document" : "Trim"}
+                  >
+                    {isEditableDocument(file) ? <Edit3 className="w-3.5 h-3.5" /> : <Scissors className="w-3.5 h-3.5" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onEditPhoto(file)}
+                    className="h-9 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 border border-sky-400/30 text-sky-300 flex items-center justify-center transition-all shadow-xs cursor-pointer"
+                    title="Convert & Adjust"
+                    aria-label="Convert"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                  </button>
+                </>
+              )}
 
               {/* Button 3: Share Library */}
               <button
