@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
-  X, RotateCw, FlipHorizontal, FlipVertical,
-  Sliders, Wand2, Download, Save, Undo, Eye, Check,
+  X, RotateCw, RotateCcw, FlipHorizontal, FlipVertical,
+  Sliders, Wand2, Download, Save, Undo2, Redo2, Check,
   Sparkles, Layers, ZoomIn, ZoomOut, Maximize2, ShieldCheck, Crop
 } from 'lucide-react';
 import { FileItem, PhotoAdjustments } from '../types';
@@ -31,6 +31,15 @@ const DEFAULT_ADJUSTMENTS: PhotoAdjustments = {
   flipV: false,
   cropAspect: 'free',
 };
+
+interface EditSnapshot {
+  adjustments: PhotoAdjustments;
+  activePreset: string;
+}
+
+function adjustmentsEqual(a: PhotoAdjustments, b: PhotoAdjustments): boolean {
+  return (Object.keys(a) as (keyof PhotoAdjustments)[]).every(key => a[key] === b[key]);
+}
 
 const PRESETS: { id: string; label: string; desc: string; values: Partial<PhotoAdjustments> }[] = [
   {
@@ -80,7 +89,6 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
   const [adjustments, setAdjustments] = useState<PhotoAdjustments>(DEFAULT_ADJUSTMENTS);
   const [activeTab, setActiveTab] = useState<'adjust' | 'presets' | 'geometry'>('adjust');
   const [activePreset, setActivePreset] = useState<string>('natural');
-  const [compareMode, setCompareMode] = useState<boolean>(false);
   const [zoomLevel, setZoomLevel] = useState<number>(100);
   const [exportFormat, setExportFormat] = useState<'image/jpeg' | 'image/png' | 'image/webp'>('image/jpeg');
   const [exportQuality, setExportQuality] = useState<number>(0.92);
@@ -90,10 +98,24 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const histogramCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const adjustmentsRef = useRef<PhotoAdjustments>(DEFAULT_ADJUSTMENTS);
+  const presetRef = useRef('natural');
+  const pastRef = useRef<EditSnapshot[]>([]);
+  const futureRef = useRef<EditSnapshot[]>([]);
+  const sessionRef = useRef<{ key: string; at: number } | null>(null);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
 
   // Load image on file change
   useEffect(() => {
     if (!isOpen) return;
+    pastRef.current = [];
+    futureRef.current = [];
+    sessionRef.current = null;
+    adjustmentsRef.current = DEFAULT_ADJUSTMENTS;
+    presetRef.current = 'natural';
+    setCanUndo(false);
+    setCanRedo(false);
     setAdjustments(DEFAULT_ADJUSTMENTS);
     setActivePreset('natural');
     setZoomLevel(100);
@@ -112,20 +134,118 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
     if (imgRef.current) {
       renderImage();
     }
-  }, [adjustments, compareMode]);
+  }, [adjustments]);
 
-  const updateAdj = (key: keyof PhotoAdjustments, value: any) => {
-    setAdjustments(prev => ({ ...prev, [key]: value }));
-    setActivePreset('');
+  const pushPast = () => {
+    pastRef.current.push({
+      adjustments: { ...adjustmentsRef.current },
+      activePreset: presetRef.current,
+    });
+    if (pastRef.current.length > 80) pastRef.current.shift();
+    futureRef.current = [];
+    setCanRedo(false);
+  };
+
+  const writeEdit = (next: PhotoAdjustments, preset: string) => {
+    adjustmentsRef.current = next;
+    presetRef.current = preset;
+    setAdjustments(next);
+    setActivePreset(preset);
+    const top = pastRef.current[pastRef.current.length - 1];
+    if (top && adjustmentsEqual(top.adjustments, next) && top.activePreset === preset) {
+      pastRef.current.pop();
+      sessionRef.current = null;
+    }
+    setCanUndo(pastRef.current.length > 0);
+  };
+
+  const updateAdj = (
+    key: keyof PhotoAdjustments,
+    value: PhotoAdjustments[keyof PhotoAdjustments],
+    coalesce = false,
+  ) => {
+    if (adjustmentsRef.current[key] === value) return;
+    const now = Date.now();
+    const sessionKey = String(key);
+    const session = sessionRef.current;
+    const continuing = coalesce && session?.key === sessionKey && now - session.at < 700;
+    if (!continuing) {
+      pushPast();
+      sessionRef.current = coalesce ? { key: sessionKey, at: now } : null;
+    } else {
+      sessionRef.current = { key: sessionKey, at: now };
+    }
+    writeEdit({ ...adjustmentsRef.current, [key]: value }, '');
   };
 
   const applyPreset = (preset: typeof PRESETS[0]) => {
-    setActivePreset(preset.id);
-    setAdjustments(prev => ({
-      ...prev,
-      ...preset.values,
-    }));
+    const next = { ...adjustmentsRef.current, ...preset.values };
+    if (adjustmentsEqual(next, adjustmentsRef.current) && presetRef.current === preset.id) return;
+    sessionRef.current = null;
+    pushPast();
+    writeEdit(next, preset.id);
   };
+
+  const undo = () => {
+    const prev = pastRef.current.pop();
+    if (!prev) return;
+    sessionRef.current = null;
+    futureRef.current.push({
+      adjustments: { ...adjustmentsRef.current },
+      activePreset: presetRef.current,
+    });
+    adjustmentsRef.current = { ...prev.adjustments };
+    presetRef.current = prev.activePreset;
+    setAdjustments(adjustmentsRef.current);
+    setActivePreset(prev.activePreset);
+    setCanUndo(pastRef.current.length > 0);
+    setCanRedo(true);
+  };
+
+  const redo = () => {
+    const next = futureRef.current.pop();
+    if (!next) return;
+    sessionRef.current = null;
+    pastRef.current.push({
+      adjustments: { ...adjustmentsRef.current },
+      activePreset: presetRef.current,
+    });
+    adjustmentsRef.current = { ...next.adjustments };
+    presetRef.current = next.activePreset;
+    setAdjustments(adjustmentsRef.current);
+    setActivePreset(next.activePreset);
+    setCanUndo(true);
+    setCanRedo(futureRef.current.length > 0);
+  };
+
+  const resetAdjustments = () => {
+    if (adjustmentsEqual(DEFAULT_ADJUSTMENTS, adjustmentsRef.current) && presetRef.current === 'natural') return;
+    sessionRef.current = null;
+    pushPast();
+    writeEdit({ ...DEFAULT_ADJUSTMENTS }, 'natural');
+  };
+
+  const undoRef = useRef(undo);
+  const redoRef = useRef(redo);
+  undoRef.current = undo;
+  redoRef.current = redo;
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+      const key = e.key.toLowerCase();
+      if (key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undoRef.current();
+      } else if ((key === 'z' && e.shiftKey) || key === 'y') {
+        e.preventDefault();
+        redoRef.current();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isOpen]);
 
   // Render Image onto canvas with CSS filter & pixel transformations
   const renderImage = () => {
@@ -151,14 +271,6 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
     ctx.translate(targetWidth / 2, targetHeight / 2);
     ctx.rotate((adjustments.rotation * Math.PI) / 180);
     ctx.scale(adjustments.flipH ? -1 : 1, adjustments.flipV ? -1 : 1);
-
-    if (compareMode) {
-      // Raw unmodified image in compare mode
-      ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
-      ctx.restore();
-      drawHistogram(ctx, canvas);
-      return;
-    }
 
     // Apply color and tone filters
     const exp = 1 + adjustments.exposure / 100;
@@ -329,33 +441,35 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Compare Toggle */}
             <button
-              onMouseDown={() => setCompareMode(true)}
-              onMouseUp={() => setCompareMode(false)}
-              onTouchStart={() => setCompareMode(true)}
-              onTouchEnd={() => setCompareMode(false)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors border ${
-                compareMode 
-                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/50' 
-                  : 'bg-neutral-800 text-neutral-300 border-neutral-700 hover:bg-neutral-750'
-              }`}
-              title="Hold to preview Original"
+              type="button"
+              onClick={resetAdjustments}
+              title="Reset adjustments"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors border bg-neutral-800 text-neutral-300 border-neutral-700 hover:bg-neutral-750"
             >
-              <Eye className="w-3.5 h-3.5" />
-              <span>{compareMode ? 'Original' : 'Hold Compare'}</span>
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Reset</span>
             </button>
 
-            {/* Reset */}
             <button
-              onClick={() => {
-                setAdjustments(DEFAULT_ADJUSTMENTS);
-                setActivePreset('natural');
-              }}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-200 bg-neutral-800/50 border border-neutral-700/60 rounded-lg hover:bg-neutral-800"
+              type="button"
+              onClick={undo}
+              disabled={!canUndo}
+              title="Undo (Ctrl+Z)"
+              className="flex items-center gap-1 px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-200 bg-neutral-800/50 border border-neutral-700/60 rounded-lg hover:bg-neutral-800 disabled:opacity-40 disabled:pointer-events-none"
             >
-              <Undo className="w-3.5 h-3.5" />
-              <span>Reset</span>
+              <Undo2 className="w-3.5 h-3.5" />
+              <span>Undo</span>
+            </button>
+            <button
+              type="button"
+              onClick={redo}
+              disabled={!canRedo}
+              title="Redo (Ctrl+Shift+Z)"
+              className="flex items-center gap-1 px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-200 bg-neutral-800/50 border border-neutral-700/60 rounded-lg hover:bg-neutral-800 disabled:opacity-40 disabled:pointer-events-none"
+            >
+              <Redo2 className="w-3.5 h-3.5" />
+              <span>Redo</span>
             </button>
 
             {/* Export & Save Buttons */}
@@ -534,35 +648,35 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
                       value={adjustments.exposure}
                       min={-100}
                       max={100}
-                      onChange={v => updateAdj('exposure', v)}
+                      onChange={v => updateAdj('exposure', v, true)}
                     />
                     <AdjustmentSlider
                       label="Brightness"
                       value={adjustments.brightness}
                       min={-100}
                       max={100}
-                      onChange={v => updateAdj('brightness', v)}
+                      onChange={v => updateAdj('brightness', v, true)}
                     />
                     <AdjustmentSlider
                       label="Contrast"
                       value={adjustments.contrast}
                       min={-100}
                       max={100}
-                      onChange={v => updateAdj('contrast', v)}
+                      onChange={v => updateAdj('contrast', v, true)}
                     />
                     <AdjustmentSlider
                       label="Highlights"
                       value={adjustments.highlights}
                       min={-100}
                       max={100}
-                      onChange={v => updateAdj('highlights', v)}
+                      onChange={v => updateAdj('highlights', v, true)}
                     />
                     <AdjustmentSlider
                       label="Shadows"
                       value={adjustments.shadows}
                       min={-100}
                       max={100}
-                      onChange={v => updateAdj('shadows', v)}
+                      onChange={v => updateAdj('shadows', v, true)}
                     />
                   </div>
                 </div>
@@ -578,28 +692,28 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
                       value={adjustments.warmth}
                       min={-100}
                       max={100}
-                      onChange={v => updateAdj('warmth', v)}
+                      onChange={v => updateAdj('warmth', v, true)}
                     />
                     <AdjustmentSlider
                       label="Tint (Green / Mag)"
                       value={adjustments.tint}
                       min={-100}
                       max={100}
-                      onChange={v => updateAdj('tint', v)}
+                      onChange={v => updateAdj('tint', v, true)}
                     />
                     <AdjustmentSlider
                       label="Saturation"
                       value={adjustments.saturation}
                       min={-100}
                       max={100}
-                      onChange={v => updateAdj('saturation', v)}
+                      onChange={v => updateAdj('saturation', v, true)}
                     />
                     <AdjustmentSlider
                       label="Vibrance"
                       value={adjustments.vibrance}
                       min={-100}
                       max={100}
-                      onChange={v => updateAdj('vibrance', v)}
+                      onChange={v => updateAdj('vibrance', v, true)}
                     />
                   </div>
                 </div>
@@ -615,14 +729,14 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
                       value={adjustments.clarity}
                       min={0}
                       max={100}
-                      onChange={v => updateAdj('clarity', v)}
+                      onChange={v => updateAdj('clarity', v, true)}
                     />
                     <AdjustmentSlider
                       label="Vignette"
                       value={adjustments.vignette}
                       min={0}
                       max={100}
-                      onChange={v => updateAdj('vignette', v)}
+                      onChange={v => updateAdj('vignette', v, true)}
                     />
                   </div>
                 </div>
