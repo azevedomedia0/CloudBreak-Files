@@ -46,6 +46,7 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
   const [autoSync, setAutoSync] = useState(true);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<'idle' | 'success' | 'failed'>('idle');
+  const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
 
   const handleTestConnection = () => {
     setIsTesting(true);
@@ -71,21 +72,18 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
   };
 
   const handleDisconnect = () => {
-    if (confirm(`Are you sure you want to disconnect ${account.name} from AetherCloud? This will stop syncing but won't delete any files.`)) {
-      onDisconnect?.(account.id);
-      onShowToast?.(`Disconnected ${account.name}`);
-      onClose();
-    }
+    onDisconnect?.(account.id);
+    onClose();
   };
 
   const pct = Math.min(100, Math.round((account.usedBytes / account.totalBytes) * 100));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-150">
-      <div className="relative flex flex-col w-full max-w-xl bg-[#14161f] border border-[#2a2e3d] rounded-2xl shadow-2xl overflow-hidden select-none">
+      <div className="relative flex flex-col w-full max-w-xl bg-[#141416] border border-[#2c2c2f] rounded-2xl shadow-2xl overflow-hidden select-none">
         
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#252837] bg-[#0e1017]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#262629] bg-[#0e0e0f]">
           <div className="flex items-center gap-3">
             <div className={`w-9 h-9 rounded-xl bg-gradient-to-tr ${account.avatarColor} flex items-center justify-center text-white font-bold text-sm shadow-md`}>
               {account.provider[0].toUpperCase()}
@@ -108,7 +106,7 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-neutral-400 hover:text-white hover:bg-[#202432] rounded-lg transition-colors cursor-pointer"
+            className="p-1.5 text-neutral-400 hover:text-white hover:bg-[#202023] rounded-lg transition-colors cursor-pointer"
             title="Close dialog"
           >
             <X className="w-5 h-5" />
@@ -116,7 +114,7 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex items-center gap-1 px-6 pt-3 border-b border-[#252837] bg-[#11131c] text-xs">
+        <div className="flex items-center gap-1 px-6 pt-3 border-b border-[#262629] bg-[#111113] text-xs">
           <button
             type="button"
             onClick={() => setActiveTab('integration')}
@@ -157,7 +155,7 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
           {activeTab === 'integration' && (
             <div className="space-y-4">
               {/* Provider Info Banner */}
-              <div className="p-3.5 rounded-xl bg-[#0a0c12] border border-[#222533] flex items-start gap-3">
+              <div className="p-3.5 rounded-xl bg-[#0b0b0c] border border-[#212124] flex items-start gap-3">
                 <Globe className="w-5 h-5 text-sky-400 shrink-0 mt-0.5" />
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-semibold text-neutral-200">
@@ -182,7 +180,7 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
                   type="text"
                   value={accountName}
                   onChange={e => setAccountName(e.target.value)}
-                  className="w-full bg-[#0e1017] border border-[#2a2e3d] rounded-lg px-3 py-2 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-sky-500 font-sans"
+                  className="w-full bg-[#0e0e0f] border border-[#2c2c2f] rounded-lg px-3 py-2 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-sky-500 font-sans"
                 />
               </div>
 
@@ -195,7 +193,7 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
                   type="text"
                   value={accountEmail}
                   onChange={e => setAccountEmail(e.target.value)}
-                  className="w-full bg-[#0e1017] border border-[#2a2e3d] rounded-lg px-3 py-2 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-sky-500 font-sans"
+                  className="w-full bg-[#0e0e0f] border border-[#2c2c2f] rounded-lg px-3 py-2 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-sky-500 font-sans"
                 />
               </div>
 
@@ -208,7 +206,7 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
                   type="text"
                   value={serverEndpoint}
                   onChange={e => setServerEndpoint(e.target.value)}
-                  className="w-full bg-[#0e1017] border border-[#2a2e3d] rounded-lg px-3 py-2 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-sky-500 font-mono text-[11px]"
+                  className="w-full bg-[#0e0e0f] border border-[#2c2c2f] rounded-lg px-3 py-2 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-sky-500 font-mono text-[11px]"
                 />
               </div>
 
@@ -224,7 +222,7 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
                     onChange={e => setApiKey(e.target.value)}
                     placeholder="Paste a token or app password"
                     autoComplete="off"
-                    className="w-full bg-[#0e1017] border border-[#2a2e3d] rounded-lg px-3 py-2 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-sky-500 font-mono text-[11px] pr-10"
+                    className="w-full bg-[#0e0e0f] border border-[#2c2c2f] rounded-lg px-3 py-2 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-sky-500 font-mono text-[11px] pr-10"
                   />
                   <div className="absolute right-2.5 top-2.5 text-neutral-500">
                     <Key className="w-3.5 h-3.5" />
@@ -238,7 +236,7 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
                   type="button"
                   onClick={handleTestConnection}
                   disabled={isTesting}
-                  className="px-3 py-2 rounded-lg bg-[#1c1f2c] hover:bg-[#252a3c] border border-[#2e3344] text-neutral-200 text-xs font-medium flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                  className="px-3 py-2 rounded-lg bg-[#1c1c1f] hover:bg-[#27272b] border border-[#323236] text-neutral-200 text-xs font-medium flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 text-sky-400 ${isTesting ? 'animate-spin' : ''}`} />
                   <span>{isTesting ? 'Testing connection...' : `Test ${account.provider} Integration`}</span>
@@ -257,7 +255,7 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
           {activeTab === 'security' && (
             <div className="space-y-4">
               {/* E2EE Toggle */}
-              <div className="p-3.5 rounded-xl bg-[#0a0c12] border border-[#222533] space-y-2">
+              <div className="p-3.5 rounded-xl bg-[#0b0b0c] border border-[#212124] space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <ShieldCheck className="w-4 h-4 text-emerald-400" />
@@ -277,17 +275,17 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
               </div>
 
               {/* Key Fingerprint */}
-              <div className="p-3.5 rounded-xl bg-[#0a0c12] border border-[#222533] space-y-1.5">
+              <div className="p-3.5 rounded-xl bg-[#0b0b0c] border border-[#212124] space-y-1.5">
                 <span className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider block font-mono">
                   Cryptographic Key Fingerprint
                 </span>
-                <div className="font-mono text-xs text-sky-300 bg-[#0e1017] p-2 rounded-lg border border-[#252837] break-all select-all">
+                <div className="font-mono text-xs text-sky-300 bg-[#0e0e0f] p-2 rounded-lg border border-[#262629] break-all select-all">
                   SHA256:7e:9b:12:44:8a:00:c3:91:ff:1a:28:cc:40:99:ee:b1
                 </div>
               </div>
 
               {/* Encryption Algorithm */}
-              <div className="p-3.5 rounded-xl bg-[#0a0c12] border border-[#222533] flex items-center justify-between">
+              <div className="p-3.5 rounded-xl bg-[#0b0b0c] border border-[#212124] flex items-center justify-between">
                 <div>
                   <div className="text-xs font-semibold text-neutral-200">Cipher Specification</div>
                   <div className="text-[11px] text-neutral-400">Authenticated Galois/Counter Mode</div>
@@ -302,7 +300,7 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
           {activeTab === 'sync' && (
             <div className="space-y-4">
               {/* Storage Quota Progress */}
-              <div className="p-4 rounded-xl bg-[#0a0c12] border border-[#222533] space-y-2">
+              <div className="p-4 rounded-xl bg-[#0b0b0c] border border-[#212124] space-y-2">
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-neutral-300">Allocated Cloud Storage</span>
                   <span className="font-mono text-white font-medium">
@@ -318,7 +316,7 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
               </div>
 
               {/* Auto Sync Toggle */}
-              <div className="p-3.5 rounded-xl bg-[#0a0c12] border border-[#222533] flex items-center justify-between">
+              <div className="p-3.5 rounded-xl bg-[#0b0b0c] border border-[#212124] flex items-center justify-between">
                 <div>
                   <div className="text-xs font-semibold text-neutral-200">Realtime Background Sync</div>
                   <div className="text-[11px] text-neutral-400">Stream file changes and P2P replicas automatically</div>
@@ -333,7 +331,7 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
               </div>
 
               {/* Node Specifications */}
-              <div className="p-3.5 rounded-xl bg-[#0a0c12] border border-[#222533] space-y-2 text-[11px]">
+              <div className="p-3.5 rounded-xl bg-[#0b0b0c] border border-[#212124] space-y-2 text-[11px]">
                 <div className="flex justify-between text-neutral-400 font-mono">
                   <span>Transfer Threads:</span>
                   <span className="text-neutral-200">8 parallel streams</span>
@@ -351,33 +349,59 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
           )}
 
           {/* Dialog Action Buttons */}
-          <div className="flex items-center justify-between pt-4 border-t border-[#252837]">
-            <button
-              type="button"
-              onClick={handleDisconnect}
-              className="px-4 py-2 rounded-lg bg-red-950/50 hover:bg-red-900/60 border border-red-800/60 text-red-300 hover:text-red-100 text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer"
-              title={`Disconnect ${account.name} from AetherCloud`}
-            >
-              <Unlink className="w-3.5 h-3.5" />
-              <span>Disconnect Account</span>
-            </button>
-            <div className="flex items-center gap-2">
+          {confirmingDisconnect ? (
+            <div className="flex items-center justify-between gap-3 pt-4 border-t border-[#262629]">
+              <div>
+                <div className="text-xs font-semibold text-red-200">Disconnect {account.name}?</div>
+                <div className="text-[11px] text-neutral-400">Syncing stops and it leaves the sidebar. Your files stay in the provider.</div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setConfirmingDisconnect(false)}
+                  className="px-4 py-2 rounded-lg bg-[#19191b] hover:bg-[#232326] text-neutral-300 text-xs font-medium transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDisconnect}
+                  className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Unlink className="w-3.5 h-3.5" />
+                  <span>Disconnect</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between pt-4 border-t border-[#262629]">
               <button
                 type="button"
-                onClick={onClose}
-                className="px-4 py-2 rounded-lg bg-[#1a1d29] hover:bg-[#222635] text-neutral-300 text-xs font-medium transition-colors cursor-pointer"
+                onClick={() => setConfirmingDisconnect(true)}
+                className="px-4 py-2 rounded-lg bg-red-950/50 hover:bg-red-900/60 border border-red-800/60 text-red-300 hover:text-red-100 text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer"
+                title={`Disconnect ${account.name} from AetherCloud`}
               >
-                Cancel
+                <Unlink className="w-3.5 h-3.5" />
+                <span>Disconnect Account</span>
               </button>
-              <button
-                type="submit"
-                className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
-              >
-                <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                <span>Save & Apply Integration</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 rounded-lg bg-[#19191b] hover:bg-[#232326] text-neutral-300 text-xs font-medium transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                  <span>Save & Apply Integration</span>
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </form>
 
       </div>

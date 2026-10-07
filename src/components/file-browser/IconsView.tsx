@@ -1,6 +1,7 @@
 import React from 'react';
-import { Image as ImageIcon, Video, FileText, Lock, ShieldCheck, Edit3, Scissors, Play, CheckSquare, Square } from 'lucide-react';
+import { ShieldCheck, Edit3, Scissors, Play, CheckSquare, Square } from 'lucide-react';
 import { FileItem } from '../../types';
+import { FileThumbnail } from './FileThumbnail';
 import { formatBytes, formatTimecode } from '../../utils/format';
 
 export interface IconsViewProps {
@@ -45,20 +46,7 @@ export const IconsView: React.FC<IconsViewProps> = ({ files, selectedFileId, sel
           >
             {/* Thumbnail / Glass Card */}
             <div className="aspect-[4/3] rounded-lg overflow-hidden relative bg-black/40 border border-white/8 group-hover:border-white/15 transition-all shadow-md">
-              {file.thumbnailUrl ? (
-                <img
-                  src={file.thumbnailUrl}
-                  alt={file.name}
-                  className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-neutral-500">
-                  {file.category === 'photo' && <ImageIcon className="w-10 h-10" />}
-                  {file.category === 'video' && <Video className="w-10 h-10" />}
-                  {file.category === 'document' && <FileText className="w-10 h-10" />}
-                  {file.category === 'archive' && <Lock className="w-10 h-10 text-cyan-400" />}
-                </div>
-              )}
+              <FileThumbnail file={file} hoverZoom />
 
               {/* Checkbox */}
               <button

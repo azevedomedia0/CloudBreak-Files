@@ -1,6 +1,7 @@
 import React from 'react';
 import { Image as ImageIcon, Video, FileText, Lock, ShieldCheck, Share2, Edit3, Scissors, CheckSquare, Square } from 'lucide-react';
 import { FileItem, CloudAccount, CloudProviderId } from '../../types';
+import { FileThumbnail } from './FileThumbnail';
 import { formatBytes, formatDate } from '../../utils/format';
 
 export interface ListViewProps {
@@ -74,10 +75,7 @@ export const ListView: React.FC<ListViewProps> = ({ files, selectedFileId, selec
                 </td>
                 <td className="p-3">
                   <div className="flex items-center gap-2.5">
-                    {file.category === 'photo' && <ImageIcon className="w-4 h-4 text-sky-400 shrink-0" />}
-                    {file.category === 'video' && <Video className="w-4 h-4 text-amber-400 shrink-0" />}
-                    {file.category === 'document' && <FileText className="w-4 h-4 text-neutral-400 shrink-0" />}
-                    {file.category === 'archive' && <Lock className="w-4 h-4 text-cyan-400 shrink-0" />}
+                    <FileThumbnail file={file} compact className="w-10 h-7 rounded border border-white/10 bg-black/40 shrink-0" iconClassName="w-3.5 h-3.5" />
                     <span className="truncate max-w-xs">{file.name}</span>
                   </div>
                 </td>

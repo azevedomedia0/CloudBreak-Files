@@ -67,7 +67,7 @@ export const PlayerHeader: React.FC<PlayerHeaderProps> = ({ file, duration, acti
             }`}
           >
             <RefreshCw className="w-3.5 h-3.5" />
-            <span>Transcode</span>
+            <span>Convert</span>
           </button>
         </div>
 

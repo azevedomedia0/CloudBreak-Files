@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { FileItem, CloudAccount } from '../types';
 import { formatBytes, formatDate, formatTimecode } from '../utils/format';
+import { PhotoNav, PhotoNavArrows } from './PhotoNavArrows';
 
 interface QuickLookModalProps {
   file: FileItem | null;
@@ -14,6 +15,7 @@ interface QuickLookModalProps {
   onEditPhoto: (file: FileItem) => void;
   onOpenVideo: (file: FileItem) => void;
   onShare: (file: FileItem) => void;
+  photoNav?: PhotoNav | null;
 }
 
 export const QuickLookModal: React.FC<QuickLookModalProps> = ({
@@ -24,6 +26,7 @@ export const QuickLookModal: React.FC<QuickLookModalProps> = ({
   onEditPhoto,
   onOpenVideo,
   onShare,
+  photoNav,
 }) => {
   // Listen for Space or Escape to toggle / close
   useEffect(() => {
@@ -32,11 +35,17 @@ export const QuickLookModal: React.FC<QuickLookModalProps> = ({
       if (e.key === 'Escape' || e.code === 'Space') {
         e.preventDefault();
         onClose();
+      } else if (e.key === 'ArrowLeft' && photoNav?.hasPrev) {
+        e.preventDefault();
+        photoNav.onPrev();
+      } else if (e.key === 'ArrowRight' && photoNav?.hasNext) {
+        e.preventDefault();
+        photoNav.onNext();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, photoNav]);
 
   if (!isOpen || !file) return null;
 
@@ -121,6 +130,7 @@ export const QuickLookModal: React.FC<QuickLookModalProps> = ({
 
         {/* Media Preview Screen */}
         <div className="flex-1 min-h-[420px] bg-black/40 flex items-center justify-center p-6 relative overflow-hidden">
+          {file.category === 'photo' && photoNav && <PhotoNavArrows nav={photoNav} />}
           {file.category === 'photo' && (
             <img
               src={file.url}

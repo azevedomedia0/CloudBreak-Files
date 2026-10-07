@@ -135,7 +135,7 @@ export const INITIAL_FILES: FileItem[] = [
     mimeType: 'video/mp4',
     updatedAt: '2026-10-04T18:24:00Z',
     thumbnailUrl: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80',
-    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+    url: '/sample-video.mp4',
     starred: true,
     tags: ['4K', 'Cinematic', 'B-Roll', 'Ocean', 'ProRes-Proxy'],
     encryption: {
@@ -199,7 +199,7 @@ export const INITIAL_FILES: FileItem[] = [
     mimeType: 'video/mp4',
     updatedAt: '2026-10-03T21:40:00Z',
     thumbnailUrl: 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&w=800&q=80',
-    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
+    url: '/sample-video.mp4',
     starred: false,
     tags: ['Hyperlapse', 'Neon', 'Tokyo', 'Nightscape'],
     encryption: {
@@ -296,7 +296,7 @@ export const INITIAL_FILES: FileItem[] = [
     mimeType: 'video/mp4',
     updatedAt: '2026-09-28T16:04:00Z',
     thumbnailUrl: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=800&q=80',
-    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+    url: '/sample-video.mp4',
     starred: true,
     tags: ['Drone', 'Mountains', '60fps', 'Master'],
     encryption: {
@@ -421,7 +421,7 @@ export const INITIAL_FILES: FileItem[] = [
     category: 'video',
     mimeType: 'video/mp4',
     updatedAt: '2026-09-28T16:20:00Z',
-    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+    url: '/sample-video.mp4',
     starred: false,
     tags: ['Trash', 'Outdated', 'Draft'],
     encryption: {

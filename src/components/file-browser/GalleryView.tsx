@@ -1,6 +1,7 @@
 import React from 'react';
-import { FileText, Edit3, Scissors } from 'lucide-react';
+import { Edit3, Scissors } from 'lucide-react';
 import { FileItem } from '../../types';
+import { FileThumbnail } from './FileThumbnail';
 
 export interface GalleryViewProps {
   files: FileItem[];
@@ -29,10 +30,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ files, selectedFile, o
           />
         )}
         {selectedFile.category !== 'photo' && selectedFile.category !== 'video' && (
-          <div className="flex flex-col items-center gap-2 text-neutral-400">
-            <FileText className="w-16 h-16 text-cyan-400" />
-            <span className="font-mono text-sm">{selectedFile.name}</span>
-          </div>
+          <FileThumbnail file={selectedFile} className="w-full h-full" iconClassName="w-16 h-16" />
         )}
 
         {/* Action Floating Buttons */}
@@ -72,13 +70,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ files, selectedFile, o
                   : 'border-white/10 opacity-60 hover:opacity-100 hover:border-white/20'
               }`}
             >
-              {file.thumbnailUrl ? (
-                <img src={file.thumbnailUrl} alt={file.name} className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full bg-black/60 flex items-center justify-center text-xs text-neutral-500 font-mono">
-                  {file.category}
-                </div>
-              )}
+              <FileThumbnail file={file} compact iconClassName="w-5 h-5" />
             </div>
           );
         })}

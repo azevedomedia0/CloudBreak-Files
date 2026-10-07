@@ -7,6 +7,7 @@ export interface FileFilterOptions {
   selectedFolderId: string | null;
   selectedCategory: FileCategory;
   searchQuery: string;
+  disconnectedAccountIds?: ReadonlySet<string>;
 }
 
 function matchesAccount(file: FileItem, selectedAccountId: CloudProviderId): boolean {
@@ -24,10 +25,12 @@ function matchesAccount(file: FileItem, selectedAccountId: CloudProviderId): boo
 }
 
 export function filterFiles(files: FileItem[], opts: FileFilterOptions): FileItem[] {
-  const { selectedLibrary, selectedLibraryId, selectedAccountId, selectedFolderId, selectedCategory, searchQuery } = opts;
+  const { selectedLibrary, selectedLibraryId, selectedAccountId, selectedFolderId, selectedCategory, searchQuery, disconnectedAccountIds } = opts;
   const query = searchQuery.trim().toLowerCase();
 
   return files.filter(file => {
+    if (disconnectedAccountIds?.has(file.accountId)) return false;
+
     if (selectedLibraryId) {
       if (!selectedLibrary?.fileIds.includes(file.id)) return false;
     } else {

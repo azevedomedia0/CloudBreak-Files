@@ -114,10 +114,10 @@ export const MacFinderToolbar: React.FC<MacFinderToolbarProps> = ({
         {onToggleSidebar && (
           <button
             onClick={onToggleSidebar}
-            className={`p-1.5 rounded-lg border transition-all ${
+            className={`p-1.5 rounded-lg transition-all ${
               isSidebarCollapsed
-                ? 'bg-sky-500/20 border-sky-400/40 text-sky-300 hover:bg-sky-500/30'
-                : 'bg-white/5 border-white/10 text-neutral-200 hover:text-white hover:bg-white/10'
+                ? 'text-sky-300 hover:bg-white/10'
+                : 'text-neutral-200 hover:text-white hover:bg-white/10'
             }`}
             title={isSidebarCollapsed ? "Show Sidebar (⌘+Ctrl+S)" : "Hide Sidebar (⌘+Ctrl+S)"}
           >
@@ -207,12 +207,12 @@ export const MacFinderToolbar: React.FC<MacFinderToolbarProps> = ({
           <button
             type="button"
             onClick={onToggleNotifications}
-            className={`notif-toggle-btn p-1.5 rounded-lg border transition-all relative flex items-center justify-center cursor-pointer ${
+            className={`notif-toggle-btn p-1.5 rounded-lg transition-all relative flex items-center justify-center cursor-pointer ${
               isNotificationOpen
-                ? 'bg-sky-500/20 border-sky-400/40 text-sky-200 shadow-sm'
+                ? 'text-sky-300 hover:bg-white/10'
                 : unreadCount > 0
-                ? 'bg-white/10 border-white/20 text-white hover:bg-white/15 hover:border-white/30'
-                : 'bg-white/5 border-white/10 text-neutral-300 hover:text-white hover:bg-white/10'
+                ? 'text-white hover:bg-white/10'
+                : 'text-neutral-300 hover:text-white hover:bg-white/10'
             }`}
             title="Notifications & P2P Invites"
             aria-label="Notifications"

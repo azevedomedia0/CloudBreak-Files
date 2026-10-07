@@ -1,6 +1,7 @@
 import React from 'react';
-import { CloudAccount, CloudProviderId, FileItem, SharedLibrary } from '../types';
+import { CloudAccount, CloudProviderId, FileItem, FolderItem, SharedLibrary } from '../types';
 import { QuickLookModal } from './QuickLookModal';
+import { PhotoNav } from './PhotoNavArrows';
 import { PhotoEditorModal } from './PhotoEditorModal';
 import { VideoPlayerModal } from './VideoPlayerModal';
 import { ShareLibraryModal } from './ShareLibraryModal';
@@ -12,7 +13,9 @@ import { NewFolderModal, NewSharedLibraryModal, AddFavoriteModal, ConnectServerM
 
 export interface AppModalsProps {
   selectedFile: FileItem | null;
+  photoNav: PhotoNav | null;
   accounts: CloudAccount[];
+  folders: FolderItem[];
   isQuickLookOpen: boolean;
   setIsQuickLookOpen: (open: boolean) => void;
   setEditingPhotoFile: (file: FileItem | null) => void;
@@ -56,13 +59,15 @@ export interface AppModalsProps {
   isConnectServerOpen: boolean;
   setIsConnectServerOpen: (open: boolean) => void;
   handleAddNetworkServer: (name: string, address: string, protocol: string) => void;
-  handleDisconnectAccount?: (accountId: string) => void;
+  handleDisconnectAccount: (accountId: string) => void;
 }
 
 /** Every modal the app can open. Each one renders nothing while it is closed. */
 export const AppModals: React.FC<AppModalsProps> = ({
   selectedFile,
+  photoNav,
   accounts,
+  folders,
   isQuickLookOpen,
   setIsQuickLookOpen,
   setEditingPhotoFile,
@@ -121,6 +126,7 @@ export const AppModals: React.FC<AppModalsProps> = ({
       const firstLib = sharedLibraries[0];
       if (firstLib) setSharingLibrary(firstLib);
     }}
+    photoNav={photoNav}
   />
 
   {/* Modal 1: In-Browser Photo Studio */}
@@ -141,6 +147,8 @@ export const AppModals: React.FC<AppModalsProps> = ({
       onClose={() => setPlayingVideoFile(null)}
       onSaveTrimmedVideo={handleSaveTrimmedVideo}
       initialTab={videoPlayerInitialTab}
+      accounts={accounts}
+      folders={folders}
     />
   )}
 
@@ -203,9 +211,8 @@ export const AppModals: React.FC<AppModalsProps> = ({
       }}
       onShowToast={showToast}
       onDisconnect={accountId => {
-        setAccounts(prev => prev.filter(a => a.id !== accountId));
+        handleDisconnectAccount(accountId);
         setIntegratingAccount(null);
-        handleDisconnectAccount?.(accountId);
       }}
     />
   )}
