@@ -3,7 +3,8 @@ import { useState } from 'react';
 interface Options {
   initial: number;
   min: number;
-  max: number;
+  /** A function lets the limit follow the window size, evaluated on every drag move. */
+  max: number | (() => number);
   /** 'right' grows when dragged right (left-side panel). 'left' grows when dragged left (right-side panel). */
   grow: 'right' | 'left';
 }
@@ -18,10 +19,11 @@ export function useResizablePanel({ initial, min, max, grow }: Options) {
     setIsResizing(true);
     const startX = e.clientX;
     const initialWidth = width;
+    const resolveMax = () => (typeof max === 'function' ? max() : max);
 
     const onMouseMove = (moveEvent: MouseEvent) => {
       const delta = grow === 'right' ? moveEvent.clientX - startX : startX - moveEvent.clientX;
-      setWidth(Math.min(max, Math.max(min, initialWidth + delta)));
+      setWidth(Math.min(resolveMax(), Math.max(min, initialWidth + delta)));
     };
 
     const onMouseUp = () => {

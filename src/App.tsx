@@ -90,7 +90,7 @@ export default function App() {
   const { width: sidebarWidth, isResizing: isResizingSidebar, startResize: startResizeSidebar, reset: resetSidebarWidth } =
     useResizablePanel({ initial: 240, min: 180, max: 380, grow: 'right' });
   const { width: inspectorWidth, isResizing: isResizingInspector, startResize: startResizeInspector, reset: resetInspectorWidth } =
-    useResizablePanel({ initial: 320, min: 260, max: 480, grow: 'left' });
+    useResizablePanel({ initial: 320, min: 260, max: () => Math.max(480, Math.round(window.innerWidth * 0.65)), grow: 'left' });
 
   const { toast: toastNotification, showToast } = useToast();
 
