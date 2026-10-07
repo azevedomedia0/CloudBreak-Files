@@ -153,7 +153,7 @@ export interface PhotoAdjustments {
 
 export interface VideoConvertOptions {
   format: 'mp4' | 'webm' | 'gif' | 'mp3';
-  resolution: 'original' | '4k' | '1080p' | '720p' | '480p';
+  resolution: 'original' | '4k' | '2k' | '1080p' | '720p' | '480p';
   quality: 'lossless' | 'high' | 'balanced' | 'compact';
   fps: 24 | 30 | 60;
   trimStart: number;
