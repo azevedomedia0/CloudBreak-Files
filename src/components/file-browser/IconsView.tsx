@@ -110,8 +110,6 @@ export const IconsView: React.FC<IconsViewProps> = ({ files, selectedFileId, sel
               </p>
               <div className="flex items-center justify-center gap-1.5 text-[11px] text-neutral-400 mt-0.5 font-mono">
                 <span>{formatBytes(file.sizeBytes)}</span>
-                <span>·</span>
-                <span>v{file.version}</span>
               </div>
             </div>
           </div>

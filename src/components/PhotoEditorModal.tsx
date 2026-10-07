@@ -316,7 +316,6 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
                 <h2 className="text-sm font-semibold text-neutral-100 truncate max-w-md">
                   {file.name}
                 </h2>
-                <span className="text-xs text-neutral-400 font-mono">v{file.version}</span>
                 {file.encryption.isEncrypted && (
                   <span className="flex items-center gap-1 text-[11px] text-cyan-400 bg-cyan-950/40 border border-cyan-800/50 px-2 py-0.5 rounded">
                     <ShieldCheck className="w-3 h-3" /> E2EE Active

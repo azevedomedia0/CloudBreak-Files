@@ -330,9 +330,6 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                 <h3 className="text-sm font-semibold text-neutral-100 break-words leading-tight">
                   {file.name}
                 </h3>
-                <span className="text-[10px] font-mono text-sky-300 bg-sky-500/20 border border-sky-400/30 px-1.5 py-0.5 rounded shrink-0">
-                  v{file.version}
-                </span>
               </div>
 
               <div className="flex items-center gap-2 text-xs text-neutral-400">
