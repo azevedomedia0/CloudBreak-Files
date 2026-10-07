@@ -621,7 +621,7 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
                     : 'border-transparent text-neutral-400 hover:text-neutral-200'
                 }`}
               >
-                Format
+                Export
               </button>
             </div>
 
