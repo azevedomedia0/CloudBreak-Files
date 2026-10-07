@@ -1,9 +1,11 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { SidebarSectionKey } from '../components/sidebar/sectionKey';
 
-type SectionOrder = SidebarSectionKey[];
+export type DropTarget = { key: SidebarSectionKey; position: 'before' | 'after' };
 
-const DEFAULT_SECTION_ORDER: SectionOrder = [
+const STORAGE_KEY = 'sidebar_section_order';
+
+const DEFAULT_SECTION_ORDER: SidebarSectionKey[] = [
   'favorites',
   'directories',
   'incomingLibraries',
@@ -12,88 +14,62 @@ const DEFAULT_SECTION_ORDER: SectionOrder = [
   'network',
 ];
 
+const loadOrder = (): SidebarSectionKey[] => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null');
+    if (
+      Array.isArray(parsed) &&
+      parsed.length === DEFAULT_SECTION_ORDER.length &&
+      DEFAULT_SECTION_ORDER.every(key => parsed.includes(key))
+    ) {
+      return parsed;
+    }
+  } catch {
+    // unreadable storage falls back to the default order
+  }
+  return DEFAULT_SECTION_ORDER;
+};
+
 export const useSectionOrder = () => {
-  const [sectionOrder, setSectionOrder] = useState<SectionOrder>(() => {
-    // Try to load from localStorage
-    try {
-      const stored = localStorage.getItem('sidebar_section_order');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        // Validate that all sections are present
-        if (Array.isArray(parsed) && parsed.length === DEFAULT_SECTION_ORDER.length) {
-          return parsed;
-        }
+  const [sectionOrder, setSectionOrder] = useState<SidebarSectionKey[]>(loadOrder);
+  const [draggingKey, setDraggingKey] = useState<SidebarSectionKey | null>(null);
+  const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
+  const draggingRef = useRef<SidebarSectionKey | null>(null);
+  const targetRef = useRef<DropTarget | null>(null);
+
+  const startDrag = useCallback((key: SidebarSectionKey) => {
+    draggingRef.current = key;
+    setDraggingKey(key);
+  }, []);
+
+  const updateDropTarget = useCallback((target: DropTarget | null) => {
+    targetRef.current = target;
+    setDropTarget(target);
+  }, []);
+
+  const endDrag = useCallback((commit: boolean) => {
+    const dragged = draggingRef.current;
+    const target = targetRef.current;
+    draggingRef.current = null;
+    targetRef.current = null;
+    setDraggingKey(null);
+    setDropTarget(null);
+
+    if (!commit || !dragged || !target || target.key === dragged) return;
+
+    setSectionOrder(prev => {
+      const next = prev.filter(key => key !== dragged);
+      const targetIndex = next.indexOf(target.key);
+      if (targetIndex === -1) return prev;
+      next.splice(targetIndex + (target.position === 'after' ? 1 : 0), 0, dragged);
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // order still applies for this session
       }
-    } catch (e) {
-      console.error('Failed to load section order:', e);
-    }
-    return DEFAULT_SECTION_ORDER;
-  });
-
-  const [draggedSection, setDraggedSection] = useState<SidebarSectionKey | null>(null);
-  const [dragOverSection, setDragOverSection] = useState<SidebarSectionKey | null>(null);
-
-  const saveSectionOrder = useCallback((order: SectionOrder) => {
-    try {
-      localStorage.setItem('sidebar_section_order', JSON.stringify(order));
-      setSectionOrder(order);
-    } catch (e) {
-      console.error('Failed to save section order:', e);
-    }
+      return next;
+    });
   }, []);
 
-  const handleDragStart = useCallback((sectionKey: SidebarSectionKey) => {
-    setDraggedSection(sectionKey);
-  }, []);
-
-  const handleDragOver = useCallback((sectionKey: SidebarSectionKey) => {
-    setDragOverSection(sectionKey);
-  }, []);
-
-  const handleDragEnd = useCallback(() => {
-    setDraggedSection(null);
-    setDragOverSection(null);
-  }, []);
-
-  const handleDrop = useCallback((targetSection: SidebarSectionKey) => {
-    if (!draggedSection || draggedSection === targetSection) {
-      setDraggedSection(null);
-      setDragOverSection(null);
-      return;
-    }
-
-    const draggedIndex = sectionOrder.indexOf(draggedSection);
-    const targetIndex = sectionOrder.indexOf(targetSection);
-
-    if (draggedIndex === -1 || targetIndex === -1) {
-      setDraggedSection(null);
-      setDragOverSection(null);
-      return;
-    }
-
-    const newOrder = [...sectionOrder];
-    // Remove dragged item
-    newOrder.splice(draggedIndex, 1);
-    // Insert at new position
-    newOrder.splice(targetIndex, 0, draggedSection);
-
-    saveSectionOrder(newOrder);
-    setDraggedSection(null);
-    setDragOverSection(null);
-  }, [draggedSection, sectionOrder, saveSectionOrder]);
-
-  const resetOrder = useCallback(() => {
-    saveSectionOrder(DEFAULT_SECTION_ORDER);
-  }, [saveSectionOrder]);
-
-  return {
-    sectionOrder,
-    draggedSection,
-    dragOverSection,
-    handleDragStart,
-    handleDragOver,
-    handleDragEnd,
-    handleDrop,
-    resetOrder,
-  };
+  return { sectionOrder, draggingKey, dropTarget, startDrag, updateDropTarget, endDrag };
 };

@@ -97,15 +97,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     network?: boolean;
   }>({});
 
-  const {
-    sectionOrder,
-    draggedSection,
-    dragOverSection,
-    handleDragStart,
-    handleDragOver,
-    handleDragEnd,
-    handleDrop,
-  } = useSectionOrder();
+  const { sectionOrder, draggingKey, dropTarget, startDrag, updateDropTarget, endDrag } = useSectionOrder();
 
   const toggleSection = (section: SidebarSectionKey) => {
     setCollapsed(prev => ({ ...prev, [section]: !prev[section] }));
@@ -250,12 +242,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <DraggableSidebarSection
             key={sectionKey}
             sectionKey={sectionKey}
-            isDragged={draggedSection === sectionKey}
-            isDragOver={dragOverSection === sectionKey}
-            onDragStart={handleDragStart}
-            onDragOver={handleDragOver}
-            onDragEnd={handleDragEnd}
-            onDrop={handleDrop}
+            isDragging={draggingKey === sectionKey}
+            dropPosition={dropTarget?.key === sectionKey ? dropTarget.position : null}
+            onDragStart={startDrag}
+            onDropTargetChange={updateDropTarget}
+            onDragEnd={endDrag}
           >
             {sectionComponents[sectionKey as keyof typeof sectionComponents]}
           </DraggableSidebarSection>
