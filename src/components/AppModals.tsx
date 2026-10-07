@@ -150,6 +150,7 @@ export const AppModals: React.FC<AppModalsProps> = ({
   {/* Modal 2: Cinema Video Player, Trimmer & Converter */}
   {playingVideoFile && (
     <VideoPlayerModal
+      key={playingVideoFile.id}
       file={playingVideoFile}
       isOpen={true}
       onClose={() => setPlayingVideoFile(null)}
