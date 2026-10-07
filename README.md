@@ -1,4 +1,4 @@
-# AetherCloud Vault
+# Ultima Files
 
 Desktop app (Tauri 2, React 19, Vite, Tailwind 4) that manages many cloud accounts and has a client-side encrypted vault.
 
