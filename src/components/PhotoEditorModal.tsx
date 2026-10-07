@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { 
-  X, RotateCw, RotateCcw, FlipHorizontal, FlipVertical, 
+import {
+  X, RotateCw, FlipHorizontal, FlipVertical,
   Sliders, Wand2, Download, Save, Undo, Eye, Check,
-  Sparkles, Layers, ZoomIn, ZoomOut, Maximize2, ShieldCheck
+  Sparkles, Layers, ZoomIn, ZoomOut, Maximize2, ShieldCheck, Crop
 } from 'lucide-react';
 import { FileItem, PhotoAdjustments } from '../types';
 
@@ -415,11 +415,11 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-3 px-4 py-2 bg-neutral-900/90 border border-neutral-800 rounded-full backdrop-blur-md text-xs text-neutral-300 shadow-xl">
               <div className="flex items-center gap-1 pr-3 border-r border-neutral-800">
                 <button
-                  onClick={() => updateAdj('rotation', (adjustments.rotation + 270) % 360)}
+                  onClick={() => console.log('Crop mode')}
                   className="p-1 hover:text-white rounded"
-                  title="Rotate CCW 90°"
+                  title="Crop"
                 >
-                  <RotateCcw className="w-4 h-4" />
+                  <Crop className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => updateAdj('rotation', (adjustments.rotation + 90) % 360)}

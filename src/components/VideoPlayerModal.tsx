@@ -21,6 +21,10 @@ interface VideoPlayerModalProps {
   initialTab?: 'player' | 'trim' | 'convert';
   accounts: CloudAccount[];
   folders: FolderItem[];
+  canPreviousMedia?: boolean;
+  canNextMedia?: boolean;
+  onPreviousMedia?: () => void;
+  onNextMedia?: () => void;
 }
 
 export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
@@ -31,6 +35,10 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   initialTab = 'player',
   accounts,
   folders,
+  canPreviousMedia = false,
+  canNextMedia = false,
+  onPreviousMedia,
+  onNextMedia,
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -401,6 +409,10 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                   onToggleMute={toggleMute}
                   onToggleLoop={() => setIsLooping(l => !l)}
                   onChangeSpeed={changeSpeed}
+                  onPreviousMedia={onPreviousMedia}
+                  onNextMedia={onNextMedia}
+                  canPreviousMedia={canPreviousMedia}
+                  canNextMedia={canNextMedia}
                 />
               )}
             </div>
