@@ -45,7 +45,7 @@ export const PlayerHeader: React.FC<PlayerHeaderProps> = ({ file, duration, acti
                 : 'text-neutral-400 hover:text-neutral-200'
             }`}
           >
-            Cinema Player
+            Video Player
           </button>
           <button
             onClick={() => setActiveTab('trim')}
