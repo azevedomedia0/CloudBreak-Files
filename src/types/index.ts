@@ -151,8 +151,41 @@ export interface PhotoAdjustments {
   cropAspect: 'free' | '1:1' | '4:5' | '16:9' | '9:16' | '3:2';
 }
 
+export type VideoConvertFormat =
+  | 'mp4'
+  | 'mov'
+  | 'mkv'
+  | 'avi'
+  | 'webm'
+  | 'gif'
+  | 'mp3'
+  | 'aac'
+  | 'wav'
+  | 'flac';
+
+const AUDIO_CONVERT_FORMATS: readonly VideoConvertFormat[] = ['mp3', 'aac', 'wav', 'flac'];
+
+export function isAudioConvertFormat(format: VideoConvertFormat): boolean {
+  return AUDIO_CONVERT_FORMATS.includes(format);
+}
+
+export function convertFormatMime(format: VideoConvertFormat): string {
+  switch (format) {
+    case 'gif': return 'image/gif';
+    case 'mp3': return 'audio/mpeg';
+    case 'aac': return 'audio/aac';
+    case 'wav': return 'audio/wav';
+    case 'flac': return 'audio/flac';
+    case 'mov': return 'video/quicktime';
+    case 'mkv': return 'video/x-matroska';
+    case 'avi': return 'video/x-msvideo';
+    case 'webm': return 'video/webm';
+    default: return `video/${format}`;
+  }
+}
+
 export interface VideoConvertOptions {
-  format: 'mp4' | 'webm' | 'gif' | 'mp3';
+  format: VideoConvertFormat;
   resolution: 'original' | '4k' | '2k' | '1080p' | '720p' | '480p';
   quality: 'lossless' | 'high' | 'balanced' | 'compact';
   fps: 24 | 30 | 60;

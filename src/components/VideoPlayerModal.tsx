@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Play } from 'lucide-react';
-import { FileItem, VideoConvertOptions, CloudAccount, FolderItem } from '../types';
+import { FileItem, VideoConvertOptions, CloudAccount, FolderItem, isAudioConvertFormat, convertFormatMime } from '../types';
 import { PlayerHeader } from './video-player/PlayerHeader';
 import { TrimPanel } from './video-player/TrimPanel';
 import { ConvertPanel, SaveDestination } from './video-player/ConvertPanel';
@@ -221,7 +221,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const isTrimmed = trimStart > 0.001 || trimEnd < duration - 0.001;
   const clipLength = Math.max(0.1, trimEnd - trimStart);
   const sourceBaseName = file.name.replace(/\.[^/.]+$/, '');
-  const defaultBaseName = `${sourceBaseName}${isTrimmed ? '_clip' : ''}${convertOptions.format === 'mp3' ? '' : `_${convertOptions.resolution}`}`;
+  const defaultBaseName = `${sourceBaseName}${isTrimmed ? '_clip' : ''}${isAudioConvertFormat(convertOptions.format) ? '' : `_${convertOptions.resolution}`}`;
   const outputName = `${customBaseName.trim() || defaultBaseName}.${convertOptions.format}`;
 
   // Perform Transcode / Convert
@@ -256,12 +256,12 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       accountId: destination.accountId,
       folderId: folder?.id,
       folderPath: folder ? `/${folder.name}` : '/',
-      mimeType: ext === 'gif' ? 'image/gif' : ext === 'mp3' ? 'audio/mpeg' : `video/${ext}`,
-      category: ext === 'gif' ? 'photo' : ext === 'mp3' ? 'audio' : 'video',
+      mimeType: convertFormatMime(ext),
+      category: ext === 'gif' ? 'photo' : isAudioConvertFormat(ext) ? 'audio' : 'video',
       sizeBytes: Math.round(file.sizeBytes * resolutionScale * (clipLength / Math.max(duration, 1))),
       updatedAt: new Date().toISOString(),
       version: 1,
-      videoMeta: ext === 'mp3' ? undefined : {
+      videoMeta: isAudioConvertFormat(ext) ? undefined : {
         ...(file.videoMeta || {
           dimensions: { width: 1920, height: 1080 },
           framerate: 30,
