@@ -3,6 +3,7 @@ import { CloudProviderId, FileCategory, FileItem, SharedLibrary } from '../types
 export interface FileFilterOptions {
   selectedLibrary: SharedLibrary | null;
   selectedLibraryId: string | null;
+  selectedSourceId?: string | null;
   selectedAccountId: CloudProviderId;
   selectedFolderId: string | null;
   selectedCategory: FileCategory;
@@ -25,17 +26,23 @@ function matchesAccount(file: FileItem, selectedAccountId: CloudProviderId): boo
 }
 
 export function filterFiles(files: FileItem[], opts: FileFilterOptions): FileItem[] {
-  const { selectedLibrary, selectedLibraryId, selectedAccountId, selectedFolderId, selectedCategory, searchQuery, disconnectedAccountIds } = opts;
+  const { selectedLibrary, selectedLibraryId, selectedSourceId, selectedAccountId, selectedFolderId, selectedCategory, searchQuery, disconnectedAccountIds } = opts;
   const query = searchQuery.trim().toLowerCase();
 
   return files.filter(file => {
     if (disconnectedAccountIds?.has(file.accountId)) return false;
 
-    if (selectedLibraryId) {
-      if (!selectedLibrary?.fileIds.includes(file.id)) return false;
-    } else {
-      if (!matchesAccount(file, selectedAccountId)) return false;
-      if (selectedFolderId && file.folderId !== selectedFolderId) return false;
+    // Network-share and device files only show while that source is open.
+    if (selectedSourceId ? file.sourceId !== selectedSourceId : file.sourceId) return false;
+
+    // An open source is the whole scope; otherwise a library, then account and folder.
+    if (!selectedSourceId) {
+      if (selectedLibraryId) {
+        if (!selectedLibrary?.fileIds.includes(file.id)) return false;
+      } else {
+        if (!matchesAccount(file, selectedAccountId)) return false;
+        if (selectedFolderId && file.folderId !== selectedFolderId) return false;
+      }
     }
 
     if (selectedCategory !== 'all') {

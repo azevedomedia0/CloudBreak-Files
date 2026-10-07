@@ -1,9 +1,11 @@
 import React from 'react';
 import { Edit3, Scissors } from 'lucide-react';
 import { FileItem } from '../../types';
+import { SelectionAccent, SELECTION_CLASSES } from '../../utils/selectionAccent';
 import { FileThumbnail } from './FileThumbnail';
 
 export interface GalleryViewProps {
+  accent: SelectionAccent;
   files: FileItem[];
   selectedFile: FileItem;
   onSelectFile: (file: FileItem) => void;
@@ -11,7 +13,7 @@ export interface GalleryViewProps {
   onOpenVideo: (file: FileItem) => void;
 }
 
-export const GalleryView: React.FC<GalleryViewProps> = ({ files, selectedFile, onSelectFile, onEditPhoto, onOpenVideo }) => (
+export const GalleryView: React.FC<GalleryViewProps> = ({ accent, files, selectedFile, onSelectFile, onEditPhoto, onOpenVideo }) => (
     <div className="h-full flex flex-col space-y-4">
       {/* Center Big Gallery Viewport */}
       <div className="flex-1 min-h-[380px] macos-glass-card rounded-2xl flex items-center justify-center relative p-6 overflow-hidden">
@@ -66,7 +68,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ files, selectedFile, o
               onClick={() => onSelectFile(file)}
               className={`h-full aspect-video rounded-lg overflow-hidden border shrink-0 cursor-pointer relative transition-all ${
                 isActive
-                  ? 'ring-2 ring-sky-400 border-sky-400 scale-102 shadow-lg'
+                  ? SELECTION_CLASSES[accent].galleryRing
                   : 'border-white/10 opacity-60 hover:opacity-100 hover:border-white/20'
               }`}
             >

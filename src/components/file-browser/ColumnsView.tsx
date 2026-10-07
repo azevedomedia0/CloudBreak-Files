@@ -2,9 +2,11 @@ import React from 'react';
 import { Image as ImageIcon, Folder, Video, FileText, Lock, Edit3, Scissors, Download, ChevronRight, Eye, HardDrive, Monitor, AppWindow } from 'lucide-react';
 import { FileItem, CloudAccount, FolderItem, CloudProviderId } from '../../types';
 import { FileThumbnail } from './FileThumbnail';
+import { SelectionAccent, SELECTION_CLASSES } from '../../utils/selectionAccent';
 import { formatBytes, formatDate } from '../../utils/format';
 
 export interface ColumnsViewProps {
+  accent: SelectionAccent;
   files: FileItem[];
   selectedFolder: FolderItem | null;
   selectedFileId: string | null;
@@ -19,7 +21,7 @@ export interface ColumnsViewProps {
   getAccount: (accountId: CloudProviderId) => CloudAccount | undefined;
 }
 
-export const ColumnsView: React.FC<ColumnsViewProps> = ({ files, selectedFolder, selectedFileId, selectedFile, folders, totalSize, onSelectFile, onEditPhoto, onOpenVideo, onOpenQuickLook, onSelectFolder, getAccount }) => (
+export const ColumnsView: React.FC<ColumnsViewProps> = ({ accent, files, selectedFolder, selectedFileId, selectedFile, folders, totalSize, onSelectFile, onEditPhoto, onOpenVideo, onOpenQuickLook, onSelectFolder, getAccount }) => (
     <div className="h-full flex gap-3 overflow-x-auto min-h-[480px]">
       {/* Col 1: Local Files & Folders */}
       <div className="w-64 macos-glass-card rounded-xl flex flex-col shrink-0 overflow-hidden">
@@ -88,7 +90,7 @@ export const ColumnsView: React.FC<ColumnsViewProps> = ({ files, selectedFolder,
                 onClick={() => onSelectFile(file)}
                 className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs transition-all ${
                   isCurrent
-                    ? 'bg-sky-500/25 text-white font-medium shadow-sm'
+                    ? SELECTION_CLASSES[accent].columnRow
                     : 'text-neutral-300 hover:bg-white/5'
                 }`}
               >

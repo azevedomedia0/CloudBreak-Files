@@ -63,6 +63,8 @@ export interface FileItem {
   videoMeta?: VideoMetadata;
   sharedWith?: string[];
   version: number;
+  /** Set for files that live on a network share (its name) or a removable device (its id) instead of a cloud account. */
+  sourceId?: string;
 }
 
 export interface FolderItem {
