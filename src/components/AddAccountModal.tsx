@@ -16,7 +16,6 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
   const [provider, setProvider] = useState<'Google Drive' | 'Dropbox' | 'OneDrive' | 'MEGA Drive' | 'Nextcloud' | 'Encrypted Vault'>('Google Drive');
   const [accountName, setAccountName] = useState('');
   const [accountIdentifier, setAccountIdentifier] = useState('');
-  const [storageLimitGB, setStorageLimitGB] = useState(500);
 
   if (!isOpen) return null;
 
@@ -37,7 +36,7 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
       email: accountIdentifier.trim() || `user@${provider.toLowerCase().replace(/\s+/g, '')}.com`,
       avatarColor: colors[Math.floor(Math.random() * colors.length)],
       usedBytes: 1.2 * 1024 * 1024 * 1024,
-      totalBytes: storageLimitGB * 1024 * 1024 * 1024,
+      totalBytes: 500 * 1024 * 1024 * 1024,
       status: 'connected',
       encryptionLevel: 'Client E2EE AES-256',
       isVault: provider === 'Encrypted Vault',
@@ -130,23 +129,6 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
               onChange={e => setAccountIdentifier(e.target.value)}
               placeholder={provider === 'Nextcloud' ? 'https://cloud.example.org or user@nextcloud' : provider === 'OneDrive' ? 'user@onedrive.live.com' : provider === 'MEGA Drive' ? 'user@mega.nz' : 'account@company.com'}
               className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-cyan-500"
-            />
-          </div>
-
-          {/* Storage Quota */}
-          <div>
-            <div className="flex justify-between items-center mb-1">
-              <span className="text-neutral-300">Allocated Quota</span>
-              <span className="font-mono text-cyan-400">{storageLimitGB} GB</span>
-            </div>
-            <input
-              type="range"
-              min={100}
-              max={5000}
-              step={100}
-              value={storageLimitGB}
-              onChange={e => setStorageLimitGB(parseInt(e.target.value, 10))}
-              className="w-full custom-range"
             />
           </div>
 
