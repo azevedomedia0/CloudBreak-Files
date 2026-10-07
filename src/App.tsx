@@ -65,7 +65,7 @@ export default function App() {
   const [viewMode, setViewMode] = useState<MacViewMode>('icons');
 
   // Vault E2EE State
-  const [isVaultUnlocked, setIsVaultUnlocked] = useState<boolean>(true);
+  const [isVaultUnlocked, setIsVaultUnlocked] = useState<boolean>(false);
 
   // Modals & Panels
   const [isQuickLookOpen, setIsQuickLookOpen] = useState<boolean>(false);
@@ -73,7 +73,7 @@ export default function App() {
   const [playingVideoFile, setPlayingVideoFile] = useState<FileItem | null>(null);
   const [videoPlayerInitialTab, setVideoPlayerInitialTab] = useState<'player' | 'trim' | 'convert'>('player');
   const [sharingLibrary, setSharingLibrary] = useState<SharedLibrary | null>(null);
-  const [isVaultSecurityOpen, setIsVaultSecurityOpen] = useState<boolean>(false);
+  const [isVaultSecurityOpen, setIsVaultSecurityOpen] = useState<boolean>(true);
   const [isProfileSettingsOpen, setIsProfileSettingsOpen] = useState<boolean>(false);
   const [userProfile, setUserProfile] = useState<UserProfile>({
     name: 'Steven Azevedo',
