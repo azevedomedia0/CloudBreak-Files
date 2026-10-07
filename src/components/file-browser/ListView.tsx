@@ -1,0 +1,137 @@
+import React from 'react';
+import { Image as ImageIcon, Video, FileText, Lock, ShieldCheck, Share2, Edit3, Scissors, CheckSquare, Square } from 'lucide-react';
+import { FileItem, CloudAccount, CloudProviderId } from '../../types';
+import { formatBytes, formatDate } from '../../utils/format';
+
+export interface ListViewProps {
+  files: FileItem[];
+  selectedFileId: string | null;
+  selectedIds: Set<string>;
+  onSelectFile: (file: FileItem) => void;
+  onEditPhoto: (file: FileItem) => void;
+  onOpenVideo: (file: FileItem) => void;
+  onShareFile: (file: FileItem) => void;
+  onOpenQuickLook: () => void;
+  toggleSelectOne: (id: string, e: React.MouseEvent) => void;
+  toggleSelectAll: () => void;
+  getAccount: (accountId: CloudProviderId) => CloudAccount | undefined;
+}
+
+export const ListView: React.FC<ListViewProps> = ({ files, selectedFileId, selectedIds, onSelectFile, onEditPhoto, onOpenVideo, onShareFile, onOpenQuickLook, toggleSelectOne, toggleSelectAll, getAccount }) => (
+    <div className="rounded-xl overflow-hidden border border-white/8 bg-black/20">
+      <table className="w-full text-left text-xs text-neutral-300">
+        <thead className="bg-white/5 border-b border-white/8 text-[11px] font-semibold text-neutral-400 uppercase tracking-wider">
+          <tr>
+            <th className="p-3 w-8">
+              <button onClick={toggleSelectAll}>
+                {selectedIds.size === files.length && files.length > 0 ? (
+                  <CheckSquare className="w-3.5 h-3.5 text-sky-400" />
+                ) : (
+                  <Square className="w-3.5 h-3.5 text-neutral-500" />
+                )}
+              </button>
+            </th>
+            <th className="p-3">Name</th>
+            <th className="p-3">Date Modified</th>
+            <th className="p-3">Size</th>
+            <th className="p-3">Kind</th>
+            <th className="p-3">Cloud Storage</th>
+            <th className="p-3">Security</th>
+            <th className="p-3 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-white/5 font-normal">
+          {files.map(file => {
+            const isSelected = selectedIds.has(file.id);
+            const isCurrent = selectedFileId === file.id;
+            const acc = getAccount(file.accountId);
+
+            return (
+              <tr
+                key={file.id}
+                onClick={() => onSelectFile(file)}
+                onDoubleClick={() => {
+                  if (file.category === 'photo') onEditPhoto(file);
+                  else if (file.category === 'video') onOpenVideo(file);
+                  else onOpenQuickLook();
+                }}
+                className={`cursor-pointer transition-colors ${
+                  isCurrent
+                    ? 'bg-sky-500/20 text-white font-medium'
+                    : isSelected
+                    ? 'bg-sky-500/10'
+                    : 'hover:bg-white/5'
+                }`}
+              >
+                <td className="p-3">
+                  <button onClick={e => toggleSelectOne(file.id, e)}>
+                    {isSelected ? (
+                      <CheckSquare className="w-3.5 h-3.5 text-sky-400" />
+                    ) : (
+                      <Square className="w-3.5 h-3.5 text-neutral-600" />
+                    )}
+                  </button>
+                </td>
+                <td className="p-3">
+                  <div className="flex items-center gap-2.5">
+                    {file.category === 'photo' && <ImageIcon className="w-4 h-4 text-sky-400 shrink-0" />}
+                    {file.category === 'video' && <Video className="w-4 h-4 text-amber-400 shrink-0" />}
+                    {file.category === 'document' && <FileText className="w-4 h-4 text-neutral-400 shrink-0" />}
+                    {file.category === 'archive' && <Lock className="w-4 h-4 text-cyan-400 shrink-0" />}
+                    <span className="truncate max-w-xs">{file.name}</span>
+                  </div>
+                </td>
+                <td className="p-3 text-neutral-400">{formatDate(file.updatedAt)}</td>
+                <td className="p-3 font-mono text-neutral-400">{formatBytes(file.sizeBytes)}</td>
+                <td className="p-3 text-neutral-400 font-mono text-[11px]">{file.mimeType.split('/')[1]?.toUpperCase() || file.category}</td>
+                <td className="p-3">
+                  <span className="flex items-center gap-1.5 text-neutral-300">
+                    <span className={`w-1.5 h-1.5 rounded-full bg-gradient-to-tr ${acc?.avatarColor || 'from-sky-400 to-cyan-500'}`} />
+                    <span>{acc?.name}</span>
+                  </span>
+                </td>
+                <td className="p-3">
+                  {file.encryption.isEncrypted ? (
+                    <span className="inline-flex items-center gap-1 text-[10px] text-cyan-300 bg-cyan-950/60 border border-cyan-800/60 px-1.5 py-0.5 rounded font-mono">
+                      <ShieldCheck className="w-3 h-3 text-cyan-400" /> AES-256
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-neutral-400">TLS 1.3</span>
+                  )}
+                </td>
+                <td className="p-3 text-right">
+                  <div className="flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
+                    {file.category === 'photo' && (
+                      <button
+                        onClick={() => onEditPhoto(file)}
+                        className="p-1 rounded hover:bg-white/10 text-cyan-400"
+                        title="Edit in Studio"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {file.category === 'video' && (
+                      <button
+                        onClick={() => onOpenVideo(file)}
+                        className="p-1 rounded hover:bg-white/10 text-amber-400"
+                        title="Cinema Suite"
+                      >
+                        <Scissors className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => onShareFile(file)}
+                      className="p-1 rounded hover:bg-white/10 text-neutral-400 hover:text-white"
+                      title="Share"
+                    >
+                      <Share2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+);
