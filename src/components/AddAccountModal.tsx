@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Cloud } from 'lucide-react';
 import { CloudAccount } from '../types';
+import { PROVIDER_LOGOS } from '../assets/providerLogos';
 
 interface AddAccountModalProps {
   isOpen: boolean;
@@ -89,14 +90,17 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
                   type="button"
                   key={p.name}
                   onClick={() => setProvider(p.name as any)}
-                  className={`p-3 rounded-lg border text-left transition-colors ${
+                  className={`p-3 rounded-lg border text-left transition-colors flex items-center gap-2.5 ${
                     provider === p.name
                       ? 'bg-cyan-950/40 border-cyan-500/60 text-cyan-200'
                       : 'bg-neutral-950 border-neutral-800 text-neutral-400 hover:text-neutral-200'
                   }`}
                 >
-                  <div className="font-semibold text-neutral-200">{p.name}</div>
-                  <div className="text-[10px] text-neutral-500 mt-0.5">{p.desc}</div>
+                  <img src={PROVIDER_LOGOS[p.name]} alt="" className="w-7 h-7 shrink-0 object-contain" />
+                  <div className="min-w-0">
+                    <div className="font-semibold text-neutral-200">{p.name}</div>
+                    <div className="text-[10px] text-neutral-500 mt-0.5">{p.desc}</div>
+                  </div>
                 </button>
               ))}
             </div>
