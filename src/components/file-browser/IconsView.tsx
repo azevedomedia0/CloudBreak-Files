@@ -2,9 +2,11 @@ import React from 'react';
 import { ShieldCheck, Edit3, Scissors, Play, CheckSquare, Square } from 'lucide-react';
 import { FileItem } from '../../types';
 import { FileThumbnail } from './FileThumbnail';
+import { SelectionAccent, SELECTION_CLASSES } from '../../utils/selectionAccent';
 import { formatBytes, formatTimecode } from '../../utils/format';
 
 export interface IconsViewProps {
+  accent: SelectionAccent;
   files: FileItem[];
   selectedFileId: string | null;
   selectedIds: Set<string>;
@@ -16,7 +18,7 @@ export interface IconsViewProps {
   toggleSelectOne: (id: string, e: React.MouseEvent) => void;
 }
 
-export const IconsView: React.FC<IconsViewProps> = ({ files, selectedFileId, selectedIds, iconScale, onSelectFile, onEditPhoto, onOpenVideo, onOpenQuickLook, toggleSelectOne }) => (
+export const IconsView: React.FC<IconsViewProps> = ({ accent, files, selectedFileId, selectedIds, iconScale, onSelectFile, onEditPhoto, onOpenVideo, onOpenQuickLook, toggleSelectOne }) => (
     <div 
       className="grid gap-4"
       style={{
@@ -38,9 +40,9 @@ export const IconsView: React.FC<IconsViewProps> = ({ files, selectedFileId, sel
             }}
             className={`group relative rounded-xl p-2 transition-all cursor-pointer ${
               isCurrent
-                ? 'bg-sky-500/25 ring-1 ring-sky-400/60 shadow-lg shadow-sky-950/50'
+                ? SELECTION_CLASSES[accent].card
                 : isSelected
-                ? 'bg-sky-500/15 ring-1 ring-sky-500/30'
+                ? SELECTION_CLASSES[accent].cardMulti
                 : 'hover:bg-white/5'
             }`}
           >
@@ -52,7 +54,7 @@ export const IconsView: React.FC<IconsViewProps> = ({ files, selectedFileId, sel
               <button
                 onClick={e => toggleSelectOne(file.id, e)}
                 className={`absolute top-2 left-2 p-1 rounded backdrop-blur-md transition-opacity ${
-                  isSelected ? 'text-sky-300 bg-black/70 opacity-100' : 'text-neutral-400 bg-black/50 opacity-0 group-hover:opacity-100'
+                  isSelected ? `${SELECTION_CLASSES[accent].checkIcon} bg-black/70 opacity-100` : 'text-neutral-400 bg-black/50 opacity-0 group-hover:opacity-100'
                 }`}
               >
                 {isSelected ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}

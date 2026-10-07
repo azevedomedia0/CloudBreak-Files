@@ -23,11 +23,11 @@ import { FileInspector } from './components/FileInspector';
 
 import {
   CloudAccount, FileItem, FolderItem, SharedLibrary, SharedMember,
-  CloudProviderId, FileCategory, AppNotification 
+  CloudProviderId, FileCategory, AppNotification, RemovableDevice
 } from './types';
 import {
   INITIAL_ACCOUNTS, INITIAL_FOLDERS, INITIAL_FILES, INITIAL_SHARED_LIBRARIES,
-  INITIAL_NOTIFICATIONS
+  INITIAL_NOTIFICATIONS, INITIAL_REMOVABLE_DEVICES
 } from './utils/sampleData';
 
 export default function App() {
@@ -39,6 +39,9 @@ export default function App() {
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [sharedLibraries, setSharedLibraries] = useState<SharedLibrary[]>(INITIAL_SHARED_LIBRARIES);
   const [selectedLibraryId, setSelectedLibraryId] = useState<string | null>(null);
+  // A network share (by name) or removable device (by id) opened from the sidebar's Network section
+  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
+  const [removableDevices, setRemovableDevices] = useState<RemovableDevice[]>(INITIAL_REMOVABLE_DEVICES);
 
   // Notifications State
   const [notifications, setNotifications] = useState<AppNotification[]>(INITIAL_NOTIFICATIONS);
@@ -176,6 +179,7 @@ export default function App() {
       setSelectedAccountId('all');
       setSelectedFolderId(null);
       setSelectedLibraryId(null);
+      setSelectedSourceId(null);
     }
     const selected = files.find(f => f.id === selectedFileId);
     if (selected?.accountId === accountId) setSelectedFileId(null);
@@ -231,7 +235,7 @@ export default function App() {
   const selectedLibrary = sharedLibraries.find(lib => lib.id === selectedLibraryId) || null;
 
   // Filter files
-  const filteredFiles = filterFiles(files, { selectedLibrary, selectedLibraryId, selectedAccountId, selectedFolderId, selectedCategory, searchQuery, disconnectedAccountIds });
+  const filteredFiles = filterFiles(files, { selectedLibrary, selectedLibraryId, selectedSourceId, selectedAccountId, selectedFolderId, selectedCategory, searchQuery, disconnectedAccountIds });
 
   const photoFiles = filteredFiles.filter(f => f.category === 'photo');
   const photoIndex = selectedFile?.category === 'photo' ? photoFiles.findIndex(f => f.id === selectedFile.id) : -1;
@@ -265,9 +269,34 @@ export default function App() {
     handleBatchEncrypt, handleBatchDelete, handleUploadFiles, handleDragOver, handleDragLeave, handleDrop,
   } = useFileActions({ setFiles, selectedFileId, setSelectedFileId, selectedAccountId, selectedFolder, showToast });
 
+  // Picking an account, folder or library leaves any open network share / device.
+  const selectAccount = (id: CloudProviderId) => { setSelectedSourceId(null); setSelectedAccountId(id); };
+  const selectFolder = (id: string | null) => { setSelectedSourceId(null); setSelectedFolderId(id); };
+  const selectLibrary = (id: string | null) => { setSelectedSourceId(null); setSelectedLibraryId(id); };
+
+  const openSource = (sourceId: string) => {
+    setSelectedSourceId(sourceId);
+    setSelectedLibraryId(null);
+    setSelectedFolderId(null);
+    const first = files.find(f => f.sourceId === sourceId);
+    if (first) setSelectedFileId(first.id);
+  };
+
+  const handleEjectDevice = (deviceId: string) => {
+    const device = removableDevices.find(d => d.id === deviceId);
+    setRemovableDevices(prev => prev.filter(d => d.id !== deviceId));
+    if (selectedSourceId === deviceId) setSelectedSourceId(null);
+    if (device) showToast(`Ejected ${device.name}`);
+  };
+
   // Active path title
   const activeAccount = accounts.find(a => a.id === selectedAccountId);
-  const activePathTitle = selectedLibrary
+  const activeSourceName = selectedSourceId
+    ? networkServers.find(s => s.name === selectedSourceId)?.name ?? removableDevices.find(d => d.id === selectedSourceId)?.name
+    : undefined;
+  const activePathTitle = activeSourceName
+    ? activeSourceName
+    : selectedLibrary
     ? selectedLibrary.name
     : selectedFolder
     ? selectedFolder.name
@@ -330,6 +359,7 @@ export default function App() {
             onMarkAllAsRead={handleMarkAllNotificationsRead}
             onClearNotification={handleClearNotification}
             onSelectLibrary={libId => {
+              setSelectedSourceId(null);
               setSelectedLibraryId(libId);
               setSelectedFolderId(null);
             }}
@@ -342,13 +372,13 @@ export default function App() {
             <Sidebar
               accounts={accounts}
               selectedAccountId={selectedAccountId}
-              onSelectAccount={setSelectedAccountId}
+              onSelectAccount={selectAccount}
               folders={folders}
               selectedFolderId={selectedFolderId}
-              onSelectFolder={setSelectedFolderId}
+              onSelectFolder={selectFolder}
               sharedLibraries={sharedLibraries}
               selectedLibraryId={selectedLibraryId}
-              onSelectLibrary={setSelectedLibraryId}
+              onSelectLibrary={selectLibrary}
               onOpenAddAccount={() => setIsAddAccountOpen(true)}
               onOpenVaultSecurity={() => setIsVaultSecurityOpen(true)}
               onOpenProfileSettings={() => setIsProfileSettingsOpen(true)}
@@ -367,6 +397,12 @@ export default function App() {
               onAddNetworkServer={() => setIsConnectServerOpen(true)}
               customFavorites={customFavorites}
               networkServers={networkServers}
+              removableDevices={removableDevices}
+              onEjectDevice={handleEjectDevice}
+              onSelectRemovableDevice={device => openSource(device.id)}
+              selectedRemovableDeviceId={selectedSourceId}
+              onSelectNetworkServer={openSource}
+              selectedNetworkServerName={selectedSourceId}
             />
 
             {/* Sidebar Draggable Splitter Handle */}
@@ -386,6 +422,7 @@ export default function App() {
             {/* Central File Explorer with 4 macOS view modes */}
             <FileBrowser
               files={filteredFiles}
+              selectedSourceId={selectedSourceId}
               accounts={accounts}
               selectedAccountId={selectedAccountId}
               selectedFolder={selectedFolder}
@@ -405,7 +442,7 @@ export default function App() {
               onBatchDelete={handleBatchDelete}
               onOpenQuickLook={() => setIsQuickLookOpen(true)}
               folders={folders}
-              onSelectFolder={setSelectedFolderId}
+              onSelectFolder={selectFolder}
             />
 
             {/* Inspector Draggable Splitter Handle */}

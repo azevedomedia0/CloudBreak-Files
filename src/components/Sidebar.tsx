@@ -11,6 +11,7 @@ import { ProfileFooter } from './sidebar/ProfileFooter';
 import { SidebarSectionKey } from './sidebar/sectionKey';
 import { useSectionOrder } from '../hooks/useSectionOrder';
 import { DraggableSidebarSection } from './DraggableSidebarSection';
+import { isIncomingLibrary, isOutgoingLibrary } from '../utils/libraryDirection';
 
 interface SidebarProps {
   accounts: CloudAccount[];
@@ -43,6 +44,8 @@ interface SidebarProps {
   onEjectDevice?: (deviceId: string) => void;
   onSelectRemovableDevice?: (device: RemovableDevice) => void;
   selectedRemovableDeviceId?: string | null;
+  onSelectNetworkServer?: (name: string) => void;
+  selectedNetworkServerName?: string | null;
   customFavorites?: Array<{ id: string; name: string }>;
 }
 
@@ -86,6 +89,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onEjectDevice,
   onSelectRemovableDevice,
   selectedRemovableDeviceId,
+  onSelectNetworkServer,
+  selectedNetworkServerName,
   customFavorites = [],
 }) => {
   const [collapsed, setCollapsed] = useState<{
@@ -103,13 +108,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setCollapsed(prev => ({ ...prev, [section]: !prev[section] }));
   };
 
-  const incomingLibraries = sharedLibraries.filter(lib => 
-    lib.direction === 'incoming' || (lib.ownerEmail !== 'you@example.com' && lib.role !== 'owner')
-  );
-
-  const outgoingLibraries = sharedLibraries.filter(lib => 
-    lib.direction === 'outgoing' || lib.ownerEmail === 'you@example.com' || lib.role === 'owner'
-  );
+  const incomingLibraries = sharedLibraries.filter(isIncomingLibrary);
+  const outgoingLibraries = sharedLibraries.filter(isOutgoingLibrary);
 
   const onlineServerCount = networkServers.filter(s => s.online).length;
   const totalServerCount = networkServers.length;
@@ -216,13 +216,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
         onEjectDevice={onEjectDevice}
         onSelectRemovableDevice={onSelectRemovableDevice}
         selectedRemovableDeviceId={selectedRemovableDeviceId}
+        onSelectNetworkServer={onSelectNetworkServer}
+        selectedNetworkServerName={selectedNetworkServerName}
         collapsed={collapsed}
         toggleSection={toggleSection}
         onlineServerCount={onlineServerCount}
         totalServerCount={totalServerCount}
       />
     ),
-  }), [accounts, selectedAccountId, onSelectAccount, selectedFolderId, onSelectFolder, selectedLibraryId, onSelectLibrary, onAddFavorite, customFavorites, collapsed, visibleFolders, incomingLibraries, outgoingLibraries, onAddNewSharedLibrary, onAddNewIncomingLibrary, onAddNewOutgoingLibrary, onOpenAddAccount, onOpenAccountSettings, onAddNetworkServer, networkServers, removableDevices, onEjectDevice, onSelectRemovableDevice, selectedRemovableDeviceId, onlineServerCount, totalServerCount]);
+  }), [accounts, selectedAccountId, onSelectAccount, selectedFolderId, onSelectFolder, selectedLibraryId, onSelectLibrary, onAddFavorite, customFavorites, collapsed, visibleFolders, incomingLibraries, outgoingLibraries, onAddNewSharedLibrary, onAddNewIncomingLibrary, onAddNewOutgoingLibrary, onOpenAddAccount, onOpenAccountSettings, onAddNetworkServer, networkServers, removableDevices, onEjectDevice, onSelectRemovableDevice, selectedRemovableDeviceId, onSelectNetworkServer, selectedNetworkServerName, onlineServerCount, totalServerCount]);
 
   if (isCollapsed) {
     return null;

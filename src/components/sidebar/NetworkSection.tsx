@@ -11,13 +11,15 @@ export interface NetworkSectionProps {
   onEjectDevice?: (deviceId: string) => void;
   onSelectRemovableDevice?: (device: RemovableDevice) => void;
   selectedRemovableDeviceId?: string | null;
+  onSelectNetworkServer?: (name: string) => void;
+  selectedNetworkServerName?: string | null;
   collapsed: Partial<Record<SidebarSectionKey, boolean>>;
   toggleSection: (section: SidebarSectionKey) => void;
   onlineServerCount: number;
   totalServerCount: number;
 }
 
-export const NetworkSection: React.FC<NetworkSectionProps> = ({ onAddNetworkServer, networkServers, removableDevices, onEjectDevice, onSelectRemovableDevice, selectedRemovableDeviceId, collapsed, toggleSection, onlineServerCount, totalServerCount }) => (
+export const NetworkSection: React.FC<NetworkSectionProps> = ({ onAddNetworkServer, networkServers, removableDevices, onEjectDevice, onSelectRemovableDevice, selectedRemovableDeviceId, onSelectNetworkServer, selectedNetworkServerName, collapsed, toggleSection, onlineServerCount, totalServerCount }) => (
     <div className="space-y-0.5">
       <div 
         onClick={() => toggleSection('network')}
@@ -61,7 +63,7 @@ export const NetworkSection: React.FC<NetworkSectionProps> = ({ onAddNetworkServ
                     onClick={() => onSelectRemovableDevice?.(dev)}
                     className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-all group text-left ${
                       isSelected
-                        ? 'bg-sky-500/20 text-sky-200 font-medium shadow-sm'
+                        ? 'bg-orange-500/20 text-orange-200 font-medium shadow-sm'
                         : 'text-neutral-300 hover:bg-white/5 hover:text-white'
                     }`}
                     title={`${dev.name} (${dev.connectionType})\nMount: ${dev.mountPoint}\nFormat: ${dev.fileSystem}\nFree: ${formatBytes(dev.freeBytes)} of ${formatBytes(dev.capacityBytes)}`}
@@ -72,7 +74,7 @@ export const NetworkSection: React.FC<NetworkSectionProps> = ({ onAddNetworkServ
                       ) : dev.type === 'thunderbolt_raid' ? (
                         <Database className={`w-4 h-4 shrink-0 ${isSelected ? 'text-purple-400' : 'text-purple-400/80'}`} />
                       ) : (
-                        <Usb className={`w-4 h-4 shrink-0 ${isSelected ? 'text-sky-400' : 'text-sky-400/80'}`} />
+                        <Usb className={`w-4 h-4 shrink-0 ${isSelected ? 'text-orange-400' : 'text-orange-400/80'}`} />
                       )}
                       <div className="truncate min-w-0">
                         <div className="truncate font-medium leading-tight text-[11px]">{dev.name}</div>
@@ -125,7 +127,12 @@ export const NetworkSection: React.FC<NetworkSectionProps> = ({ onAddNetworkServ
                 <button
                   key={net.name}
                   type="button"
-                  className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-neutral-300 hover:bg-white/5 hover:text-white transition-colors group text-left"
+                  onClick={() => onSelectNetworkServer?.(net.name)}
+                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-colors group text-left ${
+                    selectedNetworkServerName === net.name
+                      ? 'bg-orange-500/20 text-orange-200 font-medium shadow-sm'
+                      : 'text-neutral-300 hover:bg-white/5 hover:text-white'
+                  }`}
                 >
                   <div className="flex items-center gap-2 truncate">
                     <Icon className="w-4 h-4 text-orange-400 shrink-0" />

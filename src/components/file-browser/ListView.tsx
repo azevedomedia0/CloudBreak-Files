@@ -2,9 +2,11 @@ import React from 'react';
 import { Image as ImageIcon, Video, FileText, Lock, ShieldCheck, Share2, Edit3, Scissors, CheckSquare, Square } from 'lucide-react';
 import { FileItem, CloudAccount, CloudProviderId } from '../../types';
 import { FileThumbnail } from './FileThumbnail';
+import { SelectionAccent, SELECTION_CLASSES } from '../../utils/selectionAccent';
 import { formatBytes, formatDate } from '../../utils/format';
 
 export interface ListViewProps {
+  accent: SelectionAccent;
   files: FileItem[];
   selectedFileId: string | null;
   selectedIds: Set<string>;
@@ -18,7 +20,7 @@ export interface ListViewProps {
   getAccount: (accountId: CloudProviderId) => CloudAccount | undefined;
 }
 
-export const ListView: React.FC<ListViewProps> = ({ files, selectedFileId, selectedIds, onSelectFile, onEditPhoto, onOpenVideo, onShareFile, onOpenQuickLook, toggleSelectOne, toggleSelectAll, getAccount }) => (
+export const ListView: React.FC<ListViewProps> = ({ accent, files, selectedFileId, selectedIds, onSelectFile, onEditPhoto, onOpenVideo, onShareFile, onOpenQuickLook, toggleSelectOne, toggleSelectAll, getAccount }) => (
     <div className="rounded-xl overflow-hidden border border-white/8 bg-black/20">
       <table className="w-full text-left text-xs text-neutral-300">
         <thead className="bg-white/5 border-b border-white/8 text-[11px] font-semibold text-neutral-400 uppercase tracking-wider">
@@ -26,7 +28,7 @@ export const ListView: React.FC<ListViewProps> = ({ files, selectedFileId, selec
             <th className="p-3 w-8">
               <button onClick={toggleSelectAll}>
                 {selectedIds.size === files.length && files.length > 0 ? (
-                  <CheckSquare className="w-3.5 h-3.5 text-sky-400" />
+                  <CheckSquare className={`w-3.5 h-3.5 ${SELECTION_CLASSES[accent].checkIcon}`} />
                 ) : (
                   <Square className="w-3.5 h-3.5 text-neutral-500" />
                 )}
@@ -58,16 +60,16 @@ export const ListView: React.FC<ListViewProps> = ({ files, selectedFileId, selec
                 }}
                 className={`cursor-pointer transition-colors ${
                   isCurrent
-                    ? 'bg-sky-500/20 text-white font-medium'
+                    ? SELECTION_CLASSES[accent].row
                     : isSelected
-                    ? 'bg-sky-500/10'
+                    ? SELECTION_CLASSES[accent].rowMulti
                     : 'hover:bg-white/5'
                 }`}
               >
                 <td className="p-3">
                   <button onClick={e => toggleSelectOne(file.id, e)}>
                     {isSelected ? (
-                      <CheckSquare className="w-3.5 h-3.5 text-sky-400" />
+                      <CheckSquare className={`w-3.5 h-3.5 ${SELECTION_CLASSES[accent].checkIcon}`} />
                     ) : (
                       <Square className="w-3.5 h-3.5 text-neutral-600" />
                     )}

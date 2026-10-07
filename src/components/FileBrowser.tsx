@@ -7,6 +7,7 @@ import { IconsView } from './file-browser/IconsView';
 import { ListView } from './file-browser/ListView';
 import { ColumnsView } from './file-browser/ColumnsView';
 import { GalleryView } from './file-browser/GalleryView';
+import { accentForSelection } from '../utils/selectionAccent';
 
 interface FileBrowserProps {
   files: FileItem[];
@@ -14,6 +15,8 @@ interface FileBrowserProps {
   selectedAccountId: CloudProviderId;
   selectedFolder: FolderItem | null;
   selectedLibrary: SharedLibrary | null;
+  /** Network share name or removable device id when one is open. */
+  selectedSourceId?: string | null;
   selectedFileId: string | null;
   viewMode: MacViewMode;
   onSelectFile: (file: FileItem) => void;
@@ -35,6 +38,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   selectedAccountId,
   selectedFolder,
   selectedLibrary,
+  selectedSourceId = null,
   selectedFileId,
   viewMode,
   onSelectFile,
@@ -53,6 +57,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   const [iconScale, setIconScale] = useState<number>(100); // 75 to 150%
 
   const selectedFile = files.find(f => f.id === selectedFileId) || files[0] || null;
+  const accent = accentForSelection(selectedLibrary, selectedSourceId);
 
   const toggleSelectOne = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -133,16 +138,16 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         )}
 
         {/* 1. ICONS / GRID MODE */}
-        {viewMode === 'icons' && files.length > 0 && <IconsView files={files} selectedFileId={selectedFileId} selectedIds={selectedIds} iconScale={iconScale} onSelectFile={onSelectFile} onEditPhoto={onEditPhoto} onOpenVideo={onOpenVideo} onOpenQuickLook={onOpenQuickLook} toggleSelectOne={toggleSelectOne} />}
+        {viewMode === 'icons' && files.length > 0 && <IconsView accent={accent} files={files} selectedFileId={selectedFileId} selectedIds={selectedIds} iconScale={iconScale} onSelectFile={onSelectFile} onEditPhoto={onEditPhoto} onOpenVideo={onOpenVideo} onOpenQuickLook={onOpenQuickLook} toggleSelectOne={toggleSelectOne} />}
 
         {/* 2. LIST MODE */}
-        {viewMode === 'list' && files.length > 0 && <ListView files={files} selectedFileId={selectedFileId} selectedIds={selectedIds} onSelectFile={onSelectFile} onEditPhoto={onEditPhoto} onOpenVideo={onOpenVideo} onShareFile={onShareFile} onOpenQuickLook={onOpenQuickLook} toggleSelectOne={toggleSelectOne} toggleSelectAll={toggleSelectAll} getAccount={getAccount} />}
+        {viewMode === 'list' && files.length > 0 && <ListView accent={accent} files={files} selectedFileId={selectedFileId} selectedIds={selectedIds} onSelectFile={onSelectFile} onEditPhoto={onEditPhoto} onOpenVideo={onOpenVideo} onShareFile={onShareFile} onOpenQuickLook={onOpenQuickLook} toggleSelectOne={toggleSelectOne} toggleSelectAll={toggleSelectAll} getAccount={getAccount} />}
 
         {/* 3. COLUMNS (MILLER COLUMNS) MODE */}
-        {viewMode === 'columns' && <ColumnsView files={files} selectedFolder={selectedFolder} selectedFileId={selectedFileId} selectedFile={selectedFile} folders={folders} totalSize={totalSize} onSelectFile={onSelectFile} onEditPhoto={onEditPhoto} onOpenVideo={onOpenVideo} onOpenQuickLook={onOpenQuickLook} onSelectFolder={onSelectFolder} getAccount={getAccount} />}
+        {viewMode === 'columns' && <ColumnsView accent={accent} files={files} selectedFolder={selectedFolder} selectedFileId={selectedFileId} selectedFile={selectedFile} folders={folders} totalSize={totalSize} onSelectFile={onSelectFile} onEditPhoto={onEditPhoto} onOpenVideo={onOpenVideo} onOpenQuickLook={onOpenQuickLook} onSelectFolder={onSelectFolder} getAccount={getAccount} />}
 
         {/* 4. GALLERY MODE */}
-        {viewMode === 'gallery' && selectedFile && <GalleryView files={files} selectedFile={selectedFile} onSelectFile={onSelectFile} onEditPhoto={onEditPhoto} onOpenVideo={onOpenVideo} />}
+        {viewMode === 'gallery' && selectedFile && <GalleryView accent={accent} files={files} selectedFile={selectedFile} onSelectFile={onSelectFile} onEditPhoto={onEditPhoto} onOpenVideo={onOpenVideo} />}
 
       </div>
 
