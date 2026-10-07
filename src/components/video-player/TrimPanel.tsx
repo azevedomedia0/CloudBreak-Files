@@ -16,7 +16,7 @@ export interface TrimPanelProps {
   setTrimEnd: (value: number) => void;
   onSeek: (time: number) => void;
   playTrimLoop: () => void;
-  onContinue: () => void;
+  onContinue?: () => void;
 }
 
 type Handle = 'start' | 'end';
@@ -210,15 +210,17 @@ export const TrimPanel: React.FC<TrimPanelProps> = ({
             <Repeat className="w-3.5 h-3.5 text-amber-300" />
             <span>Preview</span>
           </button>
-          <button
-            onClick={onContinue}
-            className="h-9 px-3 rounded-lg bg-amber-300 hover:bg-amber-200 text-neutral-950 text-xs font-bold flex items-center gap-1.5 transition-colors"
-            title="Next: choose a format and where to save"
-          >
-            <Scissors className="w-3.5 h-3.5" />
-            <span>Save clip</span>
-            <ChevronRight className="w-3.5 h-3.5" />
-          </button>
+          {onContinue && (
+            <button
+              onClick={onContinue}
+              className="h-9 px-3 rounded-lg bg-amber-300 hover:bg-amber-200 text-neutral-950 text-xs font-bold flex items-center gap-1.5 transition-colors"
+              title="Next: choose a format and where to save"
+            >
+              <Scissors className="w-3.5 h-3.5" />
+              <span>Save clip</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
     </div>
