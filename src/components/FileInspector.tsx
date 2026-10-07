@@ -2,12 +2,14 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   X, Image as ImageIcon, Video, FileText, Lock, 
   Unlock, ShieldCheck, Download, Trash2, Edit3, Scissors, 
-  Share2, Copy, Check, Info, HardDrive, Sparkles, Key,
+  Share2, Info, HardDrive, Sparkles, Key,
   ChevronDown, ChevronUp, ChevronRight, Minimize2, Maximize2,
   PanelRightClose, PanelRight, Play, Pause, RotateCcw, Volume2, VolumeX, RefreshCw
 } from 'lucide-react';
 import { FileItem, CloudAccount } from '../types';
 import { formatBytes, formatDate, formatTimecode } from '../utils/format';
+
+import { PhotoNav, PhotoNavArrows } from './PhotoNavArrows';
 
 interface FileInspectorProps {
   file: FileItem | null;
@@ -20,6 +22,7 @@ interface FileInspectorProps {
   onToggleEncrypt: (file: FileItem) => void;
   onDeleteFile: (fileId: string) => void;
   width?: number;
+  photoNav?: PhotoNav | null;
 }
 
 export const FileInspector: React.FC<FileInspectorProps> = ({
@@ -33,8 +36,8 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
   onToggleEncrypt,
   onDeleteFile,
   width = 320,
+  photoNav,
 }) => {
-  const [copiedHash, setCopiedHash] = useState<boolean>(false);
   const [isBodyCollapsed, setIsBodyCollapsed] = useState<boolean>(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -101,11 +104,10 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
     preview?: boolean;
     general?: boolean;
     actions?: boolean;
-    crypto?: boolean;
     specs?: boolean;
   }>({});
 
-  const toggleSection = (section: 'preview' | 'general' | 'actions' | 'crypto' | 'specs') => {
+  const toggleSection = (section: 'preview' | 'general' | 'actions' | 'specs') => {
     setCollapsedSections(prev => ({
       ...prev,
       [section]: !prev[section],
@@ -115,12 +117,6 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
   if (!isOpen || !file) return null;
 
   const account = accounts.find(a => a.id === file.accountId);
-
-  const copyHash = () => {
-    navigator.clipboard.writeText(file.encryption.checksumSha256);
-    setCopiedHash(true);
-    setTimeout(() => setCopiedHash(false), 2000);
-  };
 
   const handleDownload = () => {
     const link = document.createElement('a');
@@ -200,6 +196,7 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
               {file.category === 'photo' && (
                 <img src={file.url} alt={file.name} className="w-full h-full object-cover" />
               )}
+              {file.category === 'photo' && photoNav && <PhotoNavArrows nav={photoNav} compact />}
 
               {file.category === 'video' && (
                 <div className="w-full h-full relative group/player bg-black flex flex-col justify-between overflow-hidden">
@@ -411,52 +408,6 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
               >
                 <Download className="w-4 h-4" />
               </button>
-            </div>
-          )}
-        </div>
-
-        {/* Cryptography & Zero-Knowledge Status Section */}
-        <div className="space-y-2">
-          <div 
-            onClick={() => toggleSection('crypto')}
-            className="flex items-center justify-between text-[10px] font-semibold tracking-wider uppercase text-neutral-400 cursor-pointer hover:text-neutral-200 transition-colors group select-none"
-          >
-            <div className="flex items-center gap-1.5">
-              <span>End-to-End Cryptography</span>
-              <ChevronDown className={`w-3 h-3 text-neutral-500 group-hover:text-neutral-300 transition-transform duration-200 ${collapsedSections.crypto ? '-rotate-90' : ''}`} />
-            </div>
-            <span className="text-[9px] font-mono text-cyan-400 bg-cyan-950/60 px-1.5 py-0.5 rounded border border-cyan-500/30">
-              AES-256
-            </span>
-          </div>
-
-          {!collapsedSections.crypto && (
-            <div className="p-3 bg-black/40 border border-white/8 rounded-xl space-y-2 text-xs">
-              <div className="flex justify-between">
-                <span className="text-neutral-400">Cipher Protocol</span>
-                <span className="font-mono text-cyan-300">{file.encryption.algorithm}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-neutral-400">Key Fingerprint</span>
-                <span className="font-mono text-[10px] text-neutral-300 truncate max-w-[150px]">
-                  {file.encryption.keyFingerprint}
-                </span>
-              </div>
-              <div className="pt-1 border-t border-white/5">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-neutral-500 text-[10px]">SHA-256 Integrity</span>
-                  <button
-                    onClick={copyHash}
-                    className="text-[10px] text-sky-400 hover:underline flex items-center gap-0.5"
-                  >
-                    {copiedHash ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                    <span>{copiedHash ? 'Copied' : 'Copy'}</span>
-                  </button>
-                </div>
-                <div className="font-mono text-[10px] text-neutral-400 break-all bg-black/60 p-1.5 rounded">
-                  {file.encryption.checksumSha256}
-                </div>
-              </div>
             </div>
           )}
         </div>

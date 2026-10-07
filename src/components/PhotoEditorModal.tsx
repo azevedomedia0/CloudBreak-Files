@@ -374,7 +374,7 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
               className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-neutral-950 bg-cyan-400 hover:bg-cyan-300 rounded-lg transition-colors shadow-lg shadow-cyan-500/20 disabled:opacity-50"
             >
               <Save className="w-3.5 h-3.5" />
-              <span>Save Version</span>
+              <span>Save Changes</span>
             </button>
 
             <button

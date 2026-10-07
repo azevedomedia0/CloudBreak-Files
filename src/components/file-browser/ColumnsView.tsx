@@ -1,6 +1,7 @@
 import React from 'react';
 import { Image as ImageIcon, Folder, Video, FileText, Lock, Edit3, Scissors, Download, ChevronRight, Eye, HardDrive, Monitor, AppWindow } from 'lucide-react';
 import { FileItem, CloudAccount, FolderItem, CloudProviderId } from '../../types';
+import { FileThumbnail } from './FileThumbnail';
 import { formatBytes, formatDate } from '../../utils/format';
 
 export interface ColumnsViewProps {
@@ -92,10 +93,7 @@ export const ColumnsView: React.FC<ColumnsViewProps> = ({ files, selectedFolder,
                 }`}
               >
                 <div className="flex items-center gap-2.5 truncate">
-                  {file.category === 'photo' && <ImageIcon className="w-4 h-4 text-sky-400 shrink-0" />}
-                  {file.category === 'video' && <Video className="w-4 h-4 text-amber-400 shrink-0" />}
-                  {file.category === 'document' && <FileText className="w-4 h-4 text-neutral-400 shrink-0" />}
-                  {file.category === 'archive' && <Lock className="w-4 h-4 text-cyan-400 shrink-0" />}
+                  <FileThumbnail file={file} compact className="w-8 h-6 rounded border border-white/10 bg-black/40 shrink-0" iconClassName="w-3 h-3" />
                   <span className="truncate">{file.name}</span>
                 </div>
                 <ChevronRight className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
@@ -109,14 +107,7 @@ export const ColumnsView: React.FC<ColumnsViewProps> = ({ files, selectedFolder,
       {selectedFile && (
         <div className="w-80 md:w-96 macos-glass-card rounded-xl flex flex-col shrink-0 overflow-y-auto p-4 space-y-4">
           <div className="aspect-video rounded-lg overflow-hidden bg-black/50 border border-white/10 flex items-center justify-center relative shadow-lg">
-            {selectedFile.thumbnailUrl ? (
-              <img src={selectedFile.thumbnailUrl} alt={selectedFile.name} className="w-full h-full object-cover" />
-            ) : (
-              <div className="text-neutral-500 flex flex-col items-center gap-2">
-                <FileText className="w-10 h-10 text-sky-400" />
-                <span className="font-mono text-xs">{selectedFile.name}</span>
-              </div>
-            )}
+            <FileThumbnail file={selectedFile} className="w-full h-full" />
             {selectedFile.encryption.isEncrypted && (
               <div className="absolute top-2 right-2 text-[10px] text-cyan-300 bg-black/80 px-2 py-0.5 rounded font-mono border border-cyan-500/40">
                 AES-256 E2EE

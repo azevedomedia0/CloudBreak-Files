@@ -14,6 +14,7 @@ import { useToast } from './hooks/useToast';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 import { useFileActions } from './hooks/useFileActions';
 import { AppModals } from './components/AppModals';
+import { PhotoNav } from './components/PhotoNavArrows';
 import { UserProfile } from './components/ProfileSettingsModal';
 import { DropOverlay } from './components/DropOverlay';
 import { Toast } from './components/Toast';
@@ -33,6 +34,7 @@ export default function App() {
   // Accounts & Navigation States
   const [accounts, setAccounts] = useState<CloudAccount[]>(INITIAL_ACCOUNTS);
   const [selectedAccountId, setSelectedAccountId] = useState<CloudProviderId>('all');
+  const [disconnectedAccountIds, setDisconnectedAccountIds] = useState<ReadonlySet<string>>(new Set());
   const [folders, setFolders] = useState<FolderItem[]>(INITIAL_FOLDERS);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [sharedLibraries, setSharedLibraries] = useState<SharedLibrary[]>(INITIAL_SHARED_LIBRARIES);
@@ -165,9 +167,20 @@ export default function App() {
 
   const handleDisconnectAccount = (accountId: string) => {
     const account = accounts.find(a => a.id === accountId);
-    if (account) {
-      showToast(`Disconnected ${account.name} from AetherCloud`);
+    if (!account) return;
+
+    setAccounts(prev => prev.filter(a => a.id !== accountId));
+    setDisconnectedAccountIds(prev => new Set(prev).add(accountId));
+
+    if (selectedAccountId === accountId) {
+      setSelectedAccountId('all');
+      setSelectedFolderId(null);
+      setSelectedLibraryId(null);
     }
+    const selected = files.find(f => f.id === selectedFileId);
+    if (selected?.accountId === accountId) setSelectedFileId(null);
+
+    showToast(`Disconnected ${account.name}. Your files stay in the provider.`);
   };
 
   // Notification Action Handlers
@@ -218,7 +231,19 @@ export default function App() {
   const selectedLibrary = sharedLibraries.find(lib => lib.id === selectedLibraryId) || null;
 
   // Filter files
-  const filteredFiles = filterFiles(files, { selectedLibrary, selectedLibraryId, selectedAccountId, selectedFolderId, selectedCategory, searchQuery });
+  const filteredFiles = filterFiles(files, { selectedLibrary, selectedLibraryId, selectedAccountId, selectedFolderId, selectedCategory, searchQuery, disconnectedAccountIds });
+
+  const photoFiles = filteredFiles.filter(f => f.category === 'photo');
+  const photoIndex = selectedFile?.category === 'photo' ? photoFiles.findIndex(f => f.id === selectedFile.id) : -1;
+  const photoNav: PhotoNav | null =
+    photoIndex >= 0 && photoFiles.length > 1
+      ? {
+          hasPrev: photoIndex > 0,
+          hasNext: photoIndex < photoFiles.length - 1,
+          onPrev: () => setSelectedFileId(photoFiles[photoIndex - 1].id),
+          onNext: () => setSelectedFileId(photoFiles[photoIndex + 1].id),
+        }
+      : null;
 
   const {
     isDraggingOver,
@@ -245,14 +270,14 @@ export default function App() {
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       style={{
-        background: 'radial-gradient(circle at 15% 15%, #182848 0%, #0c101c 45%, #05070c 100%)',
+        background: 'radial-gradient(circle at 15% 15%, #3b3c40 0%, #242426 45%, #171719 100%)',
       }}
     >
       
       {/* Ambient Liquid Glass Glowing Lights in Background */}
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full bg-cyan-600/15 blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-1/4 right-1/4 w-[30rem] h-[30rem] rounded-full bg-indigo-600/15 blur-[140px] pointer-events-none" />
-      <div className="absolute top-2/3 left-1/3 w-80 h-80 rounded-full bg-sky-500/10 blur-[100px] pointer-events-none" />
+      <div className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full bg-white/[0.04] blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-1/4 right-1/4 w-[30rem] h-[30rem] rounded-full bg-white/[0.035] blur-[140px] pointer-events-none" />
+      <div className="absolute top-2/3 left-1/3 w-80 h-80 rounded-full bg-white/[0.03] blur-[100px] pointer-events-none" />
 
       {isDraggingOver && <DropOverlay />}
 
@@ -387,6 +412,7 @@ export default function App() {
             {viewMode !== 'columns' && isInspectorOpen && selectedFile && (
               <FileInspector
                 file={selectedFile}
+                photoNav={photoNav}
                 accounts={accounts}
                 isOpen={true}
                 onClose={() => setIsInspectorOpen(false)}
@@ -411,7 +437,9 @@ export default function App() {
 
       <AppModals
         selectedFile={selectedFile}
+        photoNav={photoNav}
         accounts={accounts}
+        folders={folders}
         isQuickLookOpen={isQuickLookOpen}
         setIsQuickLookOpen={setIsQuickLookOpen}
         setEditingPhotoFile={setEditingPhotoFile}

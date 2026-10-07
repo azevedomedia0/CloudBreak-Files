@@ -1,10 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Play, Pause, RotateCcw, Volume2, VolumeX } from 'lucide-react';
-import { FileItem, VideoConvertOptions } from '../types';
-import { formatTimecode } from '../utils/format';
+import { Play } from 'lucide-react';
+import { FileItem, VideoConvertOptions, CloudAccount, FolderItem } from '../types';
 import { PlayerHeader } from './video-player/PlayerHeader';
 import { TrimPanel } from './video-player/TrimPanel';
-import { ConvertPanel } from './video-player/ConvertPanel';
+import { ConvertPanel, SaveDestination } from './video-player/ConvertPanel';
+import { PlaybackControls } from './video-player/PlaybackControls';
+
+interface LocalDirectoryHandle {
+  name: string;
+  getFileHandle: (name: string, opts: { create: boolean }) => Promise<{
+    createWritable: () => Promise<{ write: (data: Blob) => Promise<void>; close: () => Promise<void> }>;
+  }>;
+}
 
 interface VideoPlayerModalProps {
   file: FileItem;
@@ -12,6 +19,8 @@ interface VideoPlayerModalProps {
   onClose: () => void;
   onSaveTrimmedVideo: (newFile: FileItem) => void;
   initialTab?: 'player' | 'trim' | 'convert';
+  accounts: CloudAccount[];
+  folders: FolderItem[];
 }
 
 export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
@@ -20,8 +29,11 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   onClose,
   onSaveTrimmedVideo,
   initialTab = 'player',
+  accounts,
+  folders,
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Playback states
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -31,6 +43,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const [volume, setVolume] = useState<number>(0.8);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isLooping, setIsLooping] = useState<boolean>(false);
+  const [controlsVisible, setControlsVisible] = useState<boolean>(true);
+  const [playError, setPlayError] = useState<string | null>(null);
 
   // Active Tool Mode
   const [activeTab, setActiveTab] = useState<'player' | 'trim' | 'convert'>(initialTab);
@@ -54,24 +68,49 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const [transcodeProgress, setTranscodeProgress] = useState<number>(0);
   const [transcodeComplete, setTranscodeComplete] = useState<boolean>(false);
   const [transcodedResultUrl, setTranscodedResultUrl] = useState<string | null>(null);
+  const [destination, setDestination] = useState<SaveDestination>(() => {
+    const sourceAccount = accounts.find(a => a.id === file.accountId) ?? accounts[0];
+    return sourceAccount
+      ? { kind: 'cloud', accountId: sourceAccount.id, folderId: null }
+      : { kind: 'computer', accountId: 'all', folderId: null };
+  });
+  const [customBaseName, setCustomBaseName] = useState<string>('');
+  const [savedLocalName, setSavedLocalName] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [localFolder, setLocalFolder] = useState<{ name: string; handle: LocalDirectoryHandle } | null>(null);
 
   // Initialize durations and reset on file change
   useEffect(() => {
     if (!isOpen) return;
     setIsPlaying(false);
+    setPlayError(null);
     setCurrentTime(0);
     setTranscodeComplete(false);
     setIsTranscoding(false);
     setTranscodeProgress(0);
     setTranscodedResultUrl(null);
+    setCustomBaseName('');
+    setSavedLocalName(null);
+    setSaveError(null);
     if (initialTab) {
       setActiveTab(initialTab);
     }
   }, [file.id, isOpen, initialTab]);
 
+  useEffect(() => {
+    setConvertOptions(prev => ({ ...prev, trimStart, trimEnd }));
+  }, [trimStart, trimEnd]);
+
+  useEffect(() => {
+    setTranscodeComplete(false);
+    setSavedLocalName(null);
+    setSaveError(null);
+  }, [convertOptions.format, convertOptions.resolution, convertOptions.quality, trimStart, trimEnd]);
+
   const handleLoadedMetadata = () => {
     if (videoRef.current) {
-      const dur = videoRef.current.duration || file.videoMeta?.durationSeconds || 15;
+      const raw = videoRef.current.duration;
+      const dur = Number.isFinite(raw) && raw > 0 ? raw : file.videoMeta?.durationSeconds || 15;
       setDuration(dur);
       setTrimStart(0);
       setTrimEnd(dur);
@@ -93,15 +132,21 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     }
   };
 
+  const startPlayback = () => {
+    videoRef.current?.play().catch(err => {
+      if (err?.name !== 'AbortError') {
+        setPlayError("This video couldn't be played. Its format may not be supported yet.");
+      }
+    });
+  };
+
   const togglePlay = () => {
     if (!videoRef.current) return;
-    if (isPlaying) {
-      videoRef.current.pause();
-      setIsPlaying(false);
-      setIsPlayingTrimLoop(false);
+    if (videoRef.current.paused) {
+      startPlayback();
     } else {
-      videoRef.current.play().catch(() => {});
-      setIsPlaying(true);
+      videoRef.current.pause();
+      setIsPlayingTrimLoop(false);
     }
   };
 
@@ -111,6 +156,16 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     videoRef.current.currentTime = bounded;
     setCurrentTime(bounded);
   };
+
+  const revealControls = () => {
+    setControlsVisible(true);
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = setTimeout(() => setControlsVisible(false), 2500);
+  };
+
+  useEffect(() => () => {
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+  }, []);
 
   const stepFrame = (frames: number) => {
     if (!videoRef.current) return;
@@ -145,38 +200,21 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const playTrimLoop = () => {
     if (!videoRef.current) return;
     videoRef.current.currentTime = trimStart;
-    videoRef.current.play().catch(() => {});
-    setIsPlaying(true);
+    startPlayback();
     setIsPlayingTrimLoop(true);
   };
 
-  // Perform Trim & Save to Cloud
-  const handleSaveTrim = () => {
-    const trimmedDuration = Math.max(0.1, trimEnd - trimStart);
-    const newName = `${file.name.replace(/\.[^/.]+$/, '')}_trimmed_${Math.round(trimmedDuration)}s.mp4`;
-
-    const trimmedFile: FileItem = {
-      ...file,
-      id: `file-trim-${Date.now()}`,
-      name: newName,
-      sizeBytes: Math.round(file.sizeBytes * (trimmedDuration / Math.max(duration, 1))),
-      updatedAt: new Date().toISOString(),
-      version: 1,
-      videoMeta: {
-        ...(file.videoMeta || {
-          dimensions: { width: 1920, height: 1080 },
-          framerate: 30,
-          codec: 'H.264',
-          bitrate: '30 Mbps',
-          audioCodec: 'AAC',
-        }),
-        durationSeconds: parseFloat(trimmedDuration.toFixed(2)),
-      },
-    };
-
-    onSaveTrimmedVideo(trimmedFile);
-    onClose();
+  const continueToConvert = () => {
+    videoRef.current?.pause();
+    setIsPlayingTrimLoop(false);
+    setActiveTab('convert');
   };
+
+  const isTrimmed = trimStart > 0.001 || trimEnd < duration - 0.001;
+  const clipLength = Math.max(0.1, trimEnd - trimStart);
+  const sourceBaseName = file.name.replace(/\.[^/.]+$/, '');
+  const defaultBaseName = `${sourceBaseName}${isTrimmed ? '_clip' : ''}${convertOptions.format === 'mp3' ? '' : `_${convertOptions.resolution}`}`;
+  const outputName = `${customBaseName.trim() || defaultBaseName}.${convertOptions.format}`;
 
   // Perform Transcode / Convert
   const startTranscode = () => {
@@ -201,14 +239,18 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
   const handleSaveConvertedToCloud = () => {
     const ext = convertOptions.format;
-    const newName = `${file.name.replace(/\.[^/.]+$/, '')}_${convertOptions.resolution}.${ext}`;
+    const folder = folders.find(f => f.id === destination.folderId);
+    const resolutionScale = convertOptions.resolution === '4k' ? 1.6 : convertOptions.resolution === '720p' ? 0.5 : 0.8;
     const convertedFile: FileItem = {
       ...file,
       id: `file-conv-${Date.now()}`,
-      name: newName,
+      name: outputName,
+      accountId: destination.accountId,
+      folderId: folder?.id,
+      folderPath: folder ? `/${folder.name}` : '/',
       mimeType: ext === 'gif' ? 'image/gif' : ext === 'mp3' ? 'audio/mpeg' : `video/${ext}`,
       category: ext === 'gif' ? 'photo' : ext === 'mp3' ? 'audio' : 'video',
-      sizeBytes: Math.round(file.sizeBytes * (convertOptions.resolution === '4k' ? 1.6 : convertOptions.resolution === '720p' ? 0.5 : 0.8)),
+      sizeBytes: Math.round(file.sizeBytes * resolutionScale * (clipLength / Math.max(duration, 1))),
       updatedAt: new Date().toISOString(),
       version: 1,
       videoMeta: ext === 'mp3' ? undefined : {
@@ -219,7 +261,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           bitrate: '15 Mbps',
           audioCodec: 'AAC',
         }),
-        durationSeconds: duration,
+        durationSeconds: parseFloat(clipLength.toFixed(2)),
       },
     };
 
@@ -227,12 +269,58 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     onClose();
   };
 
-  const handleDownloadConverted = () => {
-    const ext = convertOptions.format;
-    const link = document.createElement('a');
-    link.href = file.url;
-    link.download = `${file.name.replace(/\.[^/.]+$/, '')}_transcoded.${ext}`;
-    link.click();
+  const browseLocalFolder = async () => {
+    setSaveError(null);
+    const showDirectoryPicker = (window as unknown as {
+      showDirectoryPicker?: (opts: { mode: 'readwrite' }) => Promise<LocalDirectoryHandle>;
+    }).showDirectoryPicker;
+
+    if (!showDirectoryPicker) {
+      setSaveError("Folder picking isn't available here. You'll choose a location when you save.");
+      return;
+    }
+    try {
+      const handle = await showDirectoryPicker({ mode: 'readwrite' });
+      setLocalFolder({ name: handle.name, handle });
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') setSaveError("Couldn't open that folder. Try another one.");
+    }
+  };
+
+  const handleSaveToComputer = async () => {
+    setSaveError(null);
+    try {
+      if (localFolder) {
+        const blob = await (await fetch(file.url)).blob();
+        const fileHandle = await localFolder.handle.getFileHandle(outputName, { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        setSavedLocalName(`${localFolder.name}/${outputName}`);
+        return;
+      }
+
+      const showSaveFilePicker = (window as unknown as {
+        showSaveFilePicker?: (opts: { suggestedName: string }) => Promise<{ name: string; createWritable: () => Promise<{ write: (data: Blob) => Promise<void>; close: () => Promise<void> }> }>;
+      }).showSaveFilePicker;
+
+      if (showSaveFilePicker) {
+        const handle = await showSaveFilePicker({ suggestedName: outputName });
+        const blob = await (await fetch(file.url)).blob();
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        setSavedLocalName(handle.name);
+      } else {
+        const link = document.createElement('a');
+        link.href = file.url;
+        link.download = outputName;
+        link.click();
+        setSavedLocalName(outputName);
+      }
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') setSaveError("Couldn't save the file. Try again or pick another location.");
+    }
   };
 
   if (!isOpen) return null;
@@ -252,7 +340,9 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
             {/* Main Video Screen */}
             <div 
               onClick={togglePlay}
-              className="flex-1 flex items-center justify-center p-2 relative cursor-pointer select-none group"
+              onMouseMove={revealControls}
+              onMouseLeave={() => isPlaying && setControlsVisible(false)}
+              className="flex-1 flex items-center justify-center p-2 relative cursor-pointer select-none group overflow-hidden"
             >
               <video
                 ref={videoRef}
@@ -260,10 +350,13 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                 className="max-h-full max-w-full rounded object-contain shadow-2xl"
                 onLoadedMetadata={handleLoadedMetadata}
                 onTimeUpdate={handleTimeUpdate}
+                onPlay={() => setIsPlaying(true)}
+                onPause={() => setIsPlaying(false)}
+                onError={() => setPlayError("This video couldn't be loaded. Its format may not be supported yet.")}
                 onEnded={() => {
                   if (isLooping) {
                     seek(0);
-                    videoRef.current?.play();
+                    startPlayback();
                   } else {
                     setIsPlaying(false);
                   }
@@ -271,145 +364,77 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                 playsInline
               />
 
+              {playError && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="max-w-sm text-center px-5 py-4 rounded-xl bg-neutral-900/85 border border-white/10 text-sm text-neutral-200">
+                    {playError}
+                  </div>
+                </div>
+              )}
+
               {/* Center Play Overlay when paused */}
-              {!isPlaying && (
+              {!isPlaying && !playError && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-all pointer-events-none">
-                  <div className="w-16 h-16 rounded-full bg-cyan-500/90 text-neutral-950 flex items-center justify-center shadow-lg transform group-hover:scale-105 transition-transform">
+                  <div className="w-16 h-16 rounded-full bg-neutral-900/60 backdrop-blur-md border border-white/15 text-white flex items-center justify-center shadow-lg transform group-hover:scale-105 transition-transform">
                     <Play className="w-8 h-8 ml-1" />
                   </div>
                 </div>
               )}
-            </div>
 
-            {/* Custom Pro Timeline & Playback Bar */}
-            <div className="px-5 py-3 border-t border-neutral-800/80 bg-neutral-900/95">
-              
-              {/* Timeline scrubber */}
-              <div className="relative mb-3 flex items-center group">
-                <input
-                  type="range"
-                  min={0}
-                  max={duration || 100}
-                  step={0.01}
-                  value={currentTime}
-                  onChange={e => seek(parseFloat(e.target.value))}
-                  className="w-full custom-range cursor-pointer"
+              {activeTab === 'trim' ? (
+                <TrimPanel duration={duration} currentTime={currentTime} fps={file.videoMeta?.framerate || 30} isPlaying={isPlaying} onTogglePlay={togglePlay} onSeek={seek} trimStart={trimStart} setTrimStart={setTrimStart} trimEnd={trimEnd} setTrimEnd={setTrimEnd} playTrimLoop={playTrimLoop} onContinue={continueToConvert} />
+              ) : (
+                <PlaybackControls
+                  visible={controlsVisible || !isPlaying}
+                  isPlaying={isPlaying}
+                  currentTime={currentTime}
+                  duration={duration}
+                  volume={volume}
+                  isMuted={isMuted}
+                  isLooping={isLooping}
+                  playbackRate={playbackRate}
+                  onTogglePlay={togglePlay}
+                  onSeek={seek}
+                  onSkip={seconds => seek((videoRef.current?.currentTime ?? currentTime) + seconds)}
+                  onStepFrame={stepFrame}
+                  onVolumeChange={handleVolumeChange}
+                  onToggleMute={toggleMute}
+                  onToggleLoop={() => setIsLooping(l => !l)}
+                  onChangeSpeed={changeSpeed}
                 />
-
-                {/* Trim region highlight if active */}
-                {activeTab === 'trim' && duration > 0 && (
-                  <div 
-                    className="absolute h-1.5 bg-cyan-400/50 rounded pointer-events-none top-1"
-                    style={{
-                      left: `${(trimStart / duration) * 100}%`,
-                      width: `${((trimEnd - trimStart) / duration) * 100}%`,
-                    }}
-                  />
-                )}
-              </div>
-
-              {/* Bottom control strip */}
-              <div className="flex items-center justify-between text-xs text-neutral-300">
-                <div className="flex items-center gap-3">
-                  {/* Play/Pause */}
-                  <button
-                    onClick={togglePlay}
-                    className="p-2 rounded-lg bg-cyan-400 text-neutral-950 hover:bg-cyan-300 transition-colors"
-                  >
-                    {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
-                  </button>
-
-                  {/* Frame Steps */}
-                  <div className="flex items-center gap-1 border-l border-neutral-800 pl-3">
-                    <button
-                      onClick={() => stepFrame(-1)}
-                      className="px-2 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-[11px] font-mono text-neutral-300"
-                      title="Step back 1 frame"
-                    >
-                      -1f
-                    </button>
-                    <button
-                      onClick={() => stepFrame(1)}
-                      className="px-2 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-[11px] font-mono text-neutral-300"
-                      title="Step forward 1 frame"
-                    >
-                      +1f
-                    </button>
-                  </div>
-
-                  {/* Timecode display */}
-                  <div className="font-mono text-xs flex items-center gap-1.5 text-neutral-200">
-                    <span className="text-cyan-400 font-semibold">{formatTimecode(currentTime, true)}</span>
-                    <span className="text-neutral-600">/</span>
-                    <span className="text-neutral-400">{formatTimecode(duration, true)}</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-4">
-                  {/* Playback Speed */}
-                  <div className="flex items-center gap-1">
-                    {[0.5, 1.0, 1.5, 2.0].map(speed => (
-                      <button
-                        key={speed}
-                        onClick={() => changeSpeed(speed)}
-                        className={`px-2 py-1 text-[11px] font-medium rounded transition-colors ${
-                          playbackRate === speed
-                            ? 'bg-neutral-700 text-cyan-300'
-                            : 'text-neutral-500 hover:text-neutral-300'
-                        }`}
-                      >
-                        {speed}x
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Volume Control */}
-                  <div className="flex items-center gap-2 border-l border-neutral-800 pl-4">
-                    <button onClick={toggleMute} className="text-neutral-400 hover:text-neutral-200">
-                      {isMuted || volume === 0 ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-                    </button>
-                    <input
-                      type="range"
-                      min={0}
-                      max={1}
-                      step={0.05}
-                      value={isMuted ? 0 : volume}
-                      onChange={e => handleVolumeChange(parseFloat(e.target.value))}
-                      className="w-16 custom-range"
-                    />
-                  </div>
-
-                  {/* Loop toggle */}
-                  <button
-                    onClick={() => setIsLooping(!isLooping)}
-                    className={`p-1.5 rounded transition-colors ${
-                      isLooping ? 'text-cyan-400 bg-neutral-800' : 'text-neutral-500 hover:text-neutral-300'
-                    }`}
-                    title="Loop Playback"
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
+              )}
             </div>
 
           </div>
 
-          {/* Right Tool Sidebar for Trim or Convert */}
-          {(activeTab === 'trim' || activeTab === 'convert') && (
+          {/* Right Tool Sidebar for Convert */}
+          {activeTab === 'convert' && (
             <div className="w-80 md:w-96 flex flex-col border-l border-neutral-800 bg-neutral-900/95 overflow-y-auto p-5">
-              
-              {/* TRIM VIEW */}
-              {activeTab === 'trim' && (
-                <TrimPanel duration={duration} currentTime={currentTime} trimStart={trimStart} setTrimStart={setTrimStart} trimEnd={trimEnd} setTrimEnd={setTrimEnd} playTrimLoop={playTrimLoop} handleSaveTrim={handleSaveTrim} />
-              )}
-
-              {/* CONVERT VIEW */}
-              {activeTab === 'convert' && (
-                <ConvertPanel file={file} duration={duration} convertOptions={convertOptions} setConvertOptions={setConvertOptions} isTranscoding={isTranscoding} transcodeProgress={transcodeProgress} transcodeComplete={transcodeComplete} startTranscode={startTranscode} handleSaveConvertedToCloud={handleSaveConvertedToCloud} handleDownloadConverted={handleDownloadConverted} />
-              )}
-
+              <ConvertPanel
+                file={file}
+                duration={duration}
+                convertOptions={convertOptions}
+                setConvertOptions={setConvertOptions}
+                isTranscoding={isTranscoding}
+                transcodeProgress={transcodeProgress}
+                transcodeComplete={transcodeComplete}
+                startTranscode={startTranscode}
+                accounts={accounts}
+                folders={folders}
+                destination={destination}
+                setDestination={setDestination}
+                baseName={customBaseName}
+                defaultBaseName={defaultBaseName}
+                setBaseName={setCustomBaseName}
+                isTrimmed={isTrimmed}
+                onEditTrim={() => setActiveTab('trim')}
+                savedLocalName={savedLocalName}
+                saveError={saveError}
+                localFolderName={localFolder?.name ?? null}
+                onBrowseLocal={browseLocalFolder}
+                handleSaveConvertedToCloud={handleSaveConvertedToCloud}
+                handleSaveToComputer={handleSaveToComputer}
+              />
             </div>
           )}
 

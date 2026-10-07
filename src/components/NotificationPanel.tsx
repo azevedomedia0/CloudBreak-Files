@@ -75,10 +75,10 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
   return (
     <div
       ref={panelRef}
-      className="absolute right-0 top-full mt-2 w-80 sm:w-96 md:w-[420px] max-h-[82vh] flex flex-col bg-[#0a0b14] border border-[#2a2e3d] rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150"
+      className="absolute right-0 top-full mt-2 w-80 sm:w-96 md:w-[420px] max-h-[82vh] flex flex-col bg-[#0a0a0b] border border-[#2c2c2f] rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150"
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[#252837] bg-[#0e1017] select-none">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[#262629] bg-[#0e0e0f] select-none">
         <div className="flex items-center gap-2.5">
           <div className="p-1.5 rounded-lg bg-sky-500/15 border border-sky-400/30 text-sky-300">
             <Bell className="w-4 h-4" />
@@ -101,7 +101,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
             <button
               type="button"
               onClick={onMarkAllAsRead}
-              className="px-2 py-1 rounded-md text-[11px] text-neutral-400 hover:text-white hover:bg-[#202432] transition-colors flex items-center gap-1"
+              className="px-2 py-1 rounded-md text-[11px] text-neutral-400 hover:text-white hover:bg-[#202023] transition-colors flex items-center gap-1"
               title="Mark all as read"
             >
               <CheckCheck className="w-3.5 h-3.5" />
@@ -111,7 +111,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-md text-neutral-400 hover:text-white hover:bg-[#202432] transition-colors"
+            className="p-1 rounded-md text-neutral-400 hover:text-white hover:bg-[#202023] transition-colors"
             title="Close notifications"
           >
             <X className="w-4 h-4" />
@@ -120,14 +120,14 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
       </div>
 
       {/* Filter Tabs */}
-      <div className="flex items-center gap-1 px-4 py-2 border-b border-[#252837] bg-[#11131c] text-xs select-none">
+      <div className="flex items-center gap-1 px-4 py-2 border-b border-[#262629] bg-[#111113] text-xs select-none">
         <button
           type="button"
           onClick={() => setFilter('all')}
           className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
             filter === 'all'
-              ? 'bg-[#282d3e] text-white shadow-xs font-semibold'
-              : 'text-neutral-400 hover:text-neutral-200 hover:bg-[#1a1d29]'
+              ? 'bg-[#2c2c30] text-white shadow-xs font-semibold'
+              : 'text-neutral-400 hover:text-neutral-200 hover:bg-[#19191b]'
           }`}
         >
           All ({notifications.length})
@@ -138,7 +138,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
           className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
             filter === 'invites'
               ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-500/30 shadow-xs font-semibold'
-              : 'text-neutral-400 hover:text-neutral-200 hover:bg-[#1a1d29]'
+              : 'text-neutral-400 hover:text-neutral-200 hover:bg-[#19191b]'
           }`}
         >
           <span>P2P Invites</span>
@@ -153,8 +153,8 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
           onClick={() => setFilter('system')}
           className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
             filter === 'system'
-              ? 'bg-[#282d3e] text-white shadow-xs font-semibold'
-              : 'text-neutral-400 hover:text-neutral-200 hover:bg-[#1a1d29]'
+              ? 'bg-[#2c2c30] text-white shadow-xs font-semibold'
+              : 'text-neutral-400 hover:text-neutral-200 hover:bg-[#19191b]'
           }`}
         >
           System & Security
@@ -162,7 +162,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
       </div>
 
       {/* Notifications Scroll List */}
-      <div className="overflow-y-auto max-h-[60vh] divide-y divide-[#252837] p-2 space-y-2 bg-[#14161f]">
+      <div className="overflow-y-auto max-h-[60vh] divide-y divide-[#262629] p-2 space-y-2 bg-[#141416]">
         {filteredNotifications.length === 0 ? (
           <div className="py-12 flex flex-col items-center justify-center text-center px-4">
             <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-neutral-500 mb-2.5">
@@ -185,8 +185,8 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
                 key={notification.id}
                 className={`p-3 rounded-xl transition-all border ${
                   !notification.read
-                    ? 'bg-[#1c1f2c] border-[#2e3344] shadow-sm'
-                    : 'bg-[#10121a] border-[#1e222e] hover:border-[#2a2e3d]'
+                    ? 'bg-[#1c1c1f] border-[#323236] shadow-sm'
+                    : 'bg-[#0f0f10] border-[#1e1e21] hover:border-[#2c2c2f]'
                 }`}
               >
                 {/* Top Row: Type indicator & Timestamp */}
@@ -239,7 +239,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
 
                 {/* INCOMING P2P LIBRARY CARD PREVIEW & ACTIONS */}
                 {isInvite && notification.libraryData && (
-                  <div className="p-2.5 rounded-xl bg-[#0a0c12] border border-emerald-500/30 space-y-2.5 my-2">
+                  <div className="p-2.5 rounded-xl bg-[#0b0b0c] border border-emerald-500/30 space-y-2.5 my-2">
                     <div className="flex items-start gap-2.5">
                       <div className="w-9 h-9 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center font-bold text-xs text-emerald-300 shrink-0">
                         {notification.sender?.name ? notification.sender.name.charAt(0).toUpperCase() : 'P'}
@@ -267,14 +267,14 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
                     </div>
 
                     {/* Protocol Tag */}
-                    <div className="px-2 py-1 rounded bg-[#11131c] border border-[#222533] flex items-center gap-1.5 text-[9px] font-mono text-neutral-300">
+                    <div className="px-2 py-1 rounded bg-[#111113] border border-[#212124] flex items-center gap-1.5 text-[9px] font-mono text-neutral-300">
                       <Shield className="w-3 h-3 text-cyan-400 shrink-0" />
                       <span className="truncate">{notification.libraryData.p2pProtocol}</span>
                     </div>
 
                     {/* Action Buttons: Accept / Decline */}
                     {isPending && (
-                      <div className="flex items-center gap-2 pt-1 border-t border-[#222533]">
+                      <div className="flex items-center gap-2 pt-1 border-t border-[#212124]">
                         <button
                           type="button"
                           onClick={() => onAcceptLibrary(notification.id)}
@@ -286,7 +286,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
                         <button
                           type="button"
                           onClick={() => onDeclineLibrary(notification.id)}
-                          className="py-1.5 px-3 rounded-lg text-xs font-medium bg-[#1a1d29] hover:bg-[#2b181b] border border-[#2e3344] hover:border-red-500/30 text-neutral-300 hover:text-red-300 transition-all cursor-pointer"
+                          className="py-1.5 px-3 rounded-lg text-xs font-medium bg-[#19191b] hover:bg-[#2b181b] border border-[#323236] hover:border-red-500/30 text-neutral-300 hover:text-red-300 transition-all cursor-pointer"
                         >
                           <span>Decline</span>
                         </button>
@@ -315,7 +315,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
                     )}
 
                     {isDeclined && (
-                      <div className="pt-1 border-t border-[#222533] text-[11px] text-neutral-500 italic">
+                      <div className="pt-1 border-t border-[#212124] text-[11px] text-neutral-500 italic">
                         Invitation declined
                       </div>
                     )}
@@ -328,7 +328,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
       </div>
 
       {/* Footer */}
-      <div className="px-4 py-2.5 border-t border-[#252837] bg-[#0e1017] flex items-center justify-between text-[10px] text-neutral-400 font-mono select-none">
+      <div className="px-4 py-2.5 border-t border-[#262629] bg-[#0e0e0f] flex items-center justify-between text-[10px] text-neutral-400 font-mono select-none">
         <div className="flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
           <span>Encrypted P2P Protocol Daemon Active</span>
