@@ -250,6 +250,29 @@ export default function App() {
         }
       : null;
 
+  const folderPhotos = editingPhotoFile
+    ? files.filter(item => item.category === 'photo' && (
+        editingPhotoFile.folderId
+          ? item.folderId === editingPhotoFile.folderId
+          : item.folderPath === editingPhotoFile.folderPath
+      ))
+    : [];
+  const folderPhotoIndex = editingPhotoFile ? folderPhotos.findIndex(item => item.id === editingPhotoFile.id) : -1;
+  const openFolderPhoto = (index: number) => {
+    const next = folderPhotos[index];
+    if (!next) return;
+    setSelectedFileId(next.id);
+    setEditingPhotoFile(next);
+  };
+  const editorPhotoNav: PhotoNav | null = folderPhotoIndex >= 0
+    ? {
+        hasPrev: folderPhotoIndex > 0,
+        hasNext: folderPhotoIndex < folderPhotos.length - 1,
+        onPrev: () => openFolderPhoto(folderPhotoIndex - 1),
+        onNext: () => openFolderPhoto(folderPhotoIndex + 1),
+      }
+    : null;
+
   // Video navigation for playback controls
   const videoFiles = filteredFiles.filter(f => f.category === 'video');
   const videoIndex = playingVideoFile ? videoFiles.findIndex(f => f.id === playingVideoFile.id) : -1;
@@ -497,6 +520,7 @@ export default function App() {
       <AppModals
         selectedFile={selectedFile}
         photoNav={photoNav}
+        editorPhotoNav={editorPhotoNav}
         accounts={accounts}
         folders={folders}
         isQuickLookOpen={isQuickLookOpen}

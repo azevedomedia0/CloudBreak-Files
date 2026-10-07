@@ -15,6 +15,7 @@ import { NewFolderModal, NewSharedLibraryModal, AddFavoriteModal, ConnectServerM
 export interface AppModalsProps {
   selectedFile: FileItem | null;
   photoNav: PhotoNav | null;
+  editorPhotoNav?: PhotoNav | null;
   accounts: CloudAccount[];
   folders: FolderItem[];
   isQuickLookOpen: boolean;
@@ -74,6 +75,7 @@ export interface AppModalsProps {
 export const AppModals: React.FC<AppModalsProps> = ({
   selectedFile,
   photoNav,
+  editorPhotoNav = null,
   accounts,
   folders,
   isQuickLookOpen,
@@ -155,6 +157,7 @@ export const AppModals: React.FC<AppModalsProps> = ({
       isOpen={true}
       onClose={() => setEditingPhotoFile(null)}
       onSaveAsVersion={handleSavePhotoVersion}
+      photoNav={editorPhotoNav}
     />
   )}
 
