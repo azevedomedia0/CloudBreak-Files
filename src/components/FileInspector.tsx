@@ -7,6 +7,7 @@ import {
   PanelRightClose, PanelRight, Play, Pause, RotateCcw, Volume2, VolumeX, RefreshCw
 } from 'lucide-react';
 import { FileItem, CloudAccount } from '../types';
+import { isEditableDocument } from '../utils/documentKind';
 import { formatBytes, formatDate, formatTimecode } from '../utils/format';
 
 import { PhotoNav, PhotoNavArrows } from './PhotoNavArrows';
@@ -17,6 +18,7 @@ interface FileInspectorProps {
   isOpen: boolean;
   onClose: () => void;
   onEditPhoto: (file: FileItem) => void;
+  onOpenDocument: (file: FileItem) => void;
   onOpenVideo: (file: FileItem, tab?: 'player' | 'trim' | 'convert') => void;
   onShare: (file: FileItem) => void;
   onToggleEncrypt: (file: FileItem) => void;
@@ -31,6 +33,7 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
   isOpen,
   onClose,
   onEditPhoto,
+  onOpenDocument,
   onOpenVideo,
   onShare,
   onToggleEncrypt,
@@ -361,13 +364,14 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                 type="button"
                 onClick={() => {
                   if (file.category === 'video') onOpenVideo(file, 'trim');
+                  else if (isEditableDocument(file)) onOpenDocument(file);
                   else onEditPhoto(file);
                 }}
                 className="h-9 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/30 text-amber-300 flex items-center justify-center transition-all shadow-xs cursor-pointer"
-                title={file.category === 'video' ? "Trim Video (Cinema Suite)" : "Crop & Trim Photo"}
-                aria-label="Trim"
+                title={file.category === 'video' ? "Trim Video (Cinema Suite)" : isEditableDocument(file) ? "Edit document" : "Crop & Trim Photo"}
+                aria-label={isEditableDocument(file) ? "Edit document" : "Trim"}
               >
-                <Scissors className="w-4 h-4" />
+                {isEditableDocument(file) ? <Edit3 className="w-4 h-4" /> : <Scissors className="w-4 h-4" />}
               </button>
 
               {/* Button 2: Convert */}

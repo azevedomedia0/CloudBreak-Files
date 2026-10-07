@@ -1,6 +1,7 @@
 import React from 'react';
 import { Image as ImageIcon, Folder, Video, FileText, Lock, Edit3, Scissors, Download, ChevronRight, Eye, HardDrive, Monitor, AppWindow } from 'lucide-react';
 import { FileItem, CloudAccount, FolderItem, CloudProviderId } from '../../types';
+import { isEditableDocument } from '../../utils/documentKind';
 import { FileThumbnail } from './FileThumbnail';
 import { SelectionAccent, SELECTION_CLASSES } from '../../utils/selectionAccent';
 import { formatBytes, formatDate } from '../../utils/format';
@@ -15,13 +16,14 @@ export interface ColumnsViewProps {
   totalSize: number;
   onSelectFile: (file: FileItem) => void;
   onEditPhoto: (file: FileItem) => void;
+  onOpenDocument: (file: FileItem) => void;
   onOpenVideo: (file: FileItem) => void;
   onOpenQuickLook: () => void;
   onSelectFolder: (folderId: string | null) => void;
   getAccount: (accountId: CloudProviderId) => CloudAccount | undefined;
 }
 
-export const ColumnsView: React.FC<ColumnsViewProps> = ({ accent, files, selectedFolder, selectedFileId, selectedFile, folders, totalSize, onSelectFile, onEditPhoto, onOpenVideo, onOpenQuickLook, onSelectFolder, getAccount }) => (
+export const ColumnsView: React.FC<ColumnsViewProps> = ({ accent, files, selectedFolder, selectedFileId, selectedFile, folders, totalSize, onSelectFile, onEditPhoto, onOpenDocument, onOpenVideo, onOpenQuickLook, onSelectFolder, getAccount }) => (
     <div className="h-full flex gap-3 overflow-x-auto min-h-[480px]">
       {/* Col 1: Local Files & Folders */}
       <div className="w-64 macos-glass-card rounded-xl flex flex-col shrink-0 overflow-hidden">
@@ -88,6 +90,12 @@ export const ColumnsView: React.FC<ColumnsViewProps> = ({ accent, files, selecte
               <button
                 key={file.id}
                 onClick={() => onSelectFile(file)}
+                onDoubleClick={() => {
+                  if (file.category === 'photo') onEditPhoto(file);
+                  else if (file.category === 'video') onOpenVideo(file);
+                  else if (isEditableDocument(file)) onOpenDocument(file);
+                  else onOpenQuickLook();
+                }}
                 className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs transition-all ${
                   isCurrent
                     ? SELECTION_CLASSES[accent].columnRow
@@ -133,6 +141,15 @@ export const ColumnsView: React.FC<ColumnsViewProps> = ({ accent, files, selecte
               >
                 <Edit3 className="w-3.5 h-3.5" />
                 <span>Edit in Studio Adjustments</span>
+              </button>
+            )}
+            {isEditableDocument(selectedFile) && (
+              <button
+                onClick={() => onOpenDocument(selectedFile)}
+                className="w-full py-2 px-3 rounded-lg bg-[#0060df] hover:bg-[#0250bb] text-white font-bold text-xs flex items-center justify-center gap-2 transition-colors"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>Edit document</span>
               </button>
             )}
             {selectedFile.category === 'video' && (

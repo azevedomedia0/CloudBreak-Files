@@ -28,6 +28,11 @@ export function useFileActions({
     showToast(`Saved version ${updatedFile.version} to cloud storage`);
   };
 
+  const handleSaveDocument = (updatedFile: FileItem) => {
+    setFiles(prev => prev.map(f => f.id === updatedFile.id ? updatedFile : f));
+    showToast(`Saved ${updatedFile.name}`);
+  };
+
   // Trimmed Video Save
   const handleSaveTrimmedVideo = (newFile: FileItem) => {
     setFiles(prev => [newFile, ...prev]);
@@ -187,6 +192,7 @@ export function useFileActions({
   return {
     isDraggingOver,
     handleSavePhotoVersion,
+    handleSaveDocument,
     handleSaveTrimmedVideo,
     handleToggleEncrypt,
     handleDeleteFile,

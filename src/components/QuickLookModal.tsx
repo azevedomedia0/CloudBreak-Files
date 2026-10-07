@@ -4,6 +4,7 @@ import {
   Video, Image as ImageIcon, FileText, Lock, HardDrive, Maximize2
 } from 'lucide-react';
 import { FileItem, CloudAccount } from '../types';
+import { isEditableDocument } from '../utils/documentKind';
 import { formatBytes, formatDate, formatTimecode } from '../utils/format';
 import { PhotoNav, PhotoNavArrows } from './PhotoNavArrows';
 
@@ -13,6 +14,7 @@ interface QuickLookModalProps {
   isOpen: boolean;
   onClose: () => void;
   onEditPhoto: (file: FileItem) => void;
+  onOpenDocument: (file: FileItem) => void;
   onOpenVideo: (file: FileItem) => void;
   onShare: (file: FileItem) => void;
   photoNav?: PhotoNav | null;
@@ -24,6 +26,7 @@ export const QuickLookModal: React.FC<QuickLookModalProps> = ({
   isOpen,
   onClose,
   onEditPhoto,
+  onOpenDocument,
   onOpenVideo,
   onShare,
   photoNav,
@@ -96,6 +99,16 @@ export const QuickLookModal: React.FC<QuickLookModalProps> = ({
               >
                 <Edit3 className="w-3.5 h-3.5" />
                 <span>Open in Studio</span>
+              </button>
+            )}
+
+            {isEditableDocument(file) && (
+              <button
+                onClick={() => onOpenDocument(file)}
+                className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#0060df] hover:bg-[#0250bb] text-white font-semibold text-xs transition-colors shadow-sm"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>Edit document</span>
               </button>
             )}
 

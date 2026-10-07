@@ -16,6 +16,7 @@ export function useGlobalShortcuts(options: Options) {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ignore if typing in input field
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.target instanceof HTMLElement && e.target.closest('[data-document-editor]')) return;
 
       if ((e.metaKey || e.ctrlKey) && (e.key.toLowerCase() === 'b' || (e.ctrlKey && e.key.toLowerCase() === 's'))) {
         e.preventDefault();
