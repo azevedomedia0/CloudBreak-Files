@@ -1,6 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Plus, Terminal as TerminalIcon, X } from 'lucide-react';
+import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import '@xterm/xterm/css/xterm.css';
 import { quoteShellPath, readDroppedPaths } from '../utils/fileDrag';
+import {
+  onTerminalData,
+  onTerminalExit,
+  terminalAvailable,
+  terminalCreate,
+  terminalKill,
+  terminalResize,
+  terminalWrite,
+} from '../services/terminalBridge';
 
 export type TerminalContext = {
   cwdLabel: string;
@@ -11,48 +23,16 @@ export type TerminalContext = {
   libraryNames: string[];
 };
 
-type Line =
-  | { kind: 'in'; text: string }
-  | { kind: 'out'; text: string }
-  | { kind: 'err'; text: string };
-
 type TerminalTab = {
   id: string;
   title: string;
-  lines: Line[];
-  input: string;
-  history: string[];
-  histIndex: number;
+  sessionId: string | null;
 };
 
 interface SystemTerminalProps {
   width?: number;
   context: TerminalContext;
 }
-
-const HELP = [
-  'Cloudbreak system terminal',
-  '',
-  '  help       Show this help',
-  '  clear      Clear the screen',
-  '  pwd        Print working path label',
-  '  whoami     Current profile name',
-  '  date       Local date/time',
-  '  ls         List files in the current view',
-  '  libs       List shared libraries',
-  '  vault      Vault lock status',
-  '  peer       P2P peer id (if known)',
-  '  echo …     Print arguments',
-  '  cat PATH   Show info for a dropped / listed path',
-  '',
-  'Drag files from the browser (or Finder) into this panel to insert paths.',
-  'Tip: This panel replaces the File Inspector. Use the inspector icon to switch back.',
-].join('\n');
-
-const WELCOME: Line[] = [
-  { kind: 'out', text: 'Cloudbreak Files — system terminal' },
-  { kind: 'out', text: 'Type `help` for commands. Drag files here to insert paths.' },
-];
 
 let tabSeq = 1;
 
@@ -61,12 +41,204 @@ function createTab(title?: string): TerminalTab {
   return {
     id: `term-tab-${n}-${Math.random().toString(36).slice(2, 7)}`,
     title: title ?? `Tab ${n}`,
-    lines: [...WELCOME],
-    input: '',
-    history: [],
-    histIndex: -1,
+    sessionId: null,
   };
 }
+
+const XTERM_THEME = {
+  background: '#0c0c0e',
+  foreground: '#c0c0c8',
+  cursor: '#a3e635',
+  cursorAccent: '#0c0c0e',
+  selectionBackground: '#a3e63555',
+  black: '#0c0c0e',
+  red: '#f87171',
+  green: '#a3e635',
+  yellow: '#fbbf24',
+  blue: '#38bdf8',
+  magenta: '#c084fc',
+  cyan: '#22d3ee',
+  white: '#e5e5e5',
+  brightBlack: '#737373',
+  brightRed: '#fca5a5',
+  brightGreen: '#bef264',
+  brightYellow: '#fde68a',
+  brightBlue: '#7dd3fc',
+  brightMagenta: '#d8b4fe',
+  brightCyan: '#67e8f9',
+  brightWhite: '#fafafa',
+};
+
+/** One xterm + PTY session bound to a tab. Hidden when inactive. */
+const PtyPane: React.FC<{
+  active: boolean;
+  tabId: string;
+  onSession: (tabId: string, sessionId: string | null) => void;
+  registerInsert: (tabId: string, fn: ((paths: string[]) => void) | null) => void;
+}> = ({ active, tabId, onSession, registerInsert }) => {
+  const hostRef = useRef<HTMLDivElement>(null);
+  const termRef = useRef<Terminal | null>(null);
+  const fitRef = useRef<FitAddon | null>(null);
+  const sessionRef = useRef<string | null>(null);
+  const real = terminalAvailable();
+
+  useEffect(() => {
+    if (!hostRef.current) return;
+
+    const term = new Terminal({
+      cursorBlink: true,
+      cursorStyle: 'bar',
+      fontFamily: 'JetBrains Mono, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+      fontSize: 11,
+      lineHeight: 1.35,
+      theme: XTERM_THEME,
+      allowProposedApi: true,
+      scrollback: 5000,
+    });
+    const fit = new FitAddon();
+    term.loadAddon(fit);
+    term.open(hostRef.current);
+    termRef.current = term;
+    fitRef.current = fit;
+
+    let disposed = false;
+    let unlistenData: (() => void) | undefined;
+    let unlistenExit: (() => void) | undefined;
+
+    const start = async () => {
+      try {
+        fit.fit();
+      } catch {
+        /* host may be display:none */
+      }
+
+      if (!real) {
+        term.writeln('\x1b[38;2;192;192;200mCloudbreak Files — system terminal\x1b[0m');
+        term.writeln(
+          '\x1b[38;2;163;230;53mReal Mac Terminal (zsh) requires the desktop app.\x1b[0m',
+        );
+        term.writeln('Run \x1b[1mnpm run tauri dev\x1b[0m for a full login shell.');
+        term.writeln('');
+        term.write('\x1b[38;2;163;230;53m$\x1b[0m ');
+        term.onData(data => {
+          if (data === '\r') {
+            term.write('\r\n\x1b[38;2;163;230;53m$\x1b[0m ');
+          } else if (data === '\u007f') {
+            term.write('\b \b');
+          } else {
+            term.write(data);
+          }
+        });
+        return;
+      }
+
+      try {
+        const cols = term.cols || 80;
+        const rows = term.rows || 24;
+        const id = await terminalCreate(cols, rows);
+        if (disposed) {
+          await terminalKill(id);
+          return;
+        }
+        sessionRef.current = id;
+        onSession(tabId, id);
+
+        unlistenData = await onTerminalData(ev => {
+          if (ev.id === id) term.write(ev.data);
+        });
+        unlistenExit = await onTerminalExit(ev => {
+          if (ev.id !== id) return;
+          term.writeln(`\r\n\x1b[90m[process exited${ev.code != null ? ` with ${ev.code}` : ''}]\x1b[0m`);
+          sessionRef.current = null;
+          onSession(tabId, null);
+        });
+
+        term.onData(data => {
+          const sid = sessionRef.current;
+          if (sid) void terminalWrite(sid, data);
+        });
+
+        term.onResize(({ cols: c, rows: r }) => {
+          const sid = sessionRef.current;
+          if (sid) void terminalResize(sid, c, r);
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        term.writeln(`\x1b[31mFailed to start shell: ${msg}\x1b[0m`);
+      }
+    };
+
+    void start();
+
+    registerInsert(tabId, (paths: string[]) => {
+      if (!paths.length) return;
+      const quoted = paths.map(quoteShellPath).join(' ');
+      const sid = sessionRef.current;
+      if (sid) {
+        void terminalWrite(sid, quoted);
+        return;
+      }
+      term.write(quoted);
+    });
+
+    return () => {
+      disposed = true;
+      registerInsert(tabId, null);
+      unlistenData?.();
+      unlistenExit?.();
+      const sid = sessionRef.current;
+      sessionRef.current = null;
+      onSession(tabId, null);
+      if (sid) void terminalKill(sid);
+      term.dispose();
+      termRef.current = null;
+      fitRef.current = null;
+    };
+    // One PTY per tab mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabId, real]);
+
+  useEffect(() => {
+    if (!active) return;
+    const fit = fitRef.current;
+    const term = termRef.current;
+    const timer = window.setTimeout(() => {
+      try {
+        fit?.fit();
+      } catch {
+        /* ignore */
+      }
+      term?.focus();
+      const sid = sessionRef.current;
+      if (sid && term) void terminalResize(sid, term.cols, term.rows);
+    }, 30);
+    return () => window.clearTimeout(timer);
+  }, [active]);
+
+  useEffect(() => {
+    if (!active || !hostRef.current) return;
+    const el = hostRef.current.parentElement;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      try {
+        fitRef.current?.fit();
+      } catch {
+        /* ignore */
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [active]);
+
+  return (
+    <div
+      ref={hostRef}
+      className="h-full w-full min-h-0 px-1 py-1"
+      style={{ display: active ? 'block' : 'none' }}
+      aria-hidden={!active}
+    />
+  );
+};
 
 export const SystemTerminal: React.FC<SystemTerminalProps> = ({ width = 320, context }) => {
   const [tabs, setTabs] = useState<TerminalTab[]>(() => {
@@ -75,30 +247,18 @@ export const SystemTerminal: React.FC<SystemTerminalProps> = ({ width = 320, con
   });
   const [activeId, setActiveId] = useState(() => tabs[0].id);
   const [dragOver, setDragOver] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
   const dragDepth = useRef(0);
+  const insertFns = useRef(new Map<string, (paths: string[]) => void>());
 
   const active = tabs.find(t => t.id === activeId) ?? tabs[0];
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ block: 'end' });
-  }, [active?.lines, activeId]);
+  const registerInsert = (tabId: string, fn: ((paths: string[]) => void) | null) => {
+    if (!fn) insertFns.current.delete(tabId);
+    else insertFns.current.set(tabId, fn);
+  };
 
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, [activeId]);
-
-  const prompt = `${context.userName.split(' ')[0] || 'user'}@cloudbreak:${context.cwdLabel}$`;
-
-  const patchActive = (patch: Partial<TerminalTab> | ((tab: TerminalTab) => Partial<TerminalTab>)) => {
-    setTabs(prev =>
-      prev.map(tab => {
-        if (tab.id !== activeId) return tab;
-        const next = typeof patch === 'function' ? patch(tab) : patch;
-        return { ...tab, ...next };
-      }),
-    );
+  const onSession = (tabId: string, sessionId: string | null) => {
+    setTabs(prev => prev.map(t => (t.id === tabId ? { ...t, sessionId } : t)));
   };
 
   const addTab = () => {
@@ -123,146 +283,7 @@ export const SystemTerminal: React.FC<SystemTerminalProps> = ({ width = 320, con
 
   const insertPaths = (paths: string[]) => {
     if (!paths.length || !active) return;
-    const quoted = paths.map(quoteShellPath).join(' ');
-    patchActive(tab => {
-      const input = !tab.input
-        ? quoted
-        : tab.input.endsWith(' ') || tab.input.endsWith('\t')
-          ? `${tab.input}${quoted}`
-          : `${tab.input} ${quoted}`;
-      return {
-        input,
-        lines: [
-          ...tab.lines,
-          {
-            kind: 'out',
-            text: paths.length === 1
-              ? `dropped → ${paths[0]}`
-              : `dropped ${paths.length} paths`,
-          },
-        ],
-      };
-    });
-    requestAnimationFrame(() => inputRef.current?.focus());
-  };
-
-  const run = (raw: string) => {
-    if (!active) return;
-    const text = raw.trim();
-    if (!text) return;
-
-    const [cmd, ...args] = text.split(/\s+/);
-    const out: Line[] = [{ kind: 'in', text: `${prompt} ${text}` }];
-
-    switch (cmd.toLowerCase()) {
-      case 'help':
-      case '?':
-        out.push({ kind: 'out', text: HELP });
-        break;
-      case 'clear':
-        patchActive({ lines: [], input: '', histIndex: -1 });
-        return;
-      case 'pwd':
-        out.push({ kind: 'out', text: context.cwdLabel });
-        break;
-      case 'whoami':
-        out.push({ kind: 'out', text: context.userName });
-        break;
-      case 'date':
-        out.push({ kind: 'out', text: new Date().toString() });
-        break;
-      case 'ls':
-        out.push({
-          kind: 'out',
-          text: context.fileNames.length
-            ? context.fileNames.join('\n')
-            : '(no files in current view)',
-        });
-        break;
-      case 'libs':
-        out.push({
-          kind: 'out',
-          text: context.libraryNames.length
-            ? context.libraryNames.join('\n')
-            : '(no libraries)',
-        });
-        break;
-      case 'vault':
-        out.push({
-          kind: 'out',
-          text: context.isVaultUnlocked ? 'vault: unlocked' : 'vault: locked',
-        });
-        break;
-      case 'peer':
-        out.push({
-          kind: 'out',
-          text: context.peerId ? `peer ${context.peerId}` : 'peer: (not available)',
-        });
-        break;
-      case 'echo':
-        out.push({ kind: 'out', text: args.join(' ') });
-        break;
-      case 'cat': {
-        const path = args.join(' ').replace(/^['"]|['"]$/g, '');
-        if (!path) {
-          out.push({ kind: 'err', text: 'usage: cat PATH' });
-        } else {
-          const base = path.split('/').pop() || path;
-          const known = context.fileNames.includes(base);
-          out.push({
-            kind: 'out',
-            text: known
-              ? `${path}\n  name: ${base}\n  in current view: yes`
-              : `${path}\n  (path accepted — open in browser for full metadata)`,
-          });
-        }
-        break;
-      }
-      default:
-        out.push({ kind: 'err', text: `command not found: ${cmd}` });
-        break;
-    }
-
-    patchActive(tab => ({
-      history: tab.history[tab.history.length - 1] === text
-        ? tab.history
-        : [...tab.history, text],
-      histIndex: -1,
-      lines: [...tab.lines, ...out],
-      input: '',
-    }));
-  };
-
-  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!active) return;
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      run(active.input);
-      return;
-    }
-    if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      if (!active.history.length) return;
-      const next = active.histIndex < 0
-        ? active.history.length - 1
-        : Math.max(0, active.histIndex - 1);
-      patchActive({ histIndex: next, input: active.history[next] ?? '' });
-      return;
-    }
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      if (active.histIndex < 0) return;
-      const next = active.histIndex + 1;
-      if (next >= active.history.length) {
-        patchActive({ histIndex: -1, input: '' });
-      } else {
-        patchActive({ histIndex: next, input: active.history[next] ?? '' });
-      }
-    }
-    if (e.key === 'l' && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault();
-      patchActive({ lines: [] });
-    }
+    insertFns.current.get(active.id)?.(paths);
   };
 
   const onDragEnter = (e: React.DragEvent) => {
@@ -301,15 +322,21 @@ export const SystemTerminal: React.FC<SystemTerminalProps> = ({ width = 320, con
       className={`relative h-full shrink-0 flex flex-col border-l border-white/10 bg-[#0c0c0e] select-text ${
         dragOver ? 'ring-1 ring-inset ring-lime-400/50' : ''
       }`}
-      onClick={() => inputRef.current?.focus()}
       onDragEnter={onDragEnter}
       onDragLeave={onDragLeave}
       onDragOver={onDragOver}
       onDrop={onDrop}
     >
-      <div className="terminal-panel-header h-10 px-2 flex items-center gap-1.5 border-b border-white/10 bg-neutral-950/80 shrink-0 select-none">
+      <div className="terminal-panel-header h-10 px-2 flex items-center gap-1.5 border-b border-white/10 bg-[#1B1B1B] shrink-0 select-none">
         <TerminalIcon className="w-3.5 h-3.5 text-lime-400 shrink-0 ml-1" />
-        <span className="text-[11px] font-semibold text-neutral-200 tracking-tight shrink-0">Terminal</span>
+        <span className="text-[11px] font-semibold text-neutral-200 tracking-tight shrink-0">
+          Terminal
+        </span>
+        {!terminalAvailable() && (
+          <span className="text-[9px] text-amber-500/90 font-medium shrink-0 hidden sm:inline">
+            preview
+          </span>
+        )}
 
         <div className="flex-1 min-w-0 flex items-center gap-0.5 overflow-x-auto mx-1">
           {tabs.map(tab => {
@@ -364,36 +391,21 @@ export const SystemTerminal: React.FC<SystemTerminalProps> = ({ width = 320, con
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-3 py-2 font-mono text-[11px] leading-relaxed">
-        {active.lines.map((line, i) => (
-          <pre
-            key={`${active.id}-${i}`}
-            className={`whitespace-pre-wrap break-words mb-0.5 ${
-              line.kind === 'in'
-                ? 'text-lime-300/90'
-                : line.kind === 'err'
-                  ? 'text-red-400'
-                  : 'text-neutral-300'
-            }`}
+      <div className="flex-1 min-h-0 relative overflow-hidden">
+        {tabs.map(tab => (
+          <div
+            key={tab.id}
+            className="absolute inset-0"
+            style={{ visibility: tab.id === activeId ? 'visible' : 'hidden' }}
           >
-            {line.text}
-          </pre>
+            <PtyPane
+              active={tab.id === activeId}
+              tabId={tab.id}
+              onSession={onSession}
+              registerInsert={registerInsert}
+            />
+          </div>
         ))}
-        <div className="flex items-start gap-1.5 text-neutral-200">
-          <span className="text-lime-400 shrink-0 select-none">{prompt}</span>
-          <input
-            ref={inputRef}
-            value={active.input}
-            onChange={e => patchActive({ input: e.target.value })}
-            onKeyDown={onKeyDown}
-            spellCheck={false}
-            autoCapitalize="off"
-            autoCorrect="off"
-            className="flex-1 min-w-0 bg-transparent border-0 outline-none text-neutral-100 caret-lime-400"
-            aria-label="Terminal input"
-          />
-        </div>
-        <div ref={bottomRef} />
       </div>
 
       {dragOver && (
@@ -403,6 +415,9 @@ export const SystemTerminal: React.FC<SystemTerminalProps> = ({ width = 320, con
           </span>
         </div>
       )}
+
+      {/* Keep context typed for App; unused in PTY mode beyond cwd hint */}
+      <span className="sr-only">{context.cwdLabel}</span>
     </aside>
   );
 };

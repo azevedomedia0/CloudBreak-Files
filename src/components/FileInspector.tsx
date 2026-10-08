@@ -281,18 +281,18 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                         step={0.1}
                         value={currentTime}
                         onChange={handleSeek}
-                        className="w-full h-1 bg-white/20 accent-cyan-400 rounded-lg cursor-pointer hover:h-1.5 transition-all"
+                        className="w-full h-1 bg-white/20 accent-white rounded-lg cursor-pointer hover:h-1.5 transition-all"
                         title="Seek"
                       />
                     </div>
 
                     {/* Controls Row: Play/Pause, Skip, Timecode, Volume, Fullscreen */}
-                    <div className="flex items-center justify-between text-neutral-200 text-[10px]">
+                    <div className="flex items-center justify-between text-[#ffffff] text-[10px]">
                       <div className="flex items-center gap-1.5">
                         <button
                           type="button"
                           onClick={togglePlay}
-                          className="p-1 rounded hover:bg-white/10 text-white transition-colors"
+                          className="p-1 rounded hover:bg-white/10 text-[#ffffff] transition-colors"
                           title={isPlaying ? "Pause (Space)" : "Play (Space)"}
                         >
                           {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 fill-current" />}
@@ -301,13 +301,13 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                         <button
                           type="button"
                           onClick={() => handleSkip(-5)}
-                          className="p-1 rounded hover:bg-white/10 text-neutral-300 hover:text-white transition-colors"
+                          className="p-1 rounded hover:bg-white/10 text-[#ffffff] transition-colors"
                           title="Rewind 5s"
                         >
                           <RotateCcw className="w-3 h-3" />
                         </button>
 
-                        <span className="font-mono text-[9px] text-neutral-300 tracking-tight pl-0.5">
+                        <span className="font-mono text-[9px] text-[#ffffff] tracking-tight pl-0.5">
                           {formatTimecode(currentTime)} / {formatTimecode(duration || file.videoMeta?.durationSeconds || 15)}
                         </span>
                       </div>
@@ -316,7 +316,7 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                         <button
                           type="button"
                           onClick={toggleMute}
-                          className="p-1 rounded hover:bg-white/10 text-neutral-300 hover:text-white transition-colors"
+                          className="p-1 rounded hover:bg-white/10 text-[#ffffff] transition-colors"
                           title={isMuted ? "Unmute" : "Mute"}
                         >
                           {isMuted ? <VolumeX className="w-3.5 h-3.5 text-red-400" /> : <Volume2 className="w-3.5 h-3.5" />}
@@ -325,7 +325,7 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                         <button
                           type="button"
                           onClick={() => onOpenVideo(file)}
-                          className="p-1 rounded hover:bg-white/10 text-neutral-300 hover:text-white transition-colors"
+                          className="p-1 rounded hover:bg-white/10 text-[#ffffff] transition-colors"
                           title="Open Cinema Suite"
                         >
                           <Maximize2 className="w-3 h-3" />
@@ -393,7 +393,7 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                 <button
                   type="button"
                   onClick={() => onOpenVideo(file, 'trim')}
-                  className="col-span-2 h-9 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/30 text-amber-300 flex items-center justify-center gap-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer"
+                  className="col-span-2 h-9 rounded-lg bg-amber-800/15 hover:bg-amber-800/25 border border-amber-700/30 text-amber-600 flex items-center justify-center gap-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer"
                   title="Edit Video"
                   aria-label="Edit Video"
                 >

@@ -66,7 +66,7 @@ export const AccessTokenGuide: React.FC<{ provider: string }> = ({ provider }) =
 
   return (
     <div className="rounded-xl border border-sky-500/25 bg-sky-500/5 p-3.5 space-y-2.5">
-      <div className="text-xs font-semibold text-sky-200">{guide.title}</div>
+      <div className="text-xs font-semibold text-sky-400">{guide.title}</div>
       <ol className="list-decimal pl-4 space-y-1.5 text-[11px] text-neutral-300 leading-relaxed">
         {guide.steps.map(step => (
           <li key={step}>{step}</li>
@@ -76,7 +76,7 @@ export const AccessTokenGuide: React.FC<{ provider: string }> = ({ provider }) =
         href={guide.href}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-sky-300 hover:text-sky-200 transition-colors"
+        className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-sky-500 hover:text-sky-400 transition-colors"
       >
         <ExternalLink className="w-3.5 h-3.5 shrink-0" />
         {guide.linkLabel}

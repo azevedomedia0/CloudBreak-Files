@@ -40,7 +40,7 @@ export const NewFolderModal: React.FC<NewFolderModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
       <div 
-        className="w-full max-w-md macos-window rounded-2xl overflow-hidden shadow-2xl border border-white/15 animate-in fade-in zoom-in-95 duration-150"
+        className="app-modal-panel w-full max-w-md macos-window rounded-2xl overflow-hidden shadow-2xl border border-white/15 animate-in fade-in zoom-in-95 duration-150"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/10 bg-white/5">
@@ -209,7 +209,7 @@ export const NewSharedLibraryModal: React.FC<NewSharedLibraryModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
       <div 
-        className="w-full max-w-md macos-window rounded-2xl overflow-hidden shadow-2xl border border-white/15 animate-in fade-in zoom-in-95 duration-150"
+        className="app-modal-panel w-full max-w-md macos-window rounded-2xl overflow-hidden shadow-2xl border border-white/15 animate-in fade-in zoom-in-95 duration-150"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/10 bg-white/5">
@@ -474,7 +474,7 @@ export const AddFavoriteModal: React.FC<AddFavoriteModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
       <div
-        className="w-full max-w-md macos-window rounded-2xl overflow-hidden shadow-2xl border border-white/15 animate-in fade-in zoom-in-95 duration-150"
+        className="app-modal-panel w-full max-w-md macos-window rounded-2xl overflow-hidden shadow-2xl border border-white/15 animate-in fade-in zoom-in-95 duration-150"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/10 bg-white/5">
@@ -690,7 +690,7 @@ export const ConnectServerModal: React.FC<ConnectServerModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
       <div 
-        className="w-full max-w-md macos-window rounded-2xl overflow-hidden shadow-2xl border border-white/15 animate-in fade-in zoom-in-95 duration-150"
+        className="app-modal-panel w-full max-w-md macos-window rounded-2xl overflow-hidden shadow-2xl border border-white/15 animate-in fade-in zoom-in-95 duration-150"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/10 bg-white/5">
@@ -841,7 +841,7 @@ export const JoinIncomingLibraryModal: React.FC<JoinIncomingLibraryModalProps> =
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
       <div 
-        className="w-full max-w-md macos-window rounded-2xl overflow-hidden shadow-2xl border border-white/15 animate-in fade-in zoom-in-95 duration-150"
+        className="app-modal-panel w-full max-w-md macos-window rounded-2xl overflow-hidden shadow-2xl border border-white/15 animate-in fade-in zoom-in-95 duration-150"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/10 bg-white/5">

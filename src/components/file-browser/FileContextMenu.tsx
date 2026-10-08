@@ -93,7 +93,7 @@ export const FileContextMenu: React.FC<FileContextMenuProps> = ({
     <div
       ref={menuRef}
       role="menu"
-      className="fixed z-[80] min-w-[220px] p-1 rounded-lg border border-white/15 bg-[#2b2b2b]/95 text-neutral-100 shadow-2xl backdrop-blur-xl"
+      className="app-modal-panel fixed z-[80] min-w-[220px] p-1 rounded-lg border border-white/15 bg-neutral-800/95 text-neutral-100 shadow-2xl backdrop-blur-xl"
       style={{ left: pos.x, top: pos.y }}
       onMouseDown={event => event.stopPropagation()}
       onKeyDown={event => event.stopPropagation()}
@@ -240,7 +240,7 @@ const SubmenuItem: React.FC<{
       <ChevronRight className="w-3.5 h-3.5" />
     </button>
     {open && (
-      <div className={`absolute top-0 min-w-[180px] p-1 rounded-lg border border-white/15 bg-[#2b2b2b]/95 shadow-2xl backdrop-blur-xl ${flip ? 'right-full mr-1' : 'left-full ml-1'}`}>
+      <div className={`app-modal-panel absolute top-0 min-w-[180px] p-1 rounded-lg border border-white/15 bg-neutral-800/95 shadow-2xl backdrop-blur-xl ${flip ? 'right-full mr-1' : 'left-full ml-1'}`}>
         {children}
       </div>
     )}
