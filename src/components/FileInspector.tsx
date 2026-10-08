@@ -420,7 +420,7 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                 <button
                   type="button"
                   onClick={() => onOpenVideo(file, 'trim')}
-                  className="col-span-2 h-9 rounded-lg bg-amber-800/15 hover:bg-amber-800/25 border border-amber-700/30 text-amber-600 flex items-center justify-center gap-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer"
+                  className="edit-video-btn col-span-2 h-9 rounded-lg bg-yellow-400/15 hover:bg-yellow-400/25 border border-yellow-400/35 text-yellow-300 flex items-center justify-center gap-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer"
                   title="Edit Video"
                   aria-label="Edit Video"
                 >
@@ -456,7 +456,9 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                     if (isEditableDocument(file)) onOpenDocument(file);
                     else onEditPhoto(file);
                   }}
-                  className="col-span-2 h-9 rounded-lg bg-[#c45c26]/18 hover:bg-[#c45c26]/28 border border-[#e07a45]/40 text-[#e8a070] flex items-center justify-center gap-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer"
+                  className={`col-span-2 h-9 rounded-lg bg-[#c45c26]/18 hover:bg-[#c45c26]/28 border border-[#e07a45]/40 text-[#e8a070] flex items-center justify-center gap-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer${
+                    isEditableDocument(file) ? ' edit-document-btn' : ''
+                  }`}
                   title={isEditableDocument(file) ? 'Edit document' : 'Open'}
                   aria-label={isEditableDocument(file) ? 'Edit document' : 'Open'}
                 >

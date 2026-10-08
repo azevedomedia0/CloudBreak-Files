@@ -421,7 +421,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
         {/* Video Viewport & Controls */}
         <div className="flex flex-1 overflow-hidden">
           
-          <div ref={stageRef} className="flex-1 flex flex-col bg-neutral-950 relative">
+          <div ref={stageRef} className={`flex-1 flex flex-col relative ${isFullscreen ? 'bg-black' : 'bg-neutral-950'}`}>
             
             {/* Main Video Screen */}
             <div 

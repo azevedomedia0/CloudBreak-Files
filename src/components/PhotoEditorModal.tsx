@@ -684,7 +684,9 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
           {/* Canvas Viewport Area */}
           <div
             ref={stageRef}
-            className="flex-1 flex flex-col items-center justify-center p-4 bg-neutral-950/60 relative overflow-hidden select-none"
+            className={`flex-1 flex flex-col items-center justify-center p-4 relative overflow-hidden select-none ${
+              isFullscreen ? 'bg-black' : 'bg-neutral-950/60'
+            }`}
           >
             {photoNav && <PhotoNavArrows nav={photoNav} />}
 

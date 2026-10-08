@@ -105,7 +105,7 @@ export const QuickLookModal: React.FC<QuickLookModalProps> = ({
             {isEditableDocument(file) && (
               <button
                 onClick={() => onOpenDocument(file)}
-                className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#0060df] hover:bg-[#0250bb] text-white font-semibold text-xs transition-colors shadow-sm"
+                className="edit-document-btn edit-document-btn--solid flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#0060df] hover:bg-[#0250bb] text-white font-semibold text-xs transition-colors shadow-sm"
               >
                 <Edit3 className="w-3.5 h-3.5" />
                 <span>Edit document</span>
@@ -118,7 +118,7 @@ export const QuickLookModal: React.FC<QuickLookModalProps> = ({
                   onClose();
                   onOpenVideo(file);
                 }}
-                className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-neutral-950 font-semibold text-xs transition-colors shadow-sm"
+                className="edit-video-btn edit-video-btn--solid flex items-center gap-1.5 px-3 py-1 rounded-lg bg-yellow-400 hover:bg-yellow-300 text-neutral-950 font-semibold text-xs transition-colors shadow-sm"
               >
                 <Scissors className="w-3.5 h-3.5" />
                 <span>Open in Cinema Suite</span>

@@ -80,7 +80,7 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
     <div
       onClick={e => e.stopPropagation()}
       ref={menuRef}
-      className={`absolute left-1/2 bottom-5 -translate-x-1/2 w-[min(720px,calc(100%-2rem))] rounded-2xl bg-neutral-900/70 backdrop-blur-xl border border-white/10 shadow-2xl px-4 pt-3 pb-2.5 select-none transition-all duration-300 ${
+      className={`video-playback-controls absolute left-1/2 bottom-5 -translate-x-1/2 w-[min(720px,calc(100%-2rem))] rounded-2xl bg-neutral-900/70 backdrop-blur-xl border border-white/10 shadow-2xl px-4 pt-3 pb-2.5 select-none transition-all duration-300 ${
         visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3 pointer-events-none'
       }`}
     >

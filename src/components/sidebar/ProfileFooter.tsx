@@ -56,8 +56,12 @@ export const ProfileFooter: React.FC<ProfileFooterProps> = ({ onOpenVaultSecurit
       <div className="flex items-center gap-2.5 min-w-0">
         {/* User Profile Avatar with Session Status */}
         <div className="relative shrink-0">
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center text-[11px] font-bold text-white shadow-sm shadow-sky-500/20">
-            {userProfile?.name ? userProfile.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : 'SA'}
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center text-[11px] font-bold text-white shadow-sm shadow-sky-500/20 overflow-hidden">
+            {userProfile?.avatarUrl ? (
+              <img src={userProfile.avatarUrl} alt="" className="w-full h-full object-cover" />
+            ) : (
+              userProfile?.name ? userProfile.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : 'SA'
+            )}
           </div>
           <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 border border-neutral-900" title="Active Session" />
         </div>

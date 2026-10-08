@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   X, User, Settings, ShieldCheck, HardDrive, Bell,
   Sliders, Lock, Unlock, Radio, Copy, Check, Info,
   Eye, EyeOff, Trash2, Gauge, PanelRight,
   Cpu, Fingerprint, RefreshCw, Globe, Moon, Sun,
+  Camera, ImagePlus,
 } from 'lucide-react';
 import { CloudAccount } from '../types';
 import { formatBytes } from '../utils/format';
@@ -116,17 +117,20 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
   const [name, setName] = useState(userProfile.name);
   const [email, setEmail] = useState(userProfile.email);
   const [role, setRole] = useState(userProfile.role);
+  const [avatarUrl, setAvatarUrl] = useState<string | undefined>(userProfile.avatarUrl);
   const [prefs, setPrefs] = useState<AppPreferences>(() => preferencesProp ?? loadPreferences());
   const [passphrase, setPassphrase] = useState('');
   const [showPassphrase, setShowPassphrase] = useState(false);
   const [copiedPeer, setCopiedPeer] = useState(false);
   const [vaultBusy, setVaultBusy] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!isOpen) return;
     setName(userProfile.name);
     setEmail(userProfile.email);
     setRole(userProfile.role);
+    setAvatarUrl(userProfile.avatarUrl);
     setPrefs(preferencesProp ?? loadPreferences());
     setPassphrase('');
     setShowPassphrase(false);
@@ -150,7 +154,12 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
 
   const handleSave = (e?: React.FormEvent) => {
     e?.preventDefault();
-    const profile: UserProfile = { name: name.trim() || userProfile.name, email: email.trim(), role: role.trim() };
+    const profile: UserProfile = {
+      name: name.trim() || userProfile.name,
+      email: email.trim(),
+      role: role.trim(),
+      avatarUrl,
+    };
     saveProfile(profile);
     savePreferences(prefs);
     applyTheme(prefs.theme);
@@ -158,6 +167,56 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     onUpdatePreferences?.(prefs);
     onShowToast?.('Settings saved');
     onClose();
+  };
+
+  const readAvatarFile = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Could not read image'));
+      reader.onload = () => {
+        const raw = String(reader.result || '');
+        const img = new Image();
+        img.onerror = () => reject(new Error('Invalid image'));
+        img.onload = () => {
+          const max = 256;
+          const scale = Math.min(1, max / Math.max(img.width, img.height));
+          const w = Math.max(1, Math.round(img.width * scale));
+          const h = Math.max(1, Math.round(img.height * scale));
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(raw);
+            return;
+          }
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', 0.88));
+        };
+        img.src = raw;
+      };
+      reader.readAsDataURL(file);
+    });
+
+  const handleAvatarPick = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      onShowToast?.('Choose an image file (JPEG, PNG, WebP, …)');
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      onShowToast?.('Image is too large (max 8 MB)');
+      return;
+    }
+    try {
+      const dataUrl = await readAvatarFile(file);
+      setAvatarUrl(dataUrl);
+      onShowToast?.('Profile photo updated — click Save to keep it');
+    } catch {
+      onShowToast?.("Couldn't load that image");
+    }
   };
 
   const handleResetPrefs = () => {
@@ -232,9 +291,13 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
           {activeTab === 'profile' && (
             <div className="space-y-5">
               <div className="flex items-center gap-4 p-4 rounded-xl bg-white/5 border border-white/5">
-                <div className="relative">
-                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-sky-500 via-indigo-500 to-purple-500 flex items-center justify-center text-xl font-bold text-white shadow-lg shadow-sky-500/20">
-                    {initials}
+                <div className="relative shrink-0">
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-sky-500 via-indigo-500 to-purple-500 flex items-center justify-center text-xl font-bold text-white shadow-lg shadow-sky-500/20 overflow-hidden ring-1 ring-white/15">
+                    {avatarUrl ? (
+                      <img src={avatarUrl} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      initials
+                    )}
                   </div>
                   <div
                     className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-neutral-900 ${
@@ -253,6 +316,36 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                     <span className="text-[10px] text-neutral-500">
                       {accounts.length} cloud {accounts.length === 1 ? 'account' : 'accounts'}
                     </span>
+                  </div>
+                  <div className="mt-3 flex items-center gap-2 flex-wrap">
+                    <input
+                      ref={avatarInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/*"
+                      className="hidden"
+                      onChange={handleAvatarPick}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => avatarInputRef.current?.click()}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-sky-500/15 hover:bg-sky-500/25 text-sky-200 border border-sky-400/30 transition-colors"
+                    >
+                      {avatarUrl ? <Camera className="w-3.5 h-3.5" /> : <ImagePlus className="w-3.5 h-3.5" />}
+                      <span>{avatarUrl ? 'Change photo' : 'Add photo'}</span>
+                    </button>
+                    {avatarUrl && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAvatarUrl(undefined);
+                          onShowToast?.('Profile photo removed — click Save to keep it');
+                        }}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-neutral-400 hover:text-rose-300 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/25 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Remove</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

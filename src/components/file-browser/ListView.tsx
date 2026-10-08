@@ -124,7 +124,7 @@ export const ListView: React.FC<ListViewProps> = ({
                 </td>
                 <td className="p-3">
                   <div className="flex items-center gap-2.5">
-                    <FileThumbnail file={file} compact className="w-10 h-7 rounded border border-white/10 bg-black/40 shrink-0" iconClassName="w-3.5 h-3.5" onContextMenu={event => onFileContextMenu(file, event)} />
+                    <FileThumbnail file={file} compact className="w-10 h-7 rounded-md ring-1 ring-white/10 bg-neutral-950/80 shrink-0 shadow-sm" iconClassName="w-3.5 h-3.5" onContextMenu={event => onFileContextMenu(file, event)} />
                     <span className="truncate max-w-xs">{file.name}</span>
                   </div>
                 </td>
@@ -153,7 +153,7 @@ export const ListView: React.FC<ListViewProps> = ({
                     {isEditableDocument(file) && (
                       <button
                         onClick={() => onOpenDocument(file)}
-                        className="p-1 rounded hover:bg-white/10 text-[#7cacf8]"
+                        className="edit-document-btn p-1 rounded hover:bg-white/10 text-[#7cacf8]"
                         title="Edit document"
                       >
                         <Edit3 className="w-3.5 h-3.5" />
@@ -162,7 +162,7 @@ export const ListView: React.FC<ListViewProps> = ({
                     {file.category === 'video' && (
                       <button
                         onClick={() => onOpenVideo(file)}
-                        className="p-1 rounded hover:bg-white/10 text-amber-400"
+                        className="edit-video-btn p-1 rounded hover:bg-white/10 text-yellow-400"
                         title="Cinema Suite"
                       >
                         <Scissors className="w-3.5 h-3.5" />

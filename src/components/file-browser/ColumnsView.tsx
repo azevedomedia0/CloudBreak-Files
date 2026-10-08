@@ -111,7 +111,7 @@ export const ColumnsView: React.FC<ColumnsViewProps> = ({
                 }`}
               >
                 <div className="flex items-center gap-2.5 truncate">
-                  <FileThumbnail file={file} compact className="w-8 h-6 rounded border border-white/10 bg-black/40 shrink-0" iconClassName="w-3 h-3" onContextMenu={event => onFileContextMenu(file, event)} />
+                  <FileThumbnail file={file} compact className="w-8 h-6 rounded-md ring-1 ring-white/10 bg-neutral-950/80 shrink-0" iconClassName="w-3 h-3" onContextMenu={event => onFileContextMenu(file, event)} />
                   <span className="truncate">{file.name}</span>
                 </div>
                 <ChevronRight className="w-3.5 h-3.5 text-neutral-500 shrink-0" />

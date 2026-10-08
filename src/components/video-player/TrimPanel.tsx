@@ -121,7 +121,7 @@ export const TrimPanel: React.FC<TrimPanelProps> = ({
   return (
     <div
       onClick={e => e.stopPropagation()}
-      className="absolute left-1/2 bottom-5 -translate-x-1/2 w-[min(820px,calc(100%-2rem))] rounded-2xl bg-neutral-900/70 backdrop-blur-xl border border-white/10 shadow-2xl px-4 pt-3 pb-3 select-none"
+      className="video-trim-controls absolute left-1/2 bottom-5 -translate-x-1/2 w-[min(820px,calc(100%-2rem))] rounded-2xl bg-neutral-900/70 backdrop-blur-xl border border-white/10 shadow-2xl px-4 pt-3 pb-3 select-none"
     >
       <div className="flex items-center gap-3">
         <button

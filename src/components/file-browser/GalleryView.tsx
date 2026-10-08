@@ -67,9 +67,9 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
 
   return (
     <div className="h-full flex flex-col space-y-4">
-      {/* Center Big Gallery Viewport */}
+      {/* Center Big Gallery Viewport — always black (theme-independent) */}
       <div
-        className="flex-1 min-h-[380px] flex items-center justify-center relative p-6 overflow-hidden"
+        className="gallery-fullscreen-stage flex-1 min-h-[380px] flex items-center justify-center relative p-6 overflow-hidden bg-black rounded-xl"
         onContextMenu={event => onFileContextMenu(selectedFile, event)}
       >
         {selectedFile.category === 'photo' && (
@@ -110,7 +110,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
           {isEditableDocument(selectedFile) && (
             <button
               onClick={() => onOpenDocument(selectedFile)}
-              className="px-3 py-1.5 rounded-lg bg-[#0060df] hover:bg-[#0250bb] text-white font-bold text-xs flex items-center gap-1.5 shadow-lg"
+              className="edit-document-btn edit-document-btn--solid px-3 py-1.5 rounded-lg bg-[#0060df] hover:bg-[#0250bb] text-white font-bold text-xs flex items-center gap-1.5 shadow-lg"
             >
               <Edit3 className="w-3.5 h-3.5" />
               <span>Edit document</span>
@@ -158,10 +158,10 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
                 onDragStart={e => setFileDragData(e.dataTransfer, file)}
                 onClick={() => onSelectFile(file)}
                 onContextMenu={event => onFileContextMenu(file, event)}
-                className={`h-[calc(100%-6px)] aspect-video rounded-lg overflow-hidden border shrink-0 cursor-pointer relative transition-all ${
+                className={`h-[calc(100%-6px)] aspect-video rounded-xl overflow-hidden ring-1 shrink-0 cursor-pointer relative transition-all duration-200 bg-neutral-950/80 ${
                   isActive
                     ? SELECTION_CLASSES[accent].galleryRing
-                    : 'border-white/10 opacity-60 hover:opacity-100 hover:border-white/20'
+                    : 'ring-white/10 opacity-60 hover:opacity-100 hover:ring-white/25'
                 }`}
               >
                 <FileThumbnail

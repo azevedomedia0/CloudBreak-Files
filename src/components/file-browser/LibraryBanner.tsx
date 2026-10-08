@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldCheck, FolderDown, FolderUp, Users, Wifi, Copy, Radio } from 'lucide-react';
+import { FolderDown, FolderUp, Users, Wifi, Copy, Radio } from 'lucide-react';
 import { FileItem, SharedLibrary } from '../../types';
 import { formatBytes } from '../../utils/format';
 import type { SwarmStatus } from '../../services/p2pBridge';
@@ -23,7 +23,7 @@ export const LibraryBanner: React.FC<LibraryBannerProps> = ({
         ? 'bg-emerald-950/40 border-emerald-500/25'
         : 'bg-purple-950/40 border-purple-500/25'
     }`}>
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
         <div className="flex items-start gap-3 min-w-0">
           <div className={`p-2 rounded-xl shrink-0 mt-0.5 border ${
             selectedLibrary.direction === 'incoming'
@@ -49,9 +49,6 @@ export const LibraryBanner: React.FC<LibraryBannerProps> = ({
                   ? 'Incoming P2P Media (Encrypted Protocol)'
                   : `Outgoing P2P (Seeding to Specified Users)`}
               </span>
-              <span className="text-[10px] font-mono text-neutral-400 bg-white/5 border border-white/10 px-1.5 py-0.5 rounded">
-                {files.length} {files.length === 1 ? 'file' : 'files'} ({formatBytes(totalSize)})
-              </span>
             </div>
 
             <p className="text-xs text-neutral-300 mt-0.5 leading-snug line-clamp-1">
@@ -68,44 +65,46 @@ export const LibraryBanner: React.FC<LibraryBannerProps> = ({
 
             {/* Technical Protocol & Node details */}
             <div className="mt-1.5 flex items-center gap-2 flex-wrap text-[10px] font-mono">
-              <span className="text-neutral-400 bg-black/40 border border-white/5 px-2 py-0.5 rounded flex items-center gap-1">
-                <ShieldCheck className="w-3 h-3 text-cyan-400" />
-                <span>Cipher: {selectedLibrary.p2pEncryptionCipher || 'AES-256-GCM Zero-Knowledge'}</span>
-              </span>
+              <div className="flex items-center gap-2 flex-nowrap min-w-0">
+                <span className="text-neutral-400 bg-black/40 border border-white/5 px-2 py-0.5 rounded flex items-center gap-1 shrink-0">
+                  <Wifi className="w-3 h-3 text-sky-400" />
+                  <span className="truncate">Protocol: {selectedLibrary.p2pProtocol || 'Cloudbreak private · invite-dial only'}</span>
+                </span>
 
-              <span className="text-neutral-400 bg-black/40 border border-white/5 px-2 py-0.5 rounded flex items-center gap-1">
-                <Wifi className="w-3 h-3 text-sky-400" />
-                <span>Protocol: {selectedLibrary.p2pProtocol || 'Cloudbreak private · invite-dial only'}</span>
-              </span>
-
-              {swarmStatus && (
-                <span className="text-neutral-400 bg-black/40 border border-white/5 px-2 py-0.5 rounded flex items-center gap-1">
-                  <Radio className="w-3 h-3 text-amber-400" />
-                  <span>
-                    Invite peers: {swarmStatus.peers.filter(p => p.connected).length}
-                    {' · '}↑{formatBytes(swarmStatus.bytesSent)} ↓{formatBytes(swarmStatus.bytesReceived)}
-                    {swarmStatus.privateMode ? ' · private' : ''}
+                {swarmStatus && (
+                  <span className="text-neutral-400 bg-black/40 border border-white/5 px-2 py-0.5 rounded flex items-center gap-1 shrink-0">
+                    <Radio className="w-3 h-3 text-amber-400" />
+                    <span>
+                      Invite peers: {swarmStatus.peers.filter(p => p.connected).length}
+                      {' · '}↑{formatBytes(swarmStatus.bytesSent)} ↓{formatBytes(swarmStatus.bytesReceived)}
+                      {swarmStatus.privateMode ? ' · private' : ''}
+                    </span>
                   </span>
-                </span>
-              )}
+                )}
+              </div>
 
-              {(selectedLibrary.transferSpeed || swarmStatus) && (
-                <span className={`px-2 py-0.5 rounded font-semibold border ${
-                  selectedLibrary.direction === 'incoming'
-                    ? 'bg-emerald-500/10 text-white border-emerald-500/20'
-                    : 'bg-purple-500/10 text-white border-purple-400/20'
-                }`}>
-                  {selectedLibrary.direction === 'incoming'
-                    ? `↓ ${selectedLibrary.transferSpeed || formatBytes(swarmStatus?.bytesReceived ?? 0)}`
-                    : `↑ Seeding · ${swarmStatus?.listening ? 'listening' : 'local'}`}
+              <div className="flex items-center gap-2 flex-nowrap shrink-0">
+                <span className="text-neutral-400 bg-white/5 border border-white/10 px-1.5 py-0.5 rounded">
+                  {files.length} {files.length === 1 ? 'file' : 'files'} ({formatBytes(totalSize)})
                 </span>
-              )}
+                {(selectedLibrary.transferSpeed || swarmStatus) && (
+                  <span className={`px-2 py-0.5 rounded font-semibold border ${
+                    selectedLibrary.direction === 'incoming'
+                      ? 'bg-emerald-500/10 text-white border-emerald-500/20'
+                      : 'bg-purple-500/10 text-white border-purple-400/20'
+                  }`}>
+                    {selectedLibrary.direction === 'incoming'
+                      ? `↓ ${selectedLibrary.transferSpeed || formatBytes(swarmStatus?.bytesReceived ?? 0)}`
+                      : `↑ ${selectedLibrary.transferSpeed || (swarmStatus?.listening ? 'Seeding · listening' : 'Seeding · local')}`}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </div>
 
         {/* Action buttons on the right */}
-        <div className="flex items-center gap-2 self-end md:self-center shrink-0">
+        <div className="flex items-center gap-2 self-start shrink-0">
           {onCopyInvite && selectedLibrary.direction === 'outgoing' && (
             <button
               type="button"

@@ -46,12 +46,12 @@ function createTab(title?: string): TerminalTab {
 }
 
 const XTERM_THEME_DARK = {
-  background: '#0c0c0e',
+  background: '#1a191b',
   foreground: '#c0c0c8',
   cursor: '#a3e635',
-  cursorAccent: '#0c0c0e',
+  cursorAccent: '#1a191b',
   selectionBackground: '#a3e63555',
-  black: '#0c0c0e',
+  black: '#1a191b',
   red: '#f87171',
   green: '#a3e635',
   yellow: '#fbbf24',
@@ -343,7 +343,7 @@ export const SystemTerminal: React.FC<SystemTerminalProps> = ({ width = 320, con
   return (
     <aside
       style={{ width }}
-      className={`system-terminal-panel relative h-full shrink-0 flex flex-col border-l border-white/10 bg-[#0c0c0e] select-text ${
+      className={`system-terminal-panel relative h-full shrink-0 flex flex-col border-l border-white/10 bg-[#1a191b] select-text ${
         dragOver ? 'ring-1 ring-inset ring-[#a3e635]/50' : ''
       }`}
       onDragEnter={onDragEnter}
@@ -351,7 +351,7 @@ export const SystemTerminal: React.FC<SystemTerminalProps> = ({ width = 320, con
       onDragOver={onDragOver}
       onDrop={onDrop}
     >
-      <div className="terminal-panel-header h-10 px-2 flex items-center gap-1.5 border-b border-[#2a2a2e] bg-[#1B1B1B] shrink-0 select-none">
+      <div className="terminal-panel-header h-10 px-2 flex items-center gap-1.5 border-b border-white/8 bg-[#1a191b] shrink-0 select-none">
         <TerminalIcon className="w-3.5 h-3.5 text-[#a3e635] shrink-0 ml-1" />
         <span className="text-[11px] font-semibold text-[#ececef] tracking-tight shrink-0">
           Terminal

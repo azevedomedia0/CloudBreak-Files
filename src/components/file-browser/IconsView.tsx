@@ -55,23 +55,25 @@ export const IconsView: React.FC<IconsViewProps> = ({
               else if (isEditableDocument(file)) onOpenDocument(file);
               else onOpenQuickLook();
             }}
-            className={`group relative rounded-xl p-2 transition-all cursor-pointer ${
+            className={`group relative rounded-2xl p-2 transition-all duration-200 cursor-pointer ${
               isCurrent
                 ? SELECTION_CLASSES[accent].card
                 : isSelected
                 ? SELECTION_CLASSES[accent].cardMulti
-                : 'hover:bg-white/5'
+                : 'hover:bg-white/[0.04]'
             }`}
           >
             {/* Thumbnail / Glass Card */}
-            <div className="aspect-[4/3] rounded-lg overflow-hidden relative bg-black/40 border border-white/8 group-hover:border-white/15 transition-all shadow-md">
+            <div className="file-thumb-frame aspect-[4/3] rounded-xl overflow-hidden relative bg-neutral-950/80 ring-1 ring-white/10 group-hover:ring-white/20 transition-[box-shadow,ring-color] duration-300 shadow-[0_10px_28px_-12px_rgba(0,0,0,0.65)] group-hover:shadow-[0_16px_36px_-12px_rgba(0,0,0,0.75)]">
+              <div className="pointer-events-none absolute inset-0 z-[1] rounded-xl ring-1 ring-inset ring-white/10" />
+              <div className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-1/3 bg-gradient-to-b from-white/[0.07] to-transparent" />
               <FileThumbnail file={file} hoverZoom onContextMenu={event => onFileContextMenu(file, event)} />
 
               {/* Checkbox */}
               <button
                 onClick={e => toggleSelectOne(file.id, e)}
-                className={`absolute top-2 left-2 p-1 rounded backdrop-blur-md transition-opacity ${
-                  isSelected ? `${SELECTION_CLASSES[accent].checkIcon} bg-black/70 opacity-100` : 'text-neutral-400 bg-black/50 opacity-0 group-hover:opacity-100'
+                className={`absolute top-2 left-2 z-[2] p-1 rounded-md backdrop-blur-md transition-opacity ${
+                  isSelected ? `${SELECTION_CLASSES[accent].checkIcon} bg-black/70 opacity-100` : 'text-neutral-300 bg-black/45 opacity-0 group-hover:opacity-100'
                 }`}
               >
                 {isSelected ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
@@ -79,21 +81,21 @@ export const IconsView: React.FC<IconsViewProps> = ({
 
               {/* Video Duration */}
               {file.videoMeta && (
-                <div className="absolute bottom-2 left-2 flex items-center gap-1 text-[10px] font-mono text-white bg-black/80 px-1.5 py-0.5 rounded backdrop-blur-sm">
+                <div className="absolute bottom-2 left-2 z-[2] flex items-center gap-1 text-[10px] font-mono text-white/95 bg-black/55 px-1.5 py-0.5 rounded-md backdrop-blur-md border border-white/10">
                   <Play className="w-2.5 h-2.5 fill-current" />
                   <span>{formatTimecode(file.videoMeta.durationSeconds)}</span>
                 </div>
               )}
 
               {/* Quick Action Floating Pill */}
-              <div className="absolute bottom-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="absolute bottom-2 right-2 z-[2] flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                 {file.category === 'photo' && (
                   <button
                     onClick={e => {
                       e.stopPropagation();
                       onEditPhoto(file);
                     }}
-                    className="p-1 rounded-md bg-cyan-400 hover:bg-cyan-300 text-neutral-950 shadow-md font-bold"
+                    className="p-1.5 rounded-lg bg-cyan-400 hover:bg-cyan-300 text-neutral-950 shadow-md font-bold"
                     title="Open Photo Studio"
                   >
                     <Edit3 className="w-3 h-3" />
@@ -105,7 +107,7 @@ export const IconsView: React.FC<IconsViewProps> = ({
                       e.stopPropagation();
                       onOpenDocument(file);
                     }}
-                    className="p-1 rounded-md bg-[#0060df] hover:bg-[#0250bb] text-white shadow-md font-bold"
+                    className="edit-document-btn edit-document-btn--solid p-1.5 rounded-lg bg-[#0060df] hover:bg-[#0250bb] text-white shadow-md font-bold"
                     title="Edit document"
                   >
                     <Edit3 className="w-3 h-3" />
@@ -117,7 +119,7 @@ export const IconsView: React.FC<IconsViewProps> = ({
                       e.stopPropagation();
                       onOpenVideo(file);
                     }}
-                    className="p-1 rounded-md bg-amber-400 hover:bg-amber-300 text-neutral-950 shadow-md font-bold"
+                    className="edit-video-btn edit-video-btn--solid p-1.5 rounded-lg bg-yellow-400 hover:bg-yellow-300 text-neutral-950 shadow-md font-bold"
                     title="Open Cinema Suite"
                   >
                     <Scissors className="w-3 h-3" />
@@ -127,11 +129,17 @@ export const IconsView: React.FC<IconsViewProps> = ({
             </div>
 
             {/* Title & Metadata */}
-            <div className="pt-2 px-1 text-center">
-              <p className="text-xs font-medium text-neutral-200 truncate group-hover:text-white">
+            <div className="pt-2.5 px-1 text-center">
+              <p
+                className={`text-xs font-medium truncate tracking-tight transition-colors ${
+                  isCurrent
+                    ? 'file-thumb-selected-name text-white'
+                    : 'text-neutral-200 group-hover:text-white'
+                }`}
+              >
                 {file.name}
               </p>
-              <div className="flex items-center justify-center gap-1.5 text-[11px] text-neutral-400 mt-0.5 font-mono">
+              <div className="flex items-center justify-center gap-1.5 text-[11px] text-neutral-500 mt-0.5 font-mono">
                 <span>{formatBytes(file.sizeBytes)}</span>
               </div>
             </div>

@@ -5,12 +5,24 @@
   height: 100%;
   width: 100%;
   padding: 4px 2px;
+  background: transparent !important;
 }
 .xterm .xterm-viewport {
   overflow-y: auto !important;
+  background: transparent !important;
 }
 .xterm .xterm-screen {
   height: 100%;
+  background: transparent !important;
+}
+
+/* Dark mode terminal panel */
+html[data-theme="dark"] .system-terminal-panel,
+.system-terminal-panel {
+  background-color: #1a191b;
+}
+html[data-theme="dark"] .system-terminal-panel .terminal-panel-header {
+  background-color: #1a191b;
 }
 
 @theme {
@@ -28,10 +40,14 @@
     --font-mono: 'JetBrains Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   }
   
+  html,
+  body {
+    background-color: transparent;
+  }
+
   body {
     font-family: var(--font-sans);
     color: #e5e5e5;
-    background-color: #080809;
     overflow: hidden;
   }
 
@@ -57,11 +73,9 @@
   background: rgba(26, 26, 28, 0.72);
   backdrop-filter: blur(40px) saturate(190%);
   -webkit-backdrop-filter: blur(40px) saturate(190%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 
-    0 25px 70px -15px rgba(0, 0, 0, 0.75),
-    0 0 0 1px rgba(255, 255, 255, 0.08),
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.22);
+  /* No outer border/ring — overlaps native window chrome as a black outline */
+  border: none;
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.22);
 }
 
 .macos-sidebar-glass {
@@ -100,6 +114,54 @@
     radial-gradient(1200px 600px at 50% -10%, rgba(224, 122, 69, 0.08), transparent 55%),
     radial-gradient(800px 400px at 100% 100%, rgba(56, 189, 248, 0.04), transparent 50%),
     #0a0a0b;
+}
+
+/* Light mode: orange accents 4 shades darker (500→900, 400→800, …) */
+html[data-theme="light"] .doc-editor-shell {
+  --doc-copper: #9a3412;
+  --doc-copper-deep: #7c2d12;
+  --color-orange-100: #f97316;
+  --color-orange-200: #ea580c;
+  --color-orange-300: #c2410c;
+  --color-orange-400: #9a3412;
+  --color-orange-500: #7c2d12;
+  --color-orange-600: #431407;
+  background:
+    radial-gradient(1200px 600px at 50% -10%, rgba(124, 45, 18, 0.1), transparent 55%),
+    radial-gradient(800px 400px at 100% 100%, rgba(56, 189, 248, 0.04), transparent 50%),
+    #ececef;
+}
+html[data-theme="light"] .doc-editor-shell .bg-orange-500 {
+  background-color: #7c2d12;
+  color: #faf6f1;
+}
+html[data-theme="light"] .doc-editor-shell .hover\:bg-orange-400:hover {
+  background-color: #9a3412;
+  color: #faf6f1;
+}
+html[data-theme="light"] .doc-editor-shell .bg-orange-500\/20 {
+  background-color: rgb(124 45 18 / 0.2);
+}
+html[data-theme="light"] .doc-editor-shell .hover\:bg-orange-500\/25:hover,
+html[data-theme="light"] .doc-editor-shell .bg-orange-500\/25 {
+  background-color: rgb(124 45 18 / 0.25);
+}
+html[data-theme="light"] .doc-editor-shell .text-orange-100,
+html[data-theme="light"] .doc-editor-shell .hover\:text-orange-100:hover {
+  color: #9a3412;
+}
+html[data-theme="light"] .doc-editor-shell .text-orange-200 {
+  color: #7c2d12;
+}
+html[data-theme="light"] .doc-editor-shell .text-orange-300\/70 {
+  color: rgb(124 45 18 / 0.85);
+}
+html[data-theme="light"] .doc-editor-shell .border-orange-400\/50,
+html[data-theme="light"] .doc-editor-shell .focus\:border-orange-400\/50:focus {
+  border-color: rgb(154 52 18 / 0.55);
+}
+html[data-theme="light"] .doc-editor-shell .shadow-orange-500\/15 {
+  --tw-shadow-color: rgb(124 45 18 / 0.2);
 }
 
 div.doc-page h1,
@@ -252,6 +314,18 @@ input[type="range"] {
 }
 .iina-range:hover::-webkit-slider-thumb,
 .iina-range:active::-webkit-slider-thumb { opacity: 1; }
+.iina-range::-moz-range-thumb {
+  width: 11px;
+  height: 11px;
+  border: none;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.iina-range:hover::-moz-range-thumb,
+.iina-range:active::-moz-range-thumb { opacity: 1; }
 
 /* Settings → Reduce motion */
 html.reduce-motion *,
@@ -343,7 +417,7 @@ html[data-theme="light"] {
 
 html[data-theme="light"] body {
   color: #141418;
-  background-color: #c8c8ce;
+  background-color: transparent;
 }
 
 html[data-theme="light"] ::-webkit-scrollbar-thumb {
@@ -355,17 +429,69 @@ html[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
 
 html[data-theme="light"] .macos-window {
   background: rgba(210, 210, 216, 0.9);
-  border-color: rgba(0, 0, 0, 0.1);
-  box-shadow:
-    0 25px 70px -15px rgba(0, 0, 0, 0.22),
-    0 0 0 1px rgba(0, 0, 0, 0.06),
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.55);
+  border: none;
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.55);
 }
 
 html[data-theme="light"] .macos-sidebar-glass {
   background: rgba(200, 200, 208, 0.88);
   border-right-color: rgba(0, 0, 0, 0.1);
   box-shadow: inset -1px 0 0 0 rgba(255, 255, 255, 0.35);
+}
+
+html[data-theme="light"] .app-title {
+  color: #1B1B1B;
+}
+
+/* Selected thumbnail filename in light mode */
+html[data-theme="light"] .file-thumb-selected-name {
+  color: #025985 !important;
+}
+
+/* Video playback + trim chrome: white text → #1B1B1B in light mode */
+html[data-theme="light"] .video-playback-controls,
+html[data-theme="light"] .video-trim-controls {
+  background-color: rgba(236, 236, 240, 0.92);
+  border-color: rgba(0, 0, 0, 0.12);
+  color: #1B1B1B;
+}
+html[data-theme="light"] .video-playback-controls [class*="text-white"],
+html[data-theme="light"] .video-trim-controls [class*="text-white"] {
+  color: #1B1B1B !important;
+}
+html[data-theme="light"] .video-playback-controls svg,
+html[data-theme="light"] .video-trim-controls svg {
+  color: #1B1B1B;
+}
+html[data-theme="light"] .video-trim-controls .text-amber-300,
+html[data-theme="light"] .video-trim-controls svg.text-amber-300 {
+  color: #8a6b1f !important;
+}
+html[data-theme="light"] .video-playback-controls .text-cyan-400 {
+  color: #0284c7 !important;
+}
+html[data-theme="light"] .video-playback-controls .text-rose-300 {
+  color: #e11d48 !important;
+}
+html[data-theme="light"] .video-playback-controls .iina-range {
+  background: linear-gradient(
+    to right,
+    #1B1B1B var(--fill, 0%),
+    rgba(27, 27, 27, 0.22) var(--fill, 0%)
+  );
+}
+html[data-theme="light"] .video-playback-controls .iina-range::-webkit-slider-thumb {
+  background: #1B1B1B;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  opacity: 1;
+}
+html[data-theme="light"] .video-playback-controls .iina-range::-moz-range-thumb {
+  background: #1B1B1B;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  opacity: 1;
+}
+html[data-theme="light"] .video-trim-controls .bg-white {
+  background-color: #1B1B1B !important;
 }
 
 html[data-theme="light"] .macos-toolbar-glass {
@@ -492,6 +618,34 @@ html[data-theme="light"] [class*="bg-\[#0060df\]"].text-white,
 html[data-theme="light"] [class*="bg-\[#0250bb\]"].text-white {
   color: #ffffff;
 }
+/* File browser thumbnails — soft glass frame that survives light remaps */
+.file-thumb-frame {
+  isolation: isolate;
+}
+html[data-theme="light"] .file-thumb-frame {
+  background-color: rgba(18, 18, 20, 0.92);
+  box-shadow:
+    0 10px 28px -12px rgba(0, 0, 0, 0.28),
+    0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+/* Gallery / native fullscreen media stages stay solid black in every theme */
+.gallery-fullscreen-stage,
+:fullscreen,
+:-webkit-full-screen {
+  background-color: #000 !important;
+}
+html[data-theme="light"] .gallery-fullscreen-stage,
+html[data-theme="light"] :fullscreen,
+html[data-theme="light"] :-webkit-full-screen {
+  background-color: #000 !important;
+}
+html[data-theme="light"] .gallery-fullscreen-stage .text-white,
+html[data-theme="light"] :fullscreen .text-white,
+html[data-theme="light"] :-webkit-full-screen .text-white {
+  color: #ffffff;
+}
+
 /* Video / media overlays stay dark — force light ink */
 html[data-theme="light"] .bg-black .text-white,
 html[data-theme="light"] .bg-black\/50 .text-white,
@@ -570,4 +724,46 @@ html[data-theme="light"] [class*="bg-pink-500/"],
 html[data-theme="light"] [class*="bg-lime-500/"],
 html[data-theme="light"] [class*="bg-cyan-500/"] {
   --tw-bg-opacity: 0.22;
+}
+
+/* Edit Video — earth-tone yellow in light mode (ochre / mustard) */
+html[data-theme="light"] .edit-video-btn {
+  color: #8a6b1f;
+  background-color: rgba(196, 163, 74, 0.22);
+  border-color: rgba(168, 137, 48, 0.45);
+}
+html[data-theme="light"] .edit-video-btn:hover {
+  color: #6f5518;
+  background-color: rgba(196, 163, 74, 0.34);
+  border-color: rgba(168, 137, 48, 0.6);
+}
+html[data-theme="light"] .edit-video-btn--solid {
+  color: #1a1408;
+  background-color: #c4a34a;
+  border-color: transparent;
+}
+html[data-theme="light"] .edit-video-btn--solid:hover {
+  color: #1a1408;
+  background-color: #b8973a;
+}
+
+/* Edit Document — deep copper in light mode */
+html[data-theme="light"] .edit-document-btn {
+  color: #7c2d12;
+  background-color: rgba(124, 45, 18, 0.14);
+  border-color: rgba(124, 45, 18, 0.4);
+}
+html[data-theme="light"] .edit-document-btn:hover {
+  color: #7c2d12;
+  background-color: rgba(124, 45, 18, 0.22);
+  border-color: rgba(124, 45, 18, 0.55);
+}
+html[data-theme="light"] .edit-document-btn--solid {
+  color: #faf6f1;
+  background-color: #7c2d12;
+  border-color: transparent;
+}
+html[data-theme="light"] .edit-document-btn--solid:hover {
+  color: #faf6f1;
+  background-color: #9a3412;
 }
