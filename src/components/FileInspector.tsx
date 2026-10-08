@@ -353,24 +353,18 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                 <button
                   type="button"
                   onClick={() => onOpenAudio?.(file)}
-                  className="w-full h-full relative group/audio bg-gradient-to-br from-violet-950/80 to-neutral-950 flex items-center justify-center overflow-hidden"
+                  className="w-full h-full relative overflow-hidden bg-neutral-900"
                   title="Play audio"
                 >
                   {file.thumbnailUrl ? (
-                    <img src={file.thumbnailUrl} alt="" className="absolute inset-0 w-full h-full object-cover opacity-70" />
-                  ) : null}
-                  <div className="absolute inset-0 bg-black/35" />
-                  <div className="relative z-10 flex flex-col items-center gap-2 text-white">
-                    <span className="p-3 rounded-full bg-violet-400 text-neutral-950 shadow-lg shadow-violet-500/30 group-hover/audio:scale-105 transition-transform">
-                      <Play className="w-5 h-5 fill-current ml-0.5" />
-                    </span>
-                    <span className="text-[11px] font-medium text-white/90 truncate max-w-[90%] px-3">
-                      {file.name.replace(/\.[^.]+$/, '')}
-                    </span>
-                    {file.videoMeta && (
-                      <span className="text-[10px] font-mono text-white/70">{formatTimecode(file.videoMeta.durationSeconds)}</span>
-                    )}
-                  </div>
+                    <img
+                      src={file.thumbnailUrl}
+                      alt={file.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-violet-500/70 to-sky-600/60" />
+                  )}
                 </button>
               )}
 
@@ -470,7 +464,7 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                 <button
                   type="button"
                   onClick={() => onOpenAudio(file)}
-                  className="col-span-2 h-9 rounded-lg bg-violet-500/15 hover:bg-violet-500/25 border border-violet-400/30 text-violet-300 flex items-center justify-center gap-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer"
+                  className="col-span-2 h-9 rounded-lg bg-pink-500/15 hover:bg-pink-500/25 border border-pink-400/40 text-pink-400 flex items-center justify-center gap-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer"
                   title="Play audio"
                   aria-label="Play audio"
                 >

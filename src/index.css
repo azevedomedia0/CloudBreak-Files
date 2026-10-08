@@ -144,8 +144,8 @@
 .audio-scrubber {
   background: linear-gradient(
     to right,
-    #7c6cff 0%,
-    #7c6cff var(--audio-progress, 0%),
+    #ff2d95 0%,
+    #ff2d95 var(--audio-progress, 0%),
     rgba(255, 255, 255, 0.18) var(--audio-progress, 0%),
     rgba(255, 255, 255, 0.18) 100%
   );
@@ -153,8 +153,8 @@
 .audio-volume-scrubber {
   background: linear-gradient(
     to right,
-    #7c6cff 0%,
-    #7c6cff var(--audio-volume, 0%),
+    #ff2d95 0%,
+    #ff2d95 var(--audio-volume, 0%),
     rgba(255, 255, 255, 0.18) var(--audio-volume, 0%),
     rgba(255, 255, 255, 0.18) 100%
   );
@@ -166,8 +166,8 @@
   width: 12px;
   height: 12px;
   border-radius: 999px;
-  background: #8b7cff;
-  box-shadow: 0 0 0 2px rgba(139, 124, 255, 0.35);
+  background: #ff4db0;
+  box-shadow: 0 0 0 2px rgba(255, 45, 149, 0.35);
   margin-top: -4px;
 }
 .audio-scrubber::-moz-range-thumb,
@@ -176,7 +176,7 @@
   height: 12px;
   border: none;
   border-radius: 999px;
-  background: #8b7cff;
+  background: #ff4db0;
 }
 .audio-scrubber::-webkit-slider-runnable-track,
 .audio-volume-scrubber::-webkit-slider-runnable-track {
@@ -564,8 +564,8 @@ html[data-theme="light"] .audio-player-menu-item:hover {
 html[data-theme="light"] .audio-scrubber {
   background: linear-gradient(
     to right,
-    #5b4fd6 0%,
-    #5b4fd6 var(--audio-progress, 0%),
+    #ff2d95 0%,
+    #ff2d95 var(--audio-progress, 0%),
     rgba(0, 0, 0, 0.16) var(--audio-progress, 0%),
     rgba(0, 0, 0, 0.16) 100%
   );
@@ -573,20 +573,20 @@ html[data-theme="light"] .audio-scrubber {
 html[data-theme="light"] .audio-volume-scrubber {
   background: linear-gradient(
     to right,
-    #5b4fd6 0%,
-    #5b4fd6 var(--audio-volume, 0%),
+    #ff2d95 0%,
+    #ff2d95 var(--audio-volume, 0%),
     rgba(0, 0, 0, 0.16) var(--audio-volume, 0%),
     rgba(0, 0, 0, 0.16) 100%
   );
 }
 html[data-theme="light"] .audio-scrubber::-webkit-slider-thumb,
 html[data-theme="light"] .audio-volume-scrubber::-webkit-slider-thumb {
-  background: #5b4fd6;
-  box-shadow: 0 0 0 2px rgba(91, 79, 214, 0.28);
+  background: #ff2d95;
+  box-shadow: 0 0 0 2px rgba(255, 45, 149, 0.28);
 }
 html[data-theme="light"] .audio-scrubber::-moz-range-thumb,
 html[data-theme="light"] .audio-volume-scrubber::-moz-range-thumb {
-  background: #5b4fd6;
+  background: #ff2d95;
 }
 
 html[data-theme="light"] .audio-player-queue {
