@@ -20,6 +20,7 @@ import { DropOverlay } from './components/DropOverlay';
 import { Toast } from './components/Toast';
 import { FileBrowser } from './components/FileBrowser';
 import { FileInspector } from './components/FileInspector';
+import { DocumentEditorModal } from './components/document-editor/DocumentEditorModal';
 
 import {
   CloudAccount, FileItem, FolderItem, SharedLibrary, SharedMember,
@@ -79,7 +80,7 @@ export default function App() {
   const [playingVideoFile, setPlayingVideoFile] = useState<FileItem | null>(null);
   const [videoPlayerInitialTab, setVideoPlayerInitialTab] = useState<'player' | 'trim' | 'convert'>('player');
   const [sharingLibrary, setSharingLibrary] = useState<SharedLibrary | null>(null);
-  const [isVaultSecurityOpen, setIsVaultSecurityOpen] = useState<boolean>(true);
+  const [isVaultSecurityOpen, setIsVaultSecurityOpen] = useState<boolean>(false);
   const [isProfileSettingsOpen, setIsProfileSettingsOpen] = useState<boolean>(false);
   const [userProfile, setUserProfile] = useState<UserProfile>({
     name: 'Steven Azevedo',
@@ -295,7 +296,14 @@ export default function App() {
   } = useFileActions({ setFiles, selectedFileId, setSelectedFileId, selectedAccountId, selectedFolder, showToast });
 
   // Picking an account, folder or library leaves any open network share / device.
-  const selectAccount = (id: CloudProviderId) => { setSelectedSourceId(null); setSelectedAccountId(id); };
+  const selectAccount = (id: CloudProviderId) => {
+    setSelectedSourceId(null);
+    setSelectedAccountId(id);
+    // Prompt for passphrase only when entering the private vault while locked.
+    if (id === 'vault' && !isVaultUnlocked) {
+      setIsVaultSecurityOpen(true);
+    }
+  };
   const selectFolder = (id: string | null) => { setSelectedSourceId(null); setSelectedFolderId(id); };
   const selectLibrary = (id: string | null) => { setSelectedSourceId(null); setSelectedLibraryId(id); };
 
@@ -444,73 +452,89 @@ export default function App() {
               </div>
             )}
 
-            {/* Central File Explorer with 4 macOS view modes */}
-            <FileBrowser
-              files={filteredFiles}
-              selectedSourceId={selectedSourceId}
-              accounts={accounts}
-              selectedAccountId={selectedAccountId}
-              selectedFolder={selectedFolder}
-              selectedLibrary={selectedLibrary}
-              selectedFileId={selectedFileId}
-              viewMode={viewMode}
-              onSelectFile={file => setSelectedFileId(file.id)}
-              onEditPhoto={file => setEditingPhotoFile(file)}
-              onOpenDocument={file => setEditingDocumentFile(file)}
-              onOpenVideo={file => setPlayingVideoFile(file)}
-              onShareFile={file => {
-                const firstLib = sharedLibraries[0];
-                if (firstLib) setSharingLibrary(firstLib);
-              }}
-              onToggleEncrypt={handleToggleEncrypt}
-              onDeleteFile={handleDeleteFile}
-              onBatchEncrypt={handleBatchEncrypt}
-              onBatchDelete={handleBatchDelete}
-              onRenameFile={handleRenameFile}
-              onDuplicateFiles={handleDuplicateFiles}
-              onCopyFiles={handleCopyFileNames}
-              onToggleTag={handleToggleTag}
-              onOpenQuickLook={() => setIsQuickLookOpen(true)}
-              folders={folders}
-              onSelectFolder={selectFolder}
-            />
-
-            {/* Inspector Draggable Splitter Handle */}
-            {viewMode !== 'columns' && isInspectorOpen && selectedFile && (
-              <div
-                onMouseDown={startResizeInspector}
-                onDoubleClick={resetInspectorWidth}
-                className={`w-1.5 -mr-1 z-30 cursor-col-resize hover:bg-sky-400/60 transition-colors select-none shrink-0 group ${
-                  isResizingInspector ? 'bg-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.8)]' : 'bg-transparent'
-                }`}
-                title="Drag to resize file inspector (Double-click to reset)"
-              >
-                <div className="w-0.5 h-6 mx-auto mt-2 rounded bg-white/20 group-hover:bg-sky-300 transition-colors" />
-              </div>
-            )}
-
-            {/* Right File Inspector (only in Icons / List / Gallery mode when open) */}
-            {viewMode !== 'columns' && isInspectorOpen && selectedFile && (
-              <FileInspector
-                file={selectedFile}
-                photoNav={photoNav}
-                accounts={accounts}
+            {/* Central File Explorer — document editor replaces this pane when open */}
+            {editingDocumentFile ? (
+              <DocumentEditorModal
+                key={editingDocumentFile.id}
+                file={editingDocumentFile}
                 isOpen={true}
-                onClose={() => setIsInspectorOpen(false)}
-                onEditPhoto={file => setEditingPhotoFile(file)}
-                onOpenDocument={file => setEditingDocumentFile(file)}
-                onOpenVideo={(file, tab) => {
-                  setPlayingVideoFile(file);
-                  if (tab) setVideoPlayerInitialTab(tab);
+                embedded
+                onClose={() => setEditingDocumentFile(null)}
+                onSave={updated => {
+                  handleSaveDocument(updated);
+                  setEditingDocumentFile(updated);
                 }}
-                onShare={file => {
-                  const firstLib = sharedLibraries[0];
-                  if (firstLib) setSharingLibrary(firstLib);
-                }}
-                onToggleEncrypt={handleToggleEncrypt}
-                onDeleteFile={handleDeleteFile}
-                width={inspectorWidth}
               />
+            ) : (
+              <>
+                <FileBrowser
+                  files={filteredFiles}
+                  selectedSourceId={selectedSourceId}
+                  accounts={accounts}
+                  selectedAccountId={selectedAccountId}
+                  selectedFolder={selectedFolder}
+                  selectedLibrary={selectedLibrary}
+                  selectedFileId={selectedFileId}
+                  viewMode={viewMode}
+                  onSelectFile={file => setSelectedFileId(file.id)}
+                  onEditPhoto={file => setEditingPhotoFile(file)}
+                  onOpenDocument={file => setEditingDocumentFile(file)}
+                  onOpenVideo={file => setPlayingVideoFile(file)}
+                  onShareFile={file => {
+                    const firstLib = sharedLibraries[0];
+                    if (firstLib) setSharingLibrary(firstLib);
+                  }}
+                  onToggleEncrypt={handleToggleEncrypt}
+                  onDeleteFile={handleDeleteFile}
+                  onBatchEncrypt={handleBatchEncrypt}
+                  onBatchDelete={handleBatchDelete}
+                  onRenameFile={handleRenameFile}
+                  onDuplicateFiles={handleDuplicateFiles}
+                  onCopyFiles={handleCopyFileNames}
+                  onToggleTag={handleToggleTag}
+                  onOpenQuickLook={() => setIsQuickLookOpen(true)}
+                  folders={folders}
+                  onSelectFolder={selectFolder}
+                />
+
+                {/* Inspector Draggable Splitter Handle */}
+                {viewMode !== 'columns' && isInspectorOpen && selectedFile && (
+                  <div
+                    onMouseDown={startResizeInspector}
+                    onDoubleClick={resetInspectorWidth}
+                    className={`w-1.5 -mr-1 z-30 cursor-col-resize hover:bg-sky-400/60 transition-colors select-none shrink-0 group ${
+                      isResizingInspector ? 'bg-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.8)]' : 'bg-transparent'
+                    }`}
+                    title="Drag to resize file inspector (Double-click to reset)"
+                  >
+                    <div className="w-0.5 h-6 mx-auto mt-2 rounded bg-white/20 group-hover:bg-sky-300 transition-colors" />
+                  </div>
+                )}
+
+                {/* Right File Inspector (only in Icons / List / Gallery mode when open) */}
+                {viewMode !== 'columns' && isInspectorOpen && selectedFile && (
+                  <FileInspector
+                    file={selectedFile}
+                    photoNav={photoNav}
+                    accounts={accounts}
+                    isOpen={true}
+                    onClose={() => setIsInspectorOpen(false)}
+                    onEditPhoto={file => setEditingPhotoFile(file)}
+                    onOpenDocument={file => setEditingDocumentFile(file)}
+                    onOpenVideo={(file, tab) => {
+                      setPlayingVideoFile(file);
+                      if (tab) setVideoPlayerInitialTab(tab);
+                    }}
+                    onShare={file => {
+                      const firstLib = sharedLibraries[0];
+                      if (firstLib) setSharingLibrary(firstLib);
+                    }}
+                    onToggleEncrypt={handleToggleEncrypt}
+                    onDeleteFile={handleDeleteFile}
+                    width={inspectorWidth}
+                  />
+                )}
+              </>
             )}
           </div>
 
@@ -530,9 +554,7 @@ export default function App() {
         sharedLibraries={sharedLibraries}
         setSharingLibrary={setSharingLibrary}
         editingPhotoFile={editingPhotoFile}
-        editingDocumentFile={editingDocumentFile}
-        setEditingDocumentFile={setEditingDocumentFile}
-        handleSaveDocument={handleSaveDocument}
+        onOpenDocument={file => setEditingDocumentFile(file)}
         handleSavePhotoVersion={handleSavePhotoVersion}
         playingVideoFile={playingVideoFile}
         handleSaveTrimmedVideo={handleSaveTrimmedVideo}

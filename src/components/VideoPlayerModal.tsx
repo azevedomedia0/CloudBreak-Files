@@ -41,6 +41,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   onNextMedia,
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Playback states
@@ -53,6 +54,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const [isLooping, setIsLooping] = useState<boolean>(false);
   const [controlsVisible, setControlsVisible] = useState<boolean>(true);
   const [playError, setPlayError] = useState<string | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [castStatus, setCastStatus] = useState<string | null>(null);
 
   // Active Tool Mode
   const [activeTab, setActiveTab] = useState<'player' | 'trim' | 'convert'>(initialTab);
@@ -114,6 +117,46 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     setSavedLocalName(null);
     setSaveError(null);
   }, [convertOptions.format, convertOptions.resolution, convertOptions.quality, trimStart, trimEnd]);
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === stageRef.current);
+    };
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = async () => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        await stage.requestFullscreen();
+      }
+    } catch {
+      // Fullscreen may be blocked by the browser or embedding context.
+    }
+  };
+
+  const handleCast = (deviceId: string | null) => {
+    const labels: Record<string, string> = {
+      'living-room': 'Living Room TV',
+      'studio-display': 'Studio Display',
+      bedroom: 'Bedroom Chromecast',
+    };
+    const video = videoRef.current as (HTMLVideoElement & {
+      remote?: { prompt: () => Promise<void> };
+    }) | null;
+    if (deviceId && video?.remote) {
+      void video.remote.prompt().catch(() => {
+        /* Fall through to simulated cast status below. */
+      });
+    }
+    setCastStatus(deviceId ? `Casting to ${labels[deviceId] ?? 'device'}` : 'Casting stopped');
+    window.setTimeout(() => setCastStatus(null), 2200);
+  };
 
   const handleLoadedMetadata = () => {
     if (videoRef.current) {
@@ -343,7 +386,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
         {/* Video Viewport & Controls */}
         <div className="flex flex-1 overflow-hidden">
           
-          <div className="flex-1 flex flex-col bg-neutral-950 relative">
+          <div ref={stageRef} className="flex-1 flex flex-col bg-neutral-950 relative">
             
             {/* Main Video Screen */}
             <div 
@@ -380,6 +423,14 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                 </div>
               )}
 
+              {castStatus && (
+                <div className="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-none z-10">
+                  <div className="px-3 py-1.5 rounded-full bg-neutral-900/90 border border-white/15 text-xs text-neutral-100 shadow-lg">
+                    {castStatus}
+                  </div>
+                </div>
+              )}
+
               {/* Center Play Overlay when paused */}
               {!isPlaying && !playError && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-all pointer-events-none">
@@ -399,6 +450,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                   isMuted={isMuted}
                   isLooping={isLooping}
                   playbackRate={playbackRate}
+                  isFullscreen={isFullscreen}
                   onTogglePlay={togglePlay}
                   onSeek={seek}
                   onSkip={seconds => seek((videoRef.current?.currentTime ?? currentTime) + seconds)}
@@ -407,6 +459,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                   onToggleMute={toggleMute}
                   onToggleLoop={() => setIsLooping(l => !l)}
                   onChangeSpeed={changeSpeed}
+                  onToggleFullscreen={toggleFullscreen}
+                  onCast={handleCast}
                   onPreviousMedia={onPreviousMedia}
                   onNextMedia={onNextMedia}
                   canPreviousMedia={canPreviousMedia}

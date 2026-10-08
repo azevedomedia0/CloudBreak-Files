@@ -59,6 +59,7 @@ export const INITIAL_ACCOUNTS: CloudAccount[] = [
 ];
 
 export const INITIAL_FOLDERS: FolderItem[] = [
+  // Local Files (sidebar)
   { id: 'f-desktop', name: 'Desktop', accountId: 'all', itemCount: 4 },
   { id: 'f-documents', name: 'Documents', accountId: 'all', itemCount: 4 },
   { id: 'f-photos', name: 'Photos', accountId: 'all', itemCount: 8 },
@@ -66,6 +67,40 @@ export const INITIAL_FOLDERS: FolderItem[] = [
   { id: 'f-downloads', name: 'Downloads', accountId: 'all', itemCount: 5 },
   { id: 'f-applications', name: 'Applications', accountId: 'all', itemCount: 12 },
   { id: 'f-trash', name: 'Trash', accountId: 'all', itemCount: 2 },
+
+  // Google Drive
+  { id: 'gd-my-drive', name: 'My Drive', accountId: 'gdrive', itemCount: 128 },
+  { id: 'gd-shared', name: 'Shared with me', accountId: 'gdrive', itemCount: 34 },
+  { id: 'gd-photos', name: 'Google Photos', accountId: 'gdrive', itemCount: 240 },
+  { id: 'gd-videos', name: 'Videos', accountId: 'gdrive', itemCount: 22 },
+  { id: 'gd-projects', name: 'Projects', accountId: 'gdrive', itemCount: 18 },
+
+  // Dropbox
+  { id: 'db-home', name: 'Dropbox', accountId: 'dropbox', itemCount: 210 },
+  { id: 'db-camera', name: 'Camera Uploads', accountId: 'dropbox', itemCount: 86 },
+  { id: 'db-projects', name: 'Projects', accountId: 'dropbox', itemCount: 41 },
+  { id: 'db-archives', name: 'Archives', accountId: 'dropbox', itemCount: 15 },
+  { id: 'db-exports', name: 'Exports', accountId: 'dropbox', itemCount: 27 },
+
+  // OneDrive (id: s3 in sample accounts)
+  { id: 'od-documents', name: 'Documents', accountId: 's3', itemCount: 64 },
+  { id: 'od-pictures', name: 'Pictures', accountId: 's3', itemCount: 112 },
+  { id: 'od-videos', name: 'Videos', accountId: 's3', itemCount: 38 },
+  { id: 'od-attachments', name: 'Email attachments', accountId: 's3', itemCount: 9 },
+  { id: 'od-recordings', name: 'Recordings', accountId: 's3', itemCount: 14 },
+
+  // MEGA Drive (id: cloudflare_r2)
+  { id: 'mega-root', name: 'Cloud Drive', accountId: 'cloudflare_r2', itemCount: 55 },
+  { id: 'mega-camera', name: 'Camera Uploads', accountId: 'cloudflare_r2', itemCount: 31 },
+  { id: 'mega-backups', name: 'Backups', accountId: 'cloudflare_r2', itemCount: 12 },
+  { id: 'mega-secure', name: 'Secure Vault', accountId: 'cloudflare_r2', itemCount: 7 },
+
+  // Nextcloud
+  { id: 'nc-files', name: 'Files', accountId: 'nextcloud', itemCount: 96 },
+  { id: 'nc-photos', name: 'Photos', accountId: 'nextcloud', itemCount: 48 },
+  { id: 'nc-documents', name: 'Documents', accountId: 'nextcloud', itemCount: 33 },
+  { id: 'nc-videos', name: 'Videos', accountId: 'nextcloud', itemCount: 19 },
+  { id: 'nc-talk', name: 'Talk recordings', accountId: 'nextcloud', itemCount: 6 },
 ];
 
 export const INITIAL_REMOVABLE_DEVICES: RemovableDevice[] = [

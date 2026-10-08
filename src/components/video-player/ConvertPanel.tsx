@@ -47,9 +47,15 @@ export const ConvertPanel: React.FC<ConvertPanelProps> = ({
 }) => {
   const clipLength = Math.max(0, convertOptions.trimEnd - convertOptions.trimStart);
   const outputFileName = `${baseName.trim() || defaultBaseName}.${convertOptions.format}`;
-  const saveableFolders = folders.filter(f => f.id !== 'f-trash' && f.id !== 'f-applications');
+  // Folders belonging to the cloud account selected in Location.
+  const providerFolders = folders.filter(
+    f =>
+      f.accountId === destination.accountId &&
+      f.id !== 'f-trash' &&
+      f.id !== 'f-applications',
+  );
   const destinationAccount = accounts.find(a => a.id === destination.accountId);
-  const destinationFolder = saveableFolders.find(f => f.id === destination.folderId);
+  const destinationFolder = providerFolders.find(f => f.id === destination.folderId);
   const destinationLabel = destination.kind === 'cloud'
     ? `${destinationAccount?.name ?? 'Cloud'} / ${destinationFolder?.name ?? 'Top level'}`
     : localFolderName ? `${localFolderName} on this computer` : 'This computer';
@@ -177,11 +183,20 @@ export const ConvertPanel: React.FC<ConvertPanelProps> = ({
                 value={destination.kind === 'computer' ? LOCAL_OPTION : destination.accountId}
                 onChange={e => {
                   const value = e.target.value;
-                  setDestination(prev =>
-                    value === LOCAL_OPTION
-                      ? { ...prev, kind: 'computer' }
-                      : { kind: 'cloud', accountId: value as CloudProviderId, folderId: prev.folderId }
-                  );
+                  setDestination(prev => {
+                    if (value === LOCAL_OPTION) {
+                      return { ...prev, kind: 'computer' };
+                    }
+                    const accountId = value as CloudProviderId;
+                    const folderStillValid = folders.some(
+                      f => f.id === prev.folderId && f.accountId === accountId,
+                    );
+                    return {
+                      kind: 'cloud',
+                      accountId,
+                      folderId: folderStillValid ? prev.folderId : null,
+                    };
+                  });
                 }}
                 className={`${fieldClass} flex-1 min-w-0`}
               >
@@ -217,11 +232,18 @@ export const ConvertPanel: React.FC<ConvertPanelProps> = ({
                 onChange={e => setDestination(prev => ({ ...prev, folderId: e.target.value || null }))}
                 className={fieldClass}
               >
-                <option value="">Top level</option>
-                {saveableFolders.map(f => (
+                <option value="">
+                  {destinationAccount ? `${destinationAccount.name} root` : 'Top level'}
+                </option>
+                {providerFolders.map(f => (
                   <option key={f.id} value={f.id}>{f.name}</option>
                 ))}
               </select>
+              {providerFolders.length === 0 && (
+                <p className="mt-1 text-[10px] text-neutral-500">
+                  No folders found for this cloud account.
+                </p>
+              )}
             </div>
           )}
         </div>
