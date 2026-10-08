@@ -1,10 +1,14 @@
+pub mod cloud_http;
 pub mod commands;
 pub mod crypto;
 pub mod media;
+pub mod p2p;
 pub mod storage;
+pub mod tray;
 pub mod vault_store;
 
 use commands::{AppState, VaultState};
+use p2p::P2pState;
 use std::sync::Mutex;
 use storage::StorageManager;
 
@@ -14,6 +18,16 @@ pub fn run() {
         .manage(AppState {
             storage: Mutex::new(StorageManager::new()),
             vault: Mutex::new(VaultState::default()),
+        })
+        .manage(P2pState::default())
+        .setup(|app| {
+            #[cfg(desktop)]
+            {
+                if let Err(err) = tray::build_tray(app.handle()) {
+                    eprintln!("tray icon failed: {err}");
+                }
+            }
+            Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::encrypt_data,
@@ -26,7 +40,19 @@ pub fn run() {
             commands::check_vault_status,
             commands::process_photo_render,
             commands::trim_video_stream,
+            cloud_http::cloud_http,
+            p2p::commands::p2p_get_identity,
+            p2p::commands::p2p_create_library,
+            p2p::commands::p2p_accept_invite,
+            p2p::commands::p2p_export_invite,
+            p2p::commands::p2p_list_libraries,
+            p2p::commands::p2p_start_seeding,
+            p2p::commands::p2p_swarm_status,
+            p2p::commands::p2p_read_file,
+            p2p::commands::p2p_stream_chunk,
+            p2p::commands::p2p_fetch_manifest,
+            tray::tray_refresh_status,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running AetherCloud Vault application");
+        .expect("error while running Cloudbreak Files");
 }

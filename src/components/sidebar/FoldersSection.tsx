@@ -44,8 +44,8 @@ export const FoldersSection: React.FC<FoldersSectionProps> = ({ onSelectAccount,
               onAddNewFolder?.();
             }}
             className="w-4 h-4 flex items-center justify-center bg-transparent text-neutral-400 hover:text-sky-300 transition-colors"
-            title="Create New Folder"
-            aria-label="Create New Folder"
+            title="Add Folder from Disk"
+            aria-label="Add Folder from Disk"
           >
             <Plus className="w-3 h-3 stroke-[2.5]" />
           </button>

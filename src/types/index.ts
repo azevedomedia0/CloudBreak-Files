@@ -11,9 +11,14 @@ export interface CloudAccount {
   status: 'connected' | 'syncing' | 'offline';
   encryptionLevel: 'Standard TLS' | 'Client E2EE AES-256' | 'Zero-Knowledge Vault';
   isVault?: boolean;
+  /** True when credentials were verified against the live provider API. */
+  liveConnected?: boolean;
+  /** Provider API / WebDAV endpoint used for live sync. */
+  endpoint?: string;
 }
 
-export type FileCategory = 'all' | 'photo' | 'video' | 'document' | 'audio' | 'archive';
+/** File kinds, plus toolbar presets (`files` = all items grouped by local folder). */
+export type FileCategory = 'all' | 'files' | 'photo' | 'video' | 'document' | 'audio' | 'archive';
 
 export interface PhotoExifData {
   camera?: string;
@@ -230,5 +235,18 @@ export interface RemovableDevice {
   mounted: boolean;
   ejectable: boolean;
   connectionType: 'USB-C 3.2' | 'Thunderbolt 4' | 'CFexpress / SD' | 'USB 3.0';
+}
+
+/** Sidebar Favorites shortcut to a local folder, network share, or mounted drive. */
+export type FavoriteKind = 'folder' | 'network' | 'device';
+
+export interface FavoriteShortcut {
+  id: string;
+  name: string;
+  kind: FavoriteKind;
+  /** Local Files folder id when kind === 'folder'. */
+  folderId?: string;
+  /** Network server name or removable device id when kind is network/device. */
+  sourceId?: string;
 }
 

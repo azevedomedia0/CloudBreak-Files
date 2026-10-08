@@ -2,6 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ChevronRight, Check } from 'lucide-react';
 import { FileItem } from '../../types';
 import { isEditableDocument } from '../../utils/documentKind';
+import { isZipArchive } from '../../utils/unzipArchive';
 
 const SUGGESTED_TAGS = ['Favorite', 'Work', 'Personal', 'Review', 'Final'];
 
@@ -18,6 +19,7 @@ export interface FileContextMenuProps {
   onDuplicate: (files: FileItem[]) => void;
   onCopy: (files: FileItem[]) => void;
   onShare: (file: FileItem) => void;
+  onUnzip?: (file: FileItem) => void;
   onTrash: (files: FileItem[]) => void;
   onToggleTag: (files: FileItem[], tag: string) => void;
 }
@@ -35,6 +37,7 @@ export const FileContextMenu: React.FC<FileContextMenuProps> = ({
   onDuplicate,
   onCopy,
   onShare,
+  onUnzip,
   onTrash,
   onToggleTag,
 }) => {
@@ -108,6 +111,9 @@ export const FileContextMenu: React.FC<FileContextMenuProps> = ({
           <MenuItem key={item.id} label={item.label} onClick={() => run(item.action)} />
         ))}
       </SubmenuItem>
+      {onUnzip && isZipArchive(file) && !multiple && (
+        <MenuItem label="Unzip / Extract" onClick={() => run(() => onUnzip(file))} />
+      )}
 
       <Separator />
       <MenuItem label="Move to Trash" onClick={() => run(() => onTrash(targets))} />

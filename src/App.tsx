@@ -8,8 +8,9 @@ import { MacFinderToolbar, MacViewMode } from './components/MacFinderToolbar';
 import { Sidebar } from './components/Sidebar';
 import { rustBridge } from './services/rustBridge';
 import { useResizablePanel } from './hooks/useResizablePanel';
-import { buildOutgoingLibrary, buildIncomingLibrary, buildLibraryFromNotification } from './utils/libraryBuilders';
-import { filterFiles } from './utils/filterFiles';
+import { buildLibraryFromNotification } from './utils/libraryBuilders';
+import type { SwarmStatus } from './services/p2pBridge';
+import { DateFilter, FileSortDirection, FileSortKey, filterFiles, sortFiles } from './utils/filterFiles';
 import { useToast } from './hooks/useToast';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 import { useFileActions } from './hooks/useFileActions';
@@ -24,12 +25,25 @@ import { DocumentEditorModal } from './components/document-editor/DocumentEditor
 
 import {
   CloudAccount, FileItem, FolderItem, SharedLibrary, SharedMember,
-  CloudProviderId, FileCategory, AppNotification, RemovableDevice
+  CloudProviderId, FileCategory, AppNotification, RemovableDevice, FavoriteShortcut,
 } from './types';
 import {
   INITIAL_ACCOUNTS, INITIAL_FOLDERS, INITIAL_FILES, INITIAL_SHARED_LIBRARIES,
   INITIAL_NOTIFICATIONS, INITIAL_REMOVABLE_DEVICES
 } from './utils/sampleData';
+import {
+  AppPreferences,
+  loadPreferences,
+  loadProfile,
+  savePreferences,
+  saveProfile,
+} from './utils/appPreferences';
+import { cloudService } from './services/cloud';
+import { pickLocalFolderFromDisk } from './utils/importLocalFolder';
+import { p2pBridge, recordToSharedLibrary } from './services/p2pBridge';
+import type { CreateP2pLibraryForm, JoinP2pLibraryForm } from './components/SidebarModals';
+import type { MountedCloudResult } from './components/AddAccountModal';
+import type { CloudSyncPayload } from './components/CloudProviderIntegrationModal';
 
 export default function App() {
   // Accounts & Navigation States
@@ -55,11 +69,11 @@ export default function App() {
   const [isJoinIncomingOpen, setIsJoinIncomingOpen] = useState<boolean>(false);
   const [isAddFavoriteOpen, setIsAddFavoriteOpen] = useState<boolean>(false);
   const [isConnectServerOpen, setIsConnectServerOpen] = useState<boolean>(false);
-  const [customFavorites, setCustomFavorites] = useState<Array<{ id: string; name: string }>>([]);
+  const [customFavorites, setCustomFavorites] = useState<FavoriteShortcut[]>([]);
   const [networkServers, setNetworkServers] = useState<Array<{ name: string; desc: string; icon?: any; online: boolean }>>([
     { name: 'Studio NAS (10GbE SMB)', desc: '192.168.1.100', online: true },
     { name: 'Render Farm Cluster', desc: 'Node 01-08', online: true },
-    { name: 'Aether P2P Relay', desc: 'Direct encrypted', online: true },
+    { name: 'Cloudbreak P2P Relay', desc: 'Direct encrypted', online: true },
     { name: 'Edge Gateway (Cloud Relay)', desc: 'Direct encrypted proxy', online: true },
   ]);
 
@@ -68,7 +82,12 @@ export default function App() {
   const [selectedFileId, setSelectedFileId] = useState<string | null>(INITIAL_FILES[0]?.id || null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<FileCategory>('all');
-  const [viewMode, setViewMode] = useState<MacViewMode>('icons');
+  const [starredOnly, setStarredOnly] = useState(false);
+  const [dateFilter, setDateFilter] = useState<DateFilter>('any');
+  const [sortKey, setSortKey] = useState<FileSortKey>('name');
+  const [sortDirection, setSortDirection] = useState<FileSortDirection>('asc');
+  const [appPreferences, setAppPreferencesState] = useState<AppPreferences>(() => loadPreferences());
+  const [viewMode, setViewMode] = useState<MacViewMode>(() => loadPreferences().defaultView);
 
   // Vault E2EE State
   const [isVaultUnlocked, setIsVaultUnlocked] = useState<boolean>(false);
@@ -82,14 +101,22 @@ export default function App() {
   const [sharingLibrary, setSharingLibrary] = useState<SharedLibrary | null>(null);
   const [isVaultSecurityOpen, setIsVaultSecurityOpen] = useState<boolean>(false);
   const [isProfileSettingsOpen, setIsProfileSettingsOpen] = useState<boolean>(false);
-  const [userProfile, setUserProfile] = useState<UserProfile>({
-    name: 'Steven Azevedo',
-    email: 'you@example.com',
-    role: 'Sovereign Vault Administrator',
-  });
+  const [userProfile, setUserProfileState] = useState<UserProfile>(() => loadProfile());
   const [isAddAccountOpen, setIsAddAccountOpen] = useState<boolean>(false);
   const [integratingAccount, setIntegratingAccount] = useState<CloudAccount | null>(null);
-  const [isInspectorOpen, setIsInspectorOpen] = useState<boolean>(true);
+  const [isInspectorOpen, setIsInspectorOpen] = useState<boolean>(() => loadPreferences().showInspectorOnLaunch);
+
+  const setUserProfile = (profile: UserProfile) => {
+    setUserProfileState(profile);
+    saveProfile(profile);
+  };
+
+  const setAppPreferences = (prefs: AppPreferences) => {
+    setAppPreferencesState(prefs);
+    savePreferences(prefs);
+    setViewMode(prefs.defaultView);
+    setIsInspectorOpen(prefs.showInspectorOnLaunch);
+  };
 
   // Resizable sidebar & inspector widths
   const { width: sidebarWidth, isResizing: isResizingSidebar, startResize: startResizeSidebar, reset: resetSidebarWidth } =
@@ -98,6 +125,83 @@ export default function App() {
     useResizablePanel({ initial: 320, min: 260, max: () => Math.max(480, Math.round(window.innerWidth * 0.65)), grow: 'left' });
 
   const { toast: toastNotification, showToast } = useToast();
+  const [swarmStatus, setSwarmStatus] = useState<SwarmStatus | null>(null);
+
+  useEffect(() => {
+    setAccounts(prev => prev.map(account => (
+      cloudService.hasCredentials(account.id)
+        ? { ...account, liveConnected: true }
+        : account
+    )));
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        await p2pBridge.getIdentity(userProfile.name);
+        const records = await p2pBridge.listLibraries();
+        if (cancelled) return;
+        if (records.length) {
+          setSharedLibraries(prev => {
+            const byId = new Map(prev.map(l => [l.id, l]));
+            for (const rec of records) {
+              byId.set(rec.libraryId, recordToSharedLibrary(rec));
+            }
+            return [...byId.values()];
+          });
+          // Resume seeding for outgoing libraries so the tray status dot goes green.
+          for (const rec of records) {
+            if (rec.direction === 'outgoing' && rec.isSeeding) {
+              try {
+                await p2pBridge.startSeeding(rec.libraryId);
+              } catch {
+                // ignore per-library resume failures
+              }
+            }
+          }
+        }
+        const status = await p2pBridge.swarmStatus();
+        if (!cancelled) setSwarmStatus(status);
+        try {
+          await p2pBridge.refreshTrayStatus();
+        } catch {
+          // Browser preview has no tray
+        }
+      } catch {
+        // Browser / first launch — identity created on first seed/join
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [userProfile.name]);
+
+  const refreshSwarm = async () => {
+    try {
+      if (selectedLibraryId) {
+        await p2pBridge.startSeeding(selectedLibraryId);
+      }
+      const status = await p2pBridge.swarmStatus();
+      setSwarmStatus(status);
+      showToast(
+        status.listening
+          ? `Private swarm listening · invite-dial only · ${status.peers.filter(p => p.connected).length} peer(s)`
+          : `Private mode · ${status.seedingRootCids.length} root(s) seeding (no DHT)`,
+      );
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const copyLibraryInvite = async () => {
+    if (!selectedLibraryId) return;
+    try {
+      const invite = await p2pBridge.exportInvite(selectedLibraryId);
+      await navigator.clipboard.writeText(invite);
+      showToast('P2P invite copied to clipboard');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err));
+    }
+  };
 
   const handleToggleVaultLock = async (unlocked: boolean, passphrase?: string) => {
     try {
@@ -107,11 +211,48 @@ export default function App() {
         await rustBridge.lockVault();
       }
       setIsVaultUnlocked(unlocked);
-      showToast(unlocked ? 'Vault Decrypted' : 'Vault Locked & Encrypted');
+      if (appPreferences.securityAlerts) {
+        showToast(unlocked ? 'Vault Decrypted' : 'Vault Locked & Encrypted');
+      }
     } catch (err) {
       showToast(err instanceof Error ? err.message : String(err));
     }
   };
+
+  // Apply reduce-motion preference to the document root
+  useEffect(() => {
+    document.documentElement.classList.toggle('reduce-motion', appPreferences.reduceMotion);
+  }, [appPreferences.reduceMotion]);
+
+  // Auto-lock vault after idle timeout
+  useEffect(() => {
+    if (!isVaultUnlocked || appPreferences.autoLockMinutes <= 0) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const ms = appPreferences.autoLockMinutes * 60 * 1000;
+    const arm = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        void (async () => {
+          try {
+            await rustBridge.lockVault();
+            setIsVaultUnlocked(false);
+            if (appPreferences.securityAlerts) {
+              showToast('Vault auto-locked after idle timeout');
+            }
+          } catch {
+            // ignore
+          }
+        })();
+      }, ms);
+    };
+    const events: Array<keyof WindowEventMap> = ['pointerdown', 'keydown', 'mousemove', 'wheel'];
+    arm();
+    for (const ev of events) window.addEventListener(ev, arm, { passive: true });
+    return () => {
+      if (timer) clearTimeout(timer);
+      for (const ev of events) window.removeEventListener(ev, arm);
+    };
+  }, [isVaultUnlocked, appPreferences.autoLockMinutes, appPreferences.securityAlerts, showToast]);
 
   useGlobalShortcuts({
     canQuickLook: !!selectedFileId && !editingPhotoFile && !editingDocumentFile && !playingVideoFile && !sharingLibrary,
@@ -122,10 +263,14 @@ export default function App() {
   // Sidebar Action Handlers
   const handleCreateFolder = (name: string, category: string) => {
     const newId = `folder-${Date.now()}`;
+    const parentIsLocal = selectedFolder?.accountId === 'all';
     const newFolder: FolderItem = {
       id: newId,
       name,
-      accountId: selectedAccountId === 'all' ? 'gdrive' : selectedAccountId,
+      accountId: selectedAccountId === 'all' || parentIsLocal
+        ? (parentIsLocal ? 'all' : 'gdrive')
+        : selectedAccountId,
+      parentId: selectedFolderId ?? undefined,
       itemCount: 0,
       color: category === 'vault' ? 'emerald' : 'sky',
     };
@@ -134,30 +279,198 @@ export default function App() {
     showToast(`Created folder "${name}"`);
   };
 
-  const handleCreateLibrary = (name: string, description: string, memberEmail: string, role: 'viewer' | 'editor' | 'admin') => {
-    const newLib = buildOutgoingLibrary({
-      name,
-      description,
-      memberEmail,
-      role,
-      accountId: selectedAccountId === 'all' ? 's3' : selectedAccountId,
+  const handleAddLocalFolderFromDisk = async () => {
+    try {
+      const imported = await pickLocalFolderFromDisk();
+      if (!imported) return;
+      setFolders(prev => [...prev, ...imported.folders]);
+      if (imported.files.length) {
+        setFiles(prev => [...imported.files, ...prev]);
+      }
+      setSelectedAccountId('all');
+      setSelectedLibraryId(null);
+      setSelectedSourceId(null);
+      setSelectedFolderId(imported.rootFolder.id);
+      setSelectedFileId(imported.files[0]?.id ?? null);
+      const fileNote = imported.files.length
+        ? ` · ${imported.files.length} file${imported.files.length === 1 ? '' : 's'}`
+        : '';
+      showToast(`Added “${imported.rootFolder.name}” to Local Files${fileNote}`);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const handleCreateLibrary = async (form: CreateP2pLibraryForm) => {
+    await p2pBridge.getIdentity(userProfile.name);
+    const selected = files.filter(f => f.id === selectedFileId).slice(0, 1);
+    const payloadFiles = [];
+    for (const f of selected) {
+      try {
+        const res = await fetch(f.url);
+        const buf = new Uint8Array(await res.arrayBuffer());
+        let binary = '';
+        buf.forEach(b => { binary += String.fromCharCode(b); });
+        payloadFiles.push({
+          name: f.name,
+          mimeType: f.mimeType,
+          contentBase64: btoa(binary),
+        });
+      } catch {
+        // skip unreadable sample URLs
+      }
+    }
+    if (!payloadFiles.length) {
+      const note = `Cloudbreak P2P library: ${form.name}\n${form.description}\n`;
+      payloadFiles.push({
+        name: 'LIBRARY.txt',
+        mimeType: 'text/plain',
+        contentBase64: btoa(note),
+      });
+    }
+    const result = await p2pBridge.createLibrary({
+      name: form.name,
+      description: form.description,
+      role: form.role,
+      recipientEmail: form.memberEmail || undefined,
+      invitePassphrase: form.invitePassphrase.length >= 8 ? form.invitePassphrase : undefined,
+      bandwidthCap: form.bandwidthCap,
+      files: payloadFiles,
     });
-    setSharedLibraries(prev => [...prev, newLib]);
+    const newLib = recordToSharedLibrary(result.record);
+    if (form.memberEmail) {
+      newLib.members = [
+        ...newLib.members,
+        {
+          id: `m-${Date.now()}`,
+          name: form.memberEmail.split('@')[0],
+          email: form.memberEmail,
+          role: form.role,
+          status: 'pending',
+        },
+      ];
+      newLib.seedingPeers = [{
+        id: `p-${Date.now()}`,
+        name: form.memberEmail.split('@')[0],
+        email: form.memberEmail,
+        peerNodeId: result.record.ownerPeerId,
+        status: 'seeding',
+        role: form.role,
+      }];
+    }
+    setSharedLibraries(prev => [...prev.filter(l => l.id !== newLib.id), newLib]);
     setSelectedLibraryId(newLib.id);
-    showToast(`Seeding "${name}" to specified P2P peer users`);
+    try {
+      await navigator.clipboard.writeText(result.invite);
+      showToast(`Seeding “${form.name}” — invite copied to clipboard`);
+    } catch {
+      showToast(`Seeding “${form.name}” — export invite from Share`);
+    }
   };
 
-  const handleJoinIncomingLibrary = (name: string, inviteUrlOrCode: string, ownerName: string) => {
-    const newLib = buildIncomingLibrary(name, ownerName);
-    setSharedLibraries(prev => [...prev, newLib]);
+  const handleJoinIncomingLibrary = async (form: JoinP2pLibraryForm) => {
+    await p2pBridge.getIdentity(userProfile.name);
+    const result = await p2pBridge.acceptInvite(
+      form.invite,
+      form.passphrase || undefined,
+    );
+    let newLib = recordToSharedLibrary(result.record);
+    if (form.name) newLib = { ...newLib, name: form.name };
+    if (form.ownerName) {
+      newLib = {
+        ...newLib,
+        ownerName: form.ownerName,
+        senderPeerName: form.ownerName,
+      };
+    }
+    setSharedLibraries(prev => [...prev.filter(l => l.id !== newLib.id), newLib]);
     setSelectedLibraryId(newLib.id);
-    showToast(`Connected incoming P2P library "${name}" from ${ownerName}`);
+
+    // Materialize decrypted files into the browser file list when available
+    try {
+      const manifest = await p2pBridge.fetchManifest(newLib.id);
+      const imported: FileItem[] = [];
+      for (const entry of manifest.files) {
+        try {
+          const decrypted = await p2pBridge.readFile(newLib.id, entry.fileId);
+          const bytes = Uint8Array.from(atob(decrypted.contentBase64), c => c.charCodeAt(0));
+          const blob = new Blob([bytes], { type: decrypted.mimeType || entry.mimeType });
+          const url = URL.createObjectURL(blob);
+          imported.push({
+            id: entry.fileId,
+            name: form.name ? `${entry.name}` : decrypted.name || entry.name,
+            folderPath: `/P2P/${newLib.name}`,
+            accountId: 'all',
+            sizeBytes: decrypted.sizeBytes,
+            category: entry.mimeType.startsWith('image/')
+              ? 'photo'
+              : entry.mimeType.startsWith('video/')
+                ? 'video'
+                : entry.mimeType.startsWith('audio/')
+                  ? 'audio'
+                  : 'document',
+            mimeType: decrypted.mimeType || entry.mimeType,
+            updatedAt: new Date().toISOString(),
+            url,
+            thumbnailUrl: entry.mimeType.startsWith('image/') ? url : undefined,
+            tags: ['P2P', 'E2EE'],
+            encryption: {
+              isEncrypted: true,
+              algorithm: 'AES-256-GCM',
+              keyFingerprint: 'P2P library key',
+              checksumSha256: entry.plaintextSha256 || 'verified',
+              zeroKnowledgeVerified: true,
+            },
+            version: 1,
+          });
+        } catch {
+          // chunk not local yet
+        }
+      }
+      if (imported.length) {
+        setFiles(prev => [...imported, ...prev]);
+        newLib = { ...newLib, fileIds: imported.map(f => f.id) };
+        setSharedLibraries(prev => prev.map(l => (l.id === newLib.id ? newLib : l)));
+        setSelectedFileId(imported[0].id);
+      }
+    } catch {
+      // manifest may arrive after swarm sync
+    }
+
+    showToast(
+      result.fetchedChunks > 0
+        ? `Connected “${newLib.name}” · ${result.fetchedChunks} chunk(s) fetched`
+        : `Connected “${newLib.name}” — waiting for seeder chunks`,
+    );
   };
 
-  const handleAddFavorite = (name: string) => {
-    const newFav = { id: `fav-${Date.now()}`, name };
-    setCustomFavorites(prev => [...prev, newFav]);
-    showToast(`Added "${name}" to Favorites`);
+  const favoritedSourceIds = new Set(
+    customFavorites
+      .flatMap(f => [f.sourceId, f.folderId])
+      .filter((id): id is string => !!id),
+  );
+
+  const handleBrowseFavoriteFolder = async (): Promise<boolean> => {
+    const imported = await pickLocalFolderFromDisk();
+    if (!imported) return false;
+    setFolders(prev => [...prev, ...imported.folders]);
+    if (imported.files.length) {
+      setFiles(prev => [...imported.files, ...prev]);
+    }
+    const fav: FavoriteShortcut = {
+      id: `fav-${Date.now()}`,
+      name: imported.rootFolder.name,
+      kind: 'folder',
+      folderId: imported.rootFolder.id,
+    };
+    setCustomFavorites(prev => [...prev, fav]);
+    setSelectedAccountId('all');
+    setSelectedLibraryId(null);
+    setSelectedSourceId(null);
+    setSelectedFolderId(imported.rootFolder.id);
+    setSelectedFileId(imported.files[0]?.id ?? null);
+    showToast(`Added “${imported.rootFolder.name}” to Favorites`);
+    return true;
   };
 
   const handleAddNetworkServer = (name: string, address: string, protocol: string) => {
@@ -170,11 +483,53 @@ export default function App() {
     showToast(`Connected to server "${name}"`);
   };
 
+  const applyCloudLibrary = (accountId: CloudProviderId, library: { folders: FolderItem[]; files: FileItem[] }) => {
+    setFolders(prev => [
+      ...prev.filter(folder => folder.accountId !== accountId),
+      ...library.folders,
+    ]);
+    setFiles(prev => [
+      ...prev.filter(file => file.accountId !== accountId),
+      ...library.files,
+    ]);
+  };
+
+  const handleMountCloudAccount = (result: MountedCloudResult) => {
+    const { account, folders: remoteFolders, files: remoteFiles, note } = result;
+    setDisconnectedAccountIds(prev => {
+      const next = new Set(prev);
+      next.delete(account.id);
+      return next;
+    });
+    setAccounts(prev => {
+      const without = prev.filter(a => a.id !== account.id);
+      return [...without, account];
+    });
+    applyCloudLibrary(account.id, { folders: remoteFolders, files: remoteFiles });
+    setSelectedAccountId(account.id);
+    setSelectedFolderId(null);
+    setSelectedLibraryId(null);
+    setSelectedSourceId(null);
+    showToast(note || `Mounted ${account.name} · ${remoteFiles.length} files`);
+  };
+
+  const handleSyncCloudLibrary = (payload: CloudSyncPayload) => {
+    setAccounts(prev => prev.map(a => a.id === payload.account.id ? payload.account : a));
+    applyCloudLibrary(payload.account.id, {
+      folders: payload.folders,
+      files: payload.files,
+    });
+    if (payload.note) showToast(payload.note);
+  };
+
   const handleDisconnectAccount = (accountId: string) => {
     const account = accounts.find(a => a.id === accountId);
     if (!account) return;
 
+    cloudService.disconnect(accountId as CloudProviderId);
     setAccounts(prev => prev.filter(a => a.id !== accountId));
+    setFolders(prev => prev.filter(folder => folder.accountId !== accountId));
+    setFiles(prev => prev.filter(file => file.accountId !== accountId));
     setDisconnectedAccountIds(prev => new Set(prev).add(accountId));
 
     if (selectedAccountId === accountId) {
@@ -237,7 +592,14 @@ export default function App() {
   const selectedLibrary = sharedLibraries.find(lib => lib.id === selectedLibraryId) || null;
 
   // Filter files
-  const filteredFiles = filterFiles(files, { selectedLibrary, selectedLibraryId, selectedSourceId, selectedAccountId, selectedFolderId, selectedCategory, searchQuery, disconnectedAccountIds });
+  const filteredFiles = sortFiles(
+    filterFiles(files, {
+      selectedLibrary, selectedLibraryId, selectedSourceId, selectedAccountId, selectedFolderId,
+      selectedCategory, searchQuery, disconnectedAccountIds, starredOnly, dateFilter,
+    }),
+    sortKey,
+    sortDirection,
+  );
 
   const photoFiles = filteredFiles.filter(f => f.category === 'photo');
   const photoIndex = selectedFile?.category === 'photo' ? photoFiles.findIndex(f => f.id === selectedFile.id) : -1;
@@ -291,9 +653,18 @@ export default function App() {
   const {
     isDraggingOver,
     handleSavePhotoVersion, handleSaveDocument, handleSaveTrimmedVideo, handleToggleEncrypt, handleDeleteFile,
-    handleRenameFile, handleDuplicateFiles, handleCopyFileNames, handleToggleTag,
-    handleBatchEncrypt, handleBatchDelete, handleUploadFiles, handleDragOver, handleDragLeave, handleDrop,
-  } = useFileActions({ setFiles, selectedFileId, setSelectedFileId, selectedAccountId, selectedFolder, showToast });
+    handleRenameFile, handleDuplicateFiles, handleCopyFileNames, handlePasteFiles,
+    handleMoveFile, handleCompressFile, clipboardFileIds, handleToggleTag,
+    handleBatchRestore, handleBatchDelete, handleUploadFiles, handleUnzipFile, handleDragOver, handleDragLeave, handleDrop,
+  } = useFileActions({
+    setFiles,
+    selectedFileId,
+    setSelectedFileId,
+    selectedAccountId,
+    selectedFolder,
+    showToast,
+    confirmBeforeDelete: appPreferences.confirmBeforeDelete,
+  });
 
   // Picking an account, folder or library leaves any open network share / device.
   const selectAccount = (id: CloudProviderId) => {
@@ -313,6 +684,32 @@ export default function App() {
     setSelectedFolderId(null);
     const first = files.find(f => f.sourceId === sourceId);
     if (first) setSelectedFileId(first.id);
+  };
+
+  const handleAddFavoriteNetwork = (serverName: string) => {
+    if (favoritedSourceIds.has(serverName)) return;
+    setCustomFavorites(prev => [...prev, {
+      id: `fav-${Date.now()}`,
+      name: serverName,
+      kind: 'network',
+      sourceId: serverName,
+    }]);
+    openSource(serverName);
+    showToast(`Added “${serverName}” to Favorites`);
+  };
+
+  const handleAddFavoriteDevice = (deviceId: string) => {
+    if (favoritedSourceIds.has(deviceId)) return;
+    const device = removableDevices.find(d => d.id === deviceId);
+    if (!device) return;
+    setCustomFavorites(prev => [...prev, {
+      id: `fav-${Date.now()}`,
+      name: device.name,
+      kind: 'device',
+      sourceId: device.id,
+    }]);
+    openSource(device.id);
+    showToast(`Added “${device.name}” to Favorites`);
   };
 
   const handleEjectDevice = (deviceId: string) => {
@@ -370,7 +767,23 @@ export default function App() {
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
             selectedCategory={selectedCategory}
-            onCategoryChange={setSelectedCategory}
+            onCategoryChange={cat => {
+              setSelectedCategory(cat);
+              if (cat === 'files' || cat === 'photo' || cat === 'video') {
+                setSelectedSourceId(null);
+                setSelectedLibraryId(null);
+                setSelectedFolderId(null);
+                setSelectedAccountId('all');
+              }
+            }}
+            starredOnly={starredOnly}
+            onStarredOnlyChange={setStarredOnly}
+            dateFilter={dateFilter}
+            onDateFilterChange={setDateFilter}
+            sortKey={sortKey}
+            onSortKeyChange={setSortKey}
+            sortDirection={sortDirection}
+            onSortDirectionChange={setSortDirection}
             onQuickLook={() => setIsQuickLookOpen(true)}
             hasSelectedFile={selectedFile !== null}
             onShare={() => {
@@ -383,6 +796,8 @@ export default function App() {
             activeAccount={activeAccount}
             isSidebarCollapsed={isSidebarCollapsed}
             onToggleSidebar={() => setIsSidebarCollapsed(prev => !prev)}
+            isInspectorOpen={isInspectorOpen}
+            onToggleInspector={() => setIsInspectorOpen(prev => !prev)}
             isNotificationOpen={isNotificationOpen}
             onToggleNotifications={() => setIsNotificationOpen(prev => !prev)}
             onCloseNotifications={() => setIsNotificationOpen(false)}
@@ -419,11 +834,12 @@ export default function App() {
               userProfile={userProfile}
               onOpenShareModal={lib => setSharingLibrary(lib)}
               isVaultUnlocked={isVaultUnlocked}
+              compact={appPreferences.compactSidebar}
               width={sidebarWidth}
               isCollapsed={isSidebarCollapsed}
               onToggleCollapse={() => setIsSidebarCollapsed(prev => !prev)}
               onAddFavorite={() => setIsAddFavoriteOpen(true)}
-              onAddNewFolder={() => setIsNewFolderOpen(true)}
+              onAddNewFolder={handleAddLocalFolderFromDisk}
               onAddNewIncomingLibrary={() => setIsJoinIncomingOpen(true)}
               onAddNewOutgoingLibrary={() => setIsNewLibraryOpen(true)}
               onAddNewSharedLibrary={() => setIsNewLibraryOpen(true)}
@@ -436,6 +852,8 @@ export default function App() {
               selectedRemovableDeviceId={selectedSourceId}
               onSelectNetworkServer={openSource}
               selectedNetworkServerName={selectedSourceId}
+              selectedSourceId={selectedSourceId}
+              onSelectFavoriteSource={openSource}
             />
 
             {/* Sidebar Draggable Splitter Handle */}
@@ -474,31 +892,57 @@ export default function App() {
                   selectedAccountId={selectedAccountId}
                   selectedFolder={selectedFolder}
                   selectedLibrary={selectedLibrary}
+                  selectedCategory={selectedCategory}
                   selectedFileId={selectedFileId}
                   viewMode={viewMode}
                   onSelectFile={file => setSelectedFileId(file.id)}
                   onEditPhoto={file => setEditingPhotoFile(file)}
                   onOpenDocument={file => setEditingDocumentFile(file)}
-                  onOpenVideo={file => setPlayingVideoFile(file)}
+                  onOpenVideo={async file => {
+                    if (file.tags.includes('P2P') && file.encryption?.algorithm === 'AES-256-GCM') {
+                      const lib = sharedLibraries.find(l => l.fileIds.includes(file.id));
+                      if (lib) {
+                        try {
+                          showToast('Decrypting P2P stream…');
+                          const blob = await p2pBridge.assembleFileBlob(lib.id, file.id, file.mimeType);
+                          const url = URL.createObjectURL(blob);
+                          setPlayingVideoFile({ ...file, url });
+                          return;
+                        } catch (err) {
+                          showToast(err instanceof Error ? err.message : String(err));
+                        }
+                      }
+                    }
+                    setPlayingVideoFile(file);
+                  }}
                   onShareFile={file => {
                     const firstLib = sharedLibraries[0];
                     if (firstLib) setSharingLibrary(firstLib);
                   }}
                   onToggleEncrypt={handleToggleEncrypt}
                   onDeleteFile={handleDeleteFile}
-                  onBatchEncrypt={handleBatchEncrypt}
+                  onBatchRestore={handleBatchRestore}
                   onBatchDelete={handleBatchDelete}
                   onRenameFile={handleRenameFile}
                   onDuplicateFiles={handleDuplicateFiles}
                   onCopyFiles={handleCopyFileNames}
                   onToggleTag={handleToggleTag}
+                  onUnzipFile={file => { void handleUnzipFile(file); }}
                   onOpenQuickLook={() => setIsQuickLookOpen(true)}
                   folders={folders}
-                  onSelectFolder={selectFolder}
+                  onSelectFolder={id => {
+                    if (selectedCategory === 'files' || selectedCategory === 'photo' || selectedCategory === 'video') {
+                      setSelectedCategory('all');
+                    }
+                    selectFolder(id);
+                  }}
+                  swarmStatus={swarmStatus}
+                  onCopyLibraryInvite={() => { void copyLibraryInvite(); }}
+                  onRefreshSwarm={() => { void refreshSwarm(); }}
                 />
 
                 {/* Inspector Draggable Splitter Handle */}
-                {viewMode !== 'columns' && isInspectorOpen && selectedFile && (
+                {isInspectorOpen && selectedFile && (
                   <div
                     onMouseDown={startResizeInspector}
                     onDoubleClick={resetInspectorWidth}
@@ -511,14 +955,14 @@ export default function App() {
                   </div>
                 )}
 
-                {/* Right File Inspector (only in Icons / List / Gallery mode when open) */}
-                {viewMode !== 'columns' && isInspectorOpen && selectedFile && (
+                {/* Right File Inspector */}
+                {isInspectorOpen && selectedFile && (
                   <FileInspector
                     file={selectedFile}
                     photoNav={photoNav}
                     accounts={accounts}
+                    folders={folders}
                     isOpen={true}
-                    onClose={() => setIsInspectorOpen(false)}
                     onEditPhoto={file => setEditingPhotoFile(file)}
                     onOpenDocument={file => setEditingDocumentFile(file)}
                     onOpenVideo={(file, tab) => {
@@ -531,6 +975,17 @@ export default function App() {
                     }}
                     onToggleEncrypt={handleToggleEncrypt}
                     onDeleteFile={handleDeleteFile}
+                    onUnzipFile={file => { void handleUnzipFile(file); }}
+                    onCopyFile={file => { void handleCopyFileNames([file]); }}
+                    onPasteFiles={() => handlePasteFiles({
+                      folderId: selectedFile.folderId,
+                      folderPath: selectedFile.folderPath,
+                      accountId: selectedFile.accountId,
+                    })}
+                    onRenameFile={handleRenameFile}
+                    onMoveFile={handleMoveFile}
+                    onCompressFile={handleCompressFile}
+                    canPaste={clipboardFileIds.length > 0}
                     width={inspectorWidth}
                   />
                 )}
@@ -573,11 +1028,18 @@ export default function App() {
         setIsProfileSettingsOpen={setIsProfileSettingsOpen}
         userProfile={userProfile}
         setUserProfile={setUserProfile}
+        appPreferences={appPreferences}
+        setAppPreferences={setAppPreferences}
+        peerId={swarmStatus?.peerId ?? null}
+        swarmListening={swarmStatus?.listening ?? false}
+        p2pLibraryCount={sharedLibraries.length}
         showToast={showToast}
         isAddAccountOpen={isAddAccountOpen}
         setIsAddAccountOpen={setIsAddAccountOpen}
         setAccounts={setAccounts}
         setSelectedAccountId={setSelectedAccountId}
+        onMountCloudAccount={handleMountCloudAccount}
+        onSyncCloudLibrary={handleSyncCloudLibrary}
         integratingAccount={integratingAccount}
         setIntegratingAccount={setIntegratingAccount}
         isNewFolderOpen={isNewFolderOpen}
@@ -591,7 +1053,12 @@ export default function App() {
         handleJoinIncomingLibrary={handleJoinIncomingLibrary}
         isAddFavoriteOpen={isAddFavoriteOpen}
         setIsAddFavoriteOpen={setIsAddFavoriteOpen}
-        handleAddFavorite={handleAddFavorite}
+        networkServers={networkServers}
+        removableDevices={removableDevices}
+        favoritedSourceIds={favoritedSourceIds}
+        onBrowseFavoriteFolder={handleBrowseFavoriteFolder}
+        onAddFavoriteNetwork={handleAddFavoriteNetwork}
+        onAddFavoriteDevice={handleAddFavoriteDevice}
         isConnectServerOpen={isConnectServerOpen}
         setIsConnectServerOpen={setIsConnectServerOpen}
         handleAddNetworkServer={handleAddNetworkServer}

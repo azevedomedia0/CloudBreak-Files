@@ -1,4 +1,4 @@
-# AetherCloud Vault (cloudsync-hub)
+# Cloudbreak Files
 
 Tauri 2 + React 19 + Vite + Tailwind 4 desktop app. It manages many cloud accounts and has a client-side encrypted vault. Most UI data is sample data.
 
@@ -19,7 +19,7 @@ Tauri 2 + React 19 + Vite + Tailwind 4 desktop app. It manages many cloud accoun
 - Tauri bridge uses `@tauri-apps/api/core` (`invoke`, `isTauri`). Added `@tauri-apps/api` and `@tauri-apps/cli` and an `npm run tauri` script.
 - Strict CSP and `devCsp` set in `tauri.conf.json`. Allowed hosts: Google Fonts, Unsplash images, the sample-video bucket.
 - Removed the unused `fs`, `dialog` and `shell` plugins from `Cargo.toml`. Added `src-tauri/capabilities/default.json` (`core:default` only).
-- `package.json`: renamed to `aethercloud-vault`. Removed `@google/genai`, `express`, `dotenv`, `@types/express`. Deleted the empty `bun.lock`.
+- `package.json`: renamed to `cloudbreak-files`. Removed `@google/genai`, `express`, `dotenv`, `@types/express`. Deleted the empty `bun.lock`.
 - `src-tauri/icons/` and `build.rs` already existed. `.gitignore` now covers `src-tauri/target`, `src-tauri/gen`, `*.zip`.
 - Web side checked in a scratch copy outside OneDrive: `npm install`, `npm run lint` and `npm run build` pass.
 

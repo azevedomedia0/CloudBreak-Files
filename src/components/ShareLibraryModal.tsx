@@ -474,7 +474,7 @@ export const ShareLibraryModal: React.FC<ShareLibraryModalProps> = ({
         {/* Footer */}
         <div className="flex items-center justify-between px-6 py-3.5 border-t border-white/10 bg-neutral-950/80">
           <span className="text-[10px] text-neutral-500 font-mono">
-            {isOutgoing ? 'AetherCloud P2P Seeder • Mesh Protocol v2.6' : 'AetherCloud Encrypted Receiver'}
+            {isOutgoing ? 'Cloudbreak P2P Seeder • private invite-dial' : 'Cloudbreak Encrypted Receiver'}
           </span>
           <button
             onClick={onClose}

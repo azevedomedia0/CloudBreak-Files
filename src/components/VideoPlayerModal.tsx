@@ -378,7 +378,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-2 sm:p-4">
-      <div className="relative flex flex-col w-full h-[95vh] max-w-7xl bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden shadow-2xl">
+      <div className="relative flex flex-col w-full h-full bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden shadow-2xl">
         
         {/* Header */}
         <PlayerHeader file={file} duration={duration} activeTab={activeTab} setActiveTab={setActiveTab} onClose={onClose} />
@@ -398,7 +398,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
               <video
                 ref={videoRef}
                 src={file.url}
-                className="max-h-full max-w-full rounded object-contain shadow-2xl"
+                className="w-full max-h-full rounded object-contain shadow-2xl"
                 onLoadedMetadata={handleLoadedMetadata}
                 onTimeUpdate={handleTimeUpdate}
                 onPlay={() => setIsPlaying(true)}

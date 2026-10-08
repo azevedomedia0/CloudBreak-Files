@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { 
-  X, Folder, FolderPlus, Users, Server, Star, 
-  Check, Sparkles, HardDrive, Radio, Shield, Globe, FolderDown
+import {
+  X, Folder, FolderPlus, Server, Star,
+  HardDrive, Radio, Shield, FolderDown,
 } from 'lucide-react';
+import type { RemovableDevice } from '../types';
 
 /* 1. New Folder Modal */
 interface NewFolderModalProps {
@@ -123,10 +124,19 @@ export const NewFolderModal: React.FC<NewFolderModalProps> = ({
 
 
 /* 2. New Shared Library Modal (Outgoing P2P Seeding to Specified Users) */
+export interface CreateP2pLibraryForm {
+  name: string;
+  description: string;
+  memberEmail: string;
+  role: 'viewer' | 'editor' | 'admin';
+  bandwidthCap: string;
+  invitePassphrase: string;
+}
+
 interface NewSharedLibraryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreateLibrary: (name: string, description: string, memberEmail: string, role: 'viewer' | 'editor' | 'admin') => void;
+  onCreateLibrary: (form: CreateP2pLibraryForm) => void | Promise<void>;
 }
 
 export const NewSharedLibraryModal: React.FC<NewSharedLibraryModalProps> = ({
@@ -139,22 +149,36 @@ export const NewSharedLibraryModal: React.FC<NewSharedLibraryModalProps> = ({
   const [memberEmail, setMemberEmail] = useState('');
   const [role, setRole] = useState<'viewer' | 'editor' | 'admin'>('editor');
   const [bandwidthCap, setBandwidthCap] = useState<'50' | '100' | 'unlimited'>('100');
+  const [invitePassphrase, setInvitePassphrase] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!libName.trim()) return;
-    onCreateLibrary(
-      libName.trim(),
-      description.trim() || 'Media library seeding to specified P2P users',
-      memberEmail.trim(),
-      role
-    );
-    setLibName('');
-    setDescription('');
-    setMemberEmail('');
-    onClose();
+    setBusy(true);
+    setError(null);
+    try {
+      await onCreateLibrary({
+        name: libName.trim(),
+        description: description.trim() || 'Media library seeding to specified P2P users',
+        memberEmail: memberEmail.trim(),
+        role,
+        bandwidthCap: bandwidthCap === 'unlimited' ? 'unlimited' : `${bandwidthCap} MB/s`,
+        invitePassphrase: invitePassphrase.trim(),
+      });
+      setLibName('');
+      setDescription('');
+      setMemberEmail('');
+      setInvitePassphrase('');
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -165,7 +189,7 @@ export const NewSharedLibraryModal: React.FC<NewSharedLibraryModalProps> = ({
       >
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/10 bg-white/5">
           <div className="flex items-center gap-2.5">
-            <div className="p-1.5 rounded-lg bg-sky-500/20 text-sky-300 border border-sky-400/30">
+            <div className="p-1.5 rounded-lg bg-purple-500/20 text-purple-300 border border-purple-400/30">
               <Radio className="w-4 h-4 animate-pulse" />
             </div>
             <div>
@@ -192,7 +216,7 @@ export const NewSharedLibraryModal: React.FC<NewSharedLibraryModalProps> = ({
               value={libName}
               onChange={e => setLibName(e.target.value)}
               placeholder="e.g. Commercial 4K Master Seeding Reel"
-              className="w-full px-3.5 py-2 rounded-xl bg-black/40 border border-white/15 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400/50 transition-all font-sans"
+              className="w-full px-3.5 py-2 rounded-xl bg-black/40 border border-white/15 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400/50 transition-all font-sans"
             />
           </div>
 
@@ -205,7 +229,7 @@ export const NewSharedLibraryModal: React.FC<NewSharedLibraryModalProps> = ({
               value={description}
               onChange={e => setDescription(e.target.value)}
               placeholder="e.g. Seeding graded camera plates and soundtrack files"
-              className="w-full px-3.5 py-2 rounded-xl bg-black/40 border border-white/15 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400/50 transition-all font-sans"
+              className="w-full px-3.5 py-2 rounded-xl bg-black/40 border border-white/15 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400/50 transition-all font-sans"
             />
           </div>
 
@@ -218,7 +242,7 @@ export const NewSharedLibraryModal: React.FC<NewSharedLibraryModalProps> = ({
               value={memberEmail}
               onChange={e => setMemberEmail(e.target.value)}
               placeholder="peer@example.org or node-peer-sfo-19"
-              className="w-full px-3.5 py-2 rounded-xl bg-black/40 border border-white/15 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400/50 transition-all font-sans"
+              className="w-full px-3.5 py-2 rounded-xl bg-black/40 border border-white/15 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400/50 transition-all font-sans"
             />
             <p className="text-[10px] text-neutral-400 mt-1">
               Only the P2P users you explicitly specify will receive cryptographic chunk access.
@@ -233,7 +257,7 @@ export const NewSharedLibraryModal: React.FC<NewSharedLibraryModalProps> = ({
               <select
                 value={role}
                 onChange={e => setRole(e.target.value as any)}
-                className="w-full bg-black/40 border border-white/15 text-neutral-200 text-xs rounded-xl px-2.5 py-2 focus:outline-none focus:border-sky-400"
+                className="w-full bg-black/40 border border-white/15 text-neutral-200 text-xs rounded-xl px-2.5 py-2 focus:outline-none focus:border-purple-400"
               >
                 <option value="editor">Editor (Sync & Edit)</option>
                 <option value="viewer">Viewer (Stream Only)</option>
@@ -248,7 +272,7 @@ export const NewSharedLibraryModal: React.FC<NewSharedLibraryModalProps> = ({
               <select
                 value={bandwidthCap}
                 onChange={e => setBandwidthCap(e.target.value as any)}
-                className="w-full bg-black/40 border border-white/15 text-neutral-200 text-xs rounded-xl px-2.5 py-2 focus:outline-none focus:border-sky-400"
+                className="w-full bg-black/40 border border-white/15 text-neutral-200 text-xs rounded-xl px-2.5 py-2 focus:outline-none focus:border-purple-400"
               >
                 <option value="50">50 MB/s Cap</option>
                 <option value="100">100 MB/s Cap</option>
@@ -257,10 +281,27 @@ export const NewSharedLibraryModal: React.FC<NewSharedLibraryModalProps> = ({
             </div>
           </div>
 
-          <div className="p-2.5 rounded-xl bg-sky-500/10 border border-sky-400/20 text-[11px] text-sky-200 flex items-center gap-2">
-            <Shield className="w-4 h-4 text-sky-400 shrink-0" />
-            <span>Zero-Knowledge End-to-End P2P Seeder Protocol enabled.</span>
+          <div>
+            <label className="block text-xs font-medium text-neutral-300 mb-1.5">
+              Invite passphrase (E2EE wrap, min 8 chars)
+            </label>
+            <input
+              type="password"
+              value={invitePassphrase}
+              onChange={e => setInvitePassphrase(e.target.value)}
+              placeholder="Shared secret for recipients"
+              className="w-full px-3.5 py-2 rounded-xl bg-black/40 border border-white/15 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400/50 transition-all font-mono"
+            />
           </div>
+
+          <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-400/20 text-[11px] text-purple-200 flex items-center gap-2">
+            <Shield className="w-4 h-4 text-purple-400 shrink-0" />
+            <span>Private mode: AES-256-GCM chunks, signed invite-dial only — no DHT, STUN, or peer announce.</span>
+          </div>
+
+          {error && (
+            <p className="text-[11px] text-red-300/90 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{error}</p>
+          )}
 
           <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-white/10">
             <button
@@ -272,10 +313,10 @@ export const NewSharedLibraryModal: React.FC<NewSharedLibraryModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={!libName.trim()}
-              className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-sky-500 hover:bg-sky-400 text-white shadow-lg shadow-sky-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              disabled={!libName.trim() || busy}
+              className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-purple-500 hover:bg-purple-400 text-white shadow-lg shadow-purple-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
             >
-              Start Seeding Library
+              {busy ? 'Encrypting…' : 'Start Seeding Library'}
             </button>
           </div>
         </form>
@@ -284,41 +325,59 @@ export const NewSharedLibraryModal: React.FC<NewSharedLibraryModalProps> = ({
   );
 };
 
-/* 3. Add to Favorites Modal */
+/* 3. Add to Favorites Modal — browse folder, network share, or connected drive */
+type FavoriteChooserView = 'menu' | 'network' | 'device';
+
 interface AddFavoriteModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddFavorite: (name: string, type: 'search' | 'tag' | 'view') => void;
+  networkServers: Array<{ name: string; desc: string; online: boolean }>;
+  removableDevices: RemovableDevice[];
+  favoritedSourceIds: ReadonlySet<string>;
+  onBrowseFolder: () => Promise<boolean>;
+  onAddNetwork: (serverName: string) => void;
+  onAddDevice: (deviceId: string) => void;
 }
 
 export const AddFavoriteModal: React.FC<AddFavoriteModalProps> = ({
   isOpen,
   onClose,
-  onAddFavorite,
+  networkServers,
+  removableDevices,
+  favoritedSourceIds,
+  onBrowseFolder,
+  onAddNetwork,
+  onAddDevice,
 }) => {
-  const [favoriteName, setFavoriteName] = useState('');
-  const [favType, setFavType] = useState<'search' | 'tag' | 'view'>('view');
+  const [view, setView] = useState<FavoriteChooserView>('menu');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!favoriteName.trim()) return;
-    onAddFavorite(favoriteName.trim(), favType);
-    setFavoriteName('');
+  const resetAndClose = () => {
+    setView('menu');
+    setBusy(false);
+    setError(null);
     onClose();
   };
 
-  const quickPresets = [
-    { label: 'Recent Video Edits', type: 'view' as const },
-    { label: '4K Master Deliveries', type: 'tag' as const },
-    { label: 'Unsplash RAW Library', type: 'search' as const },
-    { label: 'Color Graded Stills', type: 'tag' as const },
-  ];
+  const handleBrowseFolder = async () => {
+    setError(null);
+    setBusy(true);
+    try {
+      const added = await onBrowseFolder();
+      if (added) resetAndClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
-      <div 
+      <div
         className="w-full max-w-md macos-window rounded-2xl overflow-hidden shadow-2xl border border-white/15 animate-in fade-in zoom-in-95 duration-150"
         onClick={e => e.stopPropagation()}
       >
@@ -328,71 +387,176 @@ export const AddFavoriteModal: React.FC<AddFavoriteModalProps> = ({
               <Star className="w-4 h-4 fill-amber-400" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-white">Add to Favorites</h3>
-              <p className="text-[10px] text-neutral-400">Pin quick shortcut to sidebar navigation</p>
+              <h3 className="text-sm font-semibold text-white">
+                {view === 'menu' ? 'Add to Favorites' : view === 'network' ? 'Network Storage' : 'Connected Drive'}
+              </h3>
+              <p className="text-[10px] text-neutral-400">
+                {view === 'menu'
+                  ? 'Pin a folder, network share, or connected hard drive'
+                  : view === 'network'
+                    ? 'Choose a network server or NAS share'
+                    : 'Choose a mounted removable drive'}
+              </p>
             </div>
           </div>
           <button
-            onClick={onClose}
+            type="button"
+            onClick={resetAndClose}
             className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-white/10 text-neutral-400 hover:text-white transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-neutral-300 mb-1.5">
-              Favorite Name
-            </label>
-            <input
-              type="text"
-              autoFocus
-              value={favoriteName}
-              onChange={e => setFavoriteName(e.target.value)}
-              placeholder="e.g. Master Exports"
-              className="w-full px-3.5 py-2 rounded-xl bg-black/40 border border-white/15 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/50 transition-all font-sans"
-            />
-          </div>
+        <div className="p-5 space-y-3">
+          {view === 'menu' && (
+            <>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={handleBrowseFolder}
+                className="w-full flex items-center gap-3 p-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-amber-400/40 text-left transition-all disabled:opacity-50"
+              >
+                <div className="p-2 rounded-lg bg-sky-500/15 text-sky-300 border border-sky-500/25">
+                  <Folder className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold text-white">Folder on this computer</div>
+                  <div className="text-[10px] text-neutral-400 truncate">Browse the filesystem and pin a directory</div>
+                </div>
+              </button>
 
-          <div>
-            <label className="block text-xs font-medium text-neutral-300 mb-1.5">
-              Quick Suggestions
-            </label>
-            <div className="flex flex-wrap gap-1.5">
-              {quickPresets.map(preset => (
-                <button
-                  key={preset.label}
-                  type="button"
-                  onClick={() => {
-                    setFavoriteName(preset.label);
-                    setFavType(preset.type);
-                  }}
-                  className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] text-neutral-300 hover:text-white transition-colors"
-                >
-                  + {preset.label}
-                </button>
-              ))}
+              <button
+                type="button"
+                onClick={() => { setError(null); setView('network'); }}
+                className="w-full flex items-center gap-3 p-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-amber-400/40 text-left transition-all"
+              >
+                <div className="p-2 rounded-lg bg-orange-500/15 text-orange-300 border border-orange-500/25">
+                  <Server className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold text-white">Network storage</div>
+                  <div className="text-[10px] text-neutral-400 truncate">
+                    {networkServers.length} server{networkServers.length === 1 ? '' : 's'} available
+                  </div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setError(null); setView('device'); }}
+                className="w-full flex items-center gap-3 p-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-amber-400/40 text-left transition-all"
+              >
+                <div className="p-2 rounded-lg bg-emerald-500/15 text-emerald-300 border border-emerald-500/25">
+                  <HardDrive className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold text-white">Connected hard drive</div>
+                  <div className="text-[10px] text-neutral-400 truncate">
+                    {removableDevices.filter(d => d.mounted).length} drive{removableDevices.filter(d => d.mounted).length === 1 ? '' : 's'} mounted
+                  </div>
+                </div>
+              </button>
+            </>
+          )}
+
+          {view === 'network' && (
+            <div className="space-y-1.5 max-h-64 overflow-y-auto">
+              {networkServers.length === 0 && (
+                <p className="text-xs text-neutral-400 py-4 text-center">No network servers connected yet.</p>
+              )}
+              {networkServers.map(server => {
+                const already = favoritedSourceIds.has(server.name);
+                return (
+                  <button
+                    key={server.name}
+                    type="button"
+                    disabled={already}
+                    onClick={() => {
+                      onAddNetwork(server.name);
+                      resetAndClose();
+                    }}
+                    className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-left transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <Server className="w-3.5 h-3.5 text-orange-300 shrink-0" />
+                      <div className="min-w-0">
+                        <div className="text-xs text-white truncate">{server.name}</div>
+                        <div className="text-[10px] text-neutral-500 font-mono truncate">{server.desc}</div>
+                      </div>
+                    </div>
+                    {already ? (
+                      <span className="text-[9px] text-amber-400/80 shrink-0">Pinned</span>
+                    ) : (
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${server.online ? 'bg-emerald-400' : 'bg-neutral-500'}`} />
+                    )}
+                  </button>
+                );
+              })}
             </div>
-          </div>
+          )}
 
-          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-white/10">
+          {view === 'device' && (
+            <div className="space-y-1.5 max-h-64 overflow-y-auto">
+              {removableDevices.filter(d => d.mounted).length === 0 && (
+                <p className="text-xs text-neutral-400 py-4 text-center">No removable drives are mounted.</p>
+              )}
+              {removableDevices.filter(d => d.mounted).map(device => {
+                const already = favoritedSourceIds.has(device.id);
+                return (
+                  <button
+                    key={device.id}
+                    type="button"
+                    disabled={already}
+                    onClick={() => {
+                      onAddDevice(device.id);
+                      resetAndClose();
+                    }}
+                    className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-left transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <HardDrive className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
+                      <div className="min-w-0">
+                        <div className="text-xs text-white truncate">{device.name}</div>
+                        <div className="text-[10px] text-neutral-500 font-mono truncate">{device.mountPoint}</div>
+                      </div>
+                    </div>
+                    {already ? (
+                      <span className="text-[9px] text-amber-400/80 shrink-0">Pinned</span>
+                    ) : (
+                      <span className="text-[9px] text-neutral-500 shrink-0">{device.connectionType}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {error && (
+            <p className="text-[11px] text-red-300/90 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{error}</p>
+          )}
+
+          <div className="flex items-center justify-between gap-2.5 pt-2 border-t border-white/10">
+            {view !== 'menu' ? (
+              <button
+                type="button"
+                onClick={() => { setError(null); setView('menu'); }}
+                className="px-3.5 py-1.5 rounded-xl text-xs text-neutral-300 hover:text-white hover:bg-white/10 transition-colors"
+              >
+                Back
+              </button>
+            ) : (
+              <span />
+            )}
             <button
               type="button"
-              onClick={onClose}
+              onClick={resetAndClose}
               className="px-3.5 py-1.5 rounded-xl text-xs text-neutral-300 hover:text-white hover:bg-white/10 transition-colors"
             >
               Cancel
             </button>
-            <button
-              type="submit"
-              disabled={!favoriteName.trim()}
-              className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-amber-500 hover:bg-amber-400 text-neutral-950 shadow-lg shadow-amber-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-            >
-              Add Favorite
-            </button>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   );
@@ -524,10 +688,17 @@ export const ConnectServerModal: React.FC<ConnectServerModalProps> = ({
 };
 
 /* 5. Join / Add Incoming P2P Shared Library Modal */
+export interface JoinP2pLibraryForm {
+  name: string;
+  invite: string;
+  ownerName: string;
+  passphrase: string;
+}
+
 interface JoinIncomingLibraryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onJoinLibrary: (name: string, inviteUrlOrCode: string, ownerName: string) => void;
+  onJoinLibrary: (form: JoinP2pLibraryForm) => void | Promise<void>;
 }
 
 export const JoinIncomingLibraryModal: React.FC<JoinIncomingLibraryModalProps> = ({
@@ -539,22 +710,36 @@ export const JoinIncomingLibraryModal: React.FC<JoinIncomingLibraryModalProps> =
   const [inviteCode, setInviteCode] = useState('');
   const [ownerName, setOwnerName] = useState('');
   const [p2pPassphrase, setP2pPassphrase] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!libraryName.trim()) return;
-    onJoinLibrary(
-      libraryName.trim(),
-      inviteCode.trim() || `p2p://peer-relay.mesh/stream/${Math.random().toString(36).substring(7)}`,
-      ownerName.trim() || 'Elena Rostova'
-    );
-    setLibraryName('');
-    setInviteCode('');
-    setOwnerName('');
-    setP2pPassphrase('');
-    onClose();
+    if (!inviteCode.trim().startsWith('aetherlib:1:')) {
+      setError('Paste a valid aetherlib:1:… invite from the seeder');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await onJoinLibrary({
+        name: libraryName.trim(),
+        invite: inviteCode.trim(),
+        ownerName: ownerName.trim(),
+        passphrase: p2pPassphrase,
+      });
+      setLibraryName('');
+      setInviteCode('');
+      setOwnerName('');
+      setP2pPassphrase('');
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -565,7 +750,7 @@ export const JoinIncomingLibraryModal: React.FC<JoinIncomingLibraryModalProps> =
       >
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/10 bg-white/5">
           <div className="flex items-center gap-2.5">
-            <div className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+            <div className="p-1.5 rounded-lg bg-green-500/20 text-green-300 border border-green-400/30">
               <FolderDown className="w-4 h-4 animate-bounce" />
             </div>
             <div>
@@ -592,7 +777,7 @@ export const JoinIncomingLibraryModal: React.FC<JoinIncomingLibraryModalProps> =
               value={libraryName}
               onChange={e => setLibraryName(e.target.value)}
               placeholder="e.g. Nordic Cinema Stills 2026"
-              className="w-full px-3.5 py-2 rounded-xl bg-black/40 border border-white/15 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400/50 transition-all font-sans"
+              className="w-full px-3.5 py-2 rounded-xl bg-black/40 border border-white/15 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-green-400 focus:ring-1 focus:ring-green-400/50 transition-all font-sans"
             />
           </div>
 
@@ -605,40 +790,44 @@ export const JoinIncomingLibraryModal: React.FC<JoinIncomingLibraryModalProps> =
               value={ownerName}
               onChange={e => setOwnerName(e.target.value)}
               placeholder="e.g. Elena Rostova (Nordic Cinema)"
-              className="w-full px-3.5 py-2 rounded-xl bg-black/40 border border-white/15 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400/50 transition-all font-sans"
+              className="w-full px-3.5 py-2 rounded-xl bg-black/40 border border-white/15 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-green-400 focus:ring-1 focus:ring-green-400/50 transition-all font-sans"
             />
           </div>
 
           <div>
             <label className="block text-xs font-medium text-neutral-300 mb-1.5">
-              Sender P2P Node URI / Swarm Link
+              Cloudbreak invite (aetherlib:1:…)
             </label>
-            <input
-              type="text"
+            <textarea
               value={inviteCode}
               onChange={e => setInviteCode(e.target.value)}
-              placeholder="p2p://cph-node-042.mesh/media/nordic-reel#stream"
-              className="w-full px-3.5 py-2 rounded-xl bg-black/40 border border-white/15 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400/50 transition-all font-mono"
+              rows={3}
+              placeholder="aetherlib:1:…"
+              className="w-full px-3.5 py-2 rounded-xl bg-black/40 border border-white/15 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-green-400 focus:ring-1 focus:ring-green-400/50 transition-all font-mono"
             />
           </div>
 
           <div>
             <label className="block text-xs font-medium text-neutral-300 mb-1.5">
-              P2P Pre-shared Encryption Key / Secret (Optional)
+              Invite passphrase (if seeder set one)
             </label>
             <input
               type="password"
               value={p2pPassphrase}
               onChange={e => setP2pPassphrase(e.target.value)}
               placeholder="••••••••••••••••••••••••"
-              className="w-full px-3.5 py-2 rounded-xl bg-black/40 border border-white/15 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400/50 transition-all font-mono"
+              className="w-full px-3.5 py-2 rounded-xl bg-black/40 border border-white/15 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-green-400 focus:ring-1 focus:ring-green-400/50 transition-all font-mono"
             />
           </div>
 
-          <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-200 flex items-center gap-2">
-            <Shield className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>Encrypted P2P stream verified with SHA-256 block chunk hashing.</span>
+          <div className="p-2.5 rounded-xl bg-green-500/10 border border-green-400/20 text-[11px] text-green-200 flex items-center gap-2">
+            <Shield className="w-4 h-4 text-green-400 shrink-0" />
+            <span>Private mode: signed invite unwraps the key; dial only seederAddrs from the invite — no DHT/STUN.</span>
           </div>
+
+          {error && (
+            <p className="text-[11px] text-red-300/90 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{error}</p>
+          )}
 
           <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-white/10">
             <button
@@ -650,10 +839,10 @@ export const JoinIncomingLibraryModal: React.FC<JoinIncomingLibraryModalProps> =
             </button>
             <button
               type="submit"
-              disabled={!libraryName.trim()}
-              className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/25 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              disabled={!inviteCode.trim() || busy}
+              className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-green-500 hover:bg-green-400 text-white shadow-lg shadow-green-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
             >
-              Connect P2P Stream
+              {busy ? 'Connecting…' : 'Connect P2P Stream'}
             </button>
           </div>
         </form>

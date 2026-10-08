@@ -36,39 +36,45 @@ export const PlayerHeader: React.FC<PlayerHeaderProps> = ({ file, duration, acti
 
       {/* Mode Switcher Buttons */}
       <div className="flex items-center gap-2">
-        <div className="flex p-0.5 bg-neutral-800 rounded-lg border border-neutral-700/60 text-xs">
+        <div className="flex p-0.5 bg-neutral-800 rounded-lg border border-neutral-700/60">
           <button
+            type="button"
+            title="Player"
+            aria-label="Player"
             onClick={() => setActiveTab('player')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition-colors ${
+            className={`flex items-center justify-center p-2 rounded-md transition-colors ${
               activeTab === 'player'
                 ? 'bg-neutral-700 text-white shadow-sm'
                 : 'text-neutral-400 hover:text-neutral-200'
             }`}
           >
             <Play className="w-3.5 h-3.5 fill-current" />
-            <span>Player</span>
           </button>
           <button
+            type="button"
+            title="Trim Cut"
+            aria-label="Trim Cut"
             onClick={() => setActiveTab('trim')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition-colors ${
+            className={`flex items-center justify-center p-2 rounded-md transition-colors ${
               activeTab === 'trim'
                 ? 'bg-neutral-700 text-cyan-300 shadow-sm'
                 : 'text-neutral-400 hover:text-neutral-200'
             }`}
           >
             <Scissors className="w-3.5 h-3.5" />
-            <span>Trim Cut</span>
           </button>
           <button
+            type="button"
+            title="Convert"
+            aria-label="Convert"
             onClick={() => setActiveTab('convert')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition-colors ${
+            className={`flex items-center justify-center p-2 rounded-md transition-colors ${
               activeTab === 'convert'
                 ? 'bg-neutral-700 text-amber-300 shadow-sm'
                 : 'text-neutral-400 hover:text-neutral-200'
             }`}
           >
             <RefreshCw className="w-3.5 h-3.5" />
-            <span>Convert</span>
           </button>
         </div>
 

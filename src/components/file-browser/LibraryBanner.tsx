@@ -1,16 +1,23 @@
 import React from 'react';
-import { ShieldCheck, FolderDown, FolderUp, Users, Wifi } from 'lucide-react';
+import { ShieldCheck, FolderDown, FolderUp, Users, Wifi, Copy, Radio } from 'lucide-react';
 import { FileItem, SharedLibrary } from '../../types';
 import { formatBytes } from '../../utils/format';
+import type { SwarmStatus } from '../../services/p2pBridge';
 
 export interface LibraryBannerProps {
   files: FileItem[];
   selectedLibrary: SharedLibrary;
   totalSize: number;
   onShareFile: (file: FileItem) => void;
+  swarmStatus?: SwarmStatus | null;
+  onCopyInvite?: () => void;
+  onRefreshSwarm?: () => void;
 }
 
-export const LibraryBanner: React.FC<LibraryBannerProps> = ({ files, selectedLibrary, totalSize, onShareFile }) => (
+export const LibraryBanner: React.FC<LibraryBannerProps> = ({
+  files, selectedLibrary, totalSize, onShareFile, swarmStatus, onCopyInvite, onRefreshSwarm,
+}) => (
+
     <div className={`px-4 py-3 border-b backdrop-blur-md z-10 transition-colors ${
       selectedLibrary.direction === 'incoming'
         ? 'bg-emerald-950/40 border-emerald-500/25'
@@ -68,16 +75,34 @@ export const LibraryBanner: React.FC<LibraryBannerProps> = ({ files, selectedLib
 
               <span className="text-neutral-400 bg-black/40 border border-white/5 px-2 py-0.5 rounded flex items-center gap-1">
                 <Wifi className="w-3 h-3 text-sky-400" />
-                <span>Protocol: {selectedLibrary.p2pProtocol || (selectedLibrary.direction === 'incoming' ? 'Encrypted Direct P2P' : 'Zero-Knowledge P2P Seeder')}</span>
+                <span>Protocol: {selectedLibrary.p2pProtocol || 'Cloudbreak private · invite-dial only'}</span>
               </span>
 
-              {selectedLibrary.transferSpeed && (
+              <span className="text-emerald-300/90 bg-emerald-500/10 border border-emerald-500/25 px-2 py-0.5 rounded flex items-center gap-1 font-semibold">
+                <ShieldCheck className="w-3 h-3" />
+                <span>Private mode · no DHT/STUN</span>
+              </span>
+
+              {swarmStatus && (
+                <span className="text-neutral-400 bg-black/40 border border-white/5 px-2 py-0.5 rounded flex items-center gap-1">
+                  <Radio className="w-3 h-3 text-amber-400" />
+                  <span>
+                    Invite peers: {swarmStatus.peers.filter(p => p.connected).length}
+                    {' · '}↑{formatBytes(swarmStatus.bytesSent)} ↓{formatBytes(swarmStatus.bytesReceived)}
+                    {swarmStatus.privateMode ? ' · private' : ''}
+                  </span>
+                </span>
+              )}
+
+              {(selectedLibrary.transferSpeed || swarmStatus) && (
                 <span className={`px-2 py-0.5 rounded font-semibold border ${
                   selectedLibrary.direction === 'incoming'
                     ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
                     : 'bg-purple-500/10 text-purple-300 border-purple-400/20'
                 }`}>
-                  {selectedLibrary.direction === 'incoming' ? `↓ ${selectedLibrary.transferSpeed}` : `↑ Seeding at ${selectedLibrary.transferSpeed}`}
+                  {selectedLibrary.direction === 'incoming'
+                    ? `↓ ${selectedLibrary.transferSpeed || formatBytes(swarmStatus?.bytesReceived ?? 0)}`
+                    : `↑ Seeding · ${swarmStatus?.listening ? 'listening' : 'local'}`}
                 </span>
               )}
             </div>
@@ -86,9 +111,31 @@ export const LibraryBanner: React.FC<LibraryBannerProps> = ({ files, selectedLib
 
         {/* Action buttons on the right */}
         <div className="flex items-center gap-2 self-end md:self-center shrink-0">
+          {onCopyInvite && selectedLibrary.direction === 'outgoing' && (
+            <button
+              type="button"
+              onClick={onCopyInvite}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 bg-white/5 hover:bg-white/10 text-neutral-200 border border-white/15 transition-all"
+              title="Copy aetherlib invite"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              <span>Copy Invite</span>
+            </button>
+          )}
+          {onRefreshSwarm && (
+            <button
+              type="button"
+              onClick={onRefreshSwarm}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 bg-white/5 hover:bg-white/10 text-neutral-200 border border-white/15 transition-all"
+              title="Refresh swarm status"
+            >
+              <Wifi className="w-3.5 h-3.5" />
+              <span>Swarm</span>
+            </button>
+          )}
           <button
             type="button"
-            onClick={() => onShareFile(files[0] || ({} as any))}
+            onClick={() => onShareFile(files[0] || ({} as FileItem))}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all ${
               selectedLibrary.direction === 'incoming'
                 ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border border-emerald-500/40'

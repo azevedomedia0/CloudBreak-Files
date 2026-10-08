@@ -63,18 +63,18 @@ export const NetworkSection: React.FC<NetworkSectionProps> = ({ onAddNetworkServ
                     onClick={() => onSelectRemovableDevice?.(dev)}
                     className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-all group text-left ${
                       isSelected
-                        ? 'bg-orange-500/20 text-orange-200 font-medium shadow-sm'
+                        ? 'bg-[#CC3700]/20 text-[#FF8F5C] font-medium shadow-sm'
                         : 'text-neutral-300 hover:bg-white/5 hover:text-white'
                     }`}
                     title={`${dev.name} (${dev.connectionType})\nMount: ${dev.mountPoint}\nFormat: ${dev.fileSystem}\nFree: ${formatBytes(dev.freeBytes)} of ${formatBytes(dev.capacityBytes)}`}
                   >
                     <div className="flex items-center gap-2 truncate min-w-0">
                       {dev.type === 'memory_card' ? (
-                        <Disc className={`w-4 h-4 shrink-0 ${isSelected ? 'text-amber-400' : 'text-amber-400/80'}`} />
+                        <Disc className={`w-4 h-4 shrink-0 ${isSelected ? 'text-[#CC3700]' : 'text-[#CC3700]/85'}`} />
                       ) : dev.type === 'thunderbolt_raid' ? (
-                        <Database className={`w-4 h-4 shrink-0 ${isSelected ? 'text-purple-400' : 'text-purple-400/80'}`} />
+                        <Database className={`w-4 h-4 shrink-0 ${isSelected ? 'text-[#CC3700]' : 'text-[#CC3700]/85'}`} />
                       ) : (
-                        <Usb className={`w-4 h-4 shrink-0 ${isSelected ? 'text-orange-400' : 'text-orange-400/80'}`} />
+                        <Usb className={`w-4 h-4 shrink-0 ${isSelected ? 'text-[#CC3700]' : 'text-[#CC3700]/85'}`} />
                       )}
                       <div className="truncate min-w-0">
                         <div className="truncate font-medium leading-tight text-[11px]">{dev.name}</div>

@@ -1,19 +1,46 @@
 import React, { useState } from 'react';
 import {
-  X, Check, Shield, ShieldCheck, Key, Globe,
-  ExternalLink, Server, RefreshCw, Lock, Sparkles,
-  Sliders, Link2, HardDrive, CheckCircle2, AlertCircle, Unlink
+  X, Check, Key, Globe,
+  RefreshCw, CheckCircle2, AlertCircle, Unlink, Loader2
 } from 'lucide-react';
-import { CloudAccount } from '../types';
+import { CloudAccount, FileItem, FolderItem } from '../types';
 import { formatBytes } from '../utils/format';
+import {
+  cloudService,
+  CloudProviderKind,
+  defaultEndpoint,
+  credentialStore,
+} from '../services/cloud';
+import { AccessTokenGuide, isTokenProvider } from './cloud/AccessTokenGuide';
+
+export interface CloudSyncPayload {
+  account: CloudAccount;
+  folders: FolderItem[];
+  files: FileItem[];
+  note?: string;
+}
 
 interface CloudProviderIntegrationModalProps {
   account: CloudAccount | null;
   isOpen: boolean;
   onClose: () => void;
   onUpdateAccount?: (updated: CloudAccount) => void;
+  onSyncLibrary?: (payload: CloudSyncPayload) => void;
   onShowToast?: (message: string) => void;
   onDisconnect?: (accountId: string) => void;
+}
+
+function asProviderKind(provider: string): CloudProviderKind | null {
+  if (
+    provider === 'Google Drive'
+    || provider === 'Dropbox'
+    || provider === 'OneDrive'
+    || provider === 'MEGA Drive'
+    || provider === 'Nextcloud'
+  ) {
+    return provider;
+  }
+  return null;
 }
 
 export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationModalProps> = ({
@@ -21,62 +48,126 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
   isOpen,
   onClose,
   onUpdateAccount,
+  onSyncLibrary,
   onShowToast,
   onDisconnect,
 }) => {
-  if (!isOpen || !account) return null;
+  const kind = account ? asProviderKind(account.provider) : null;
+  const existing = account ? credentialStore.get(account.id) : null;
 
-  const [activeTab, setActiveTab] = useState<'integration' | 'security' | 'sync'>('integration');
-  const [accountName, setAccountName] = useState(account.name);
-  const [accountEmail, setAccountEmail] = useState(account.email);
+  const [activeTab, setActiveTab] = useState<'integration' | 'sync'>('integration');
+  const [accountName, setAccountName] = useState(account?.name ?? '');
+  const [accountEmail, setAccountEmail] = useState(account?.email ?? '');
   const [serverEndpoint, setServerEndpoint] = useState(
-    account.provider === 'Nextcloud'
-      ? 'https://cloud.example.org/remote.php/dav/files/your-username'
-      : account.provider === 'MEGA Drive'
-      ? 'https://g.api.mega.co.nz/cs'
-      : account.provider === 'OneDrive'
-      ? 'https://graph.microsoft.com/v1.0/me/drive'
-      : account.provider === 'Google Drive'
-      ? 'https://www.googleapis.com/drive/v3'
-      : 'https://api.dropboxapi.com/2'
+    account?.endpoint
+      || existing?.endpoint
+      || (kind ? defaultEndpoint(kind) : ''),
   );
-  // Credentials are never pre-filled. Enter a real token or app password here.
+  const [username, setUsername] = useState(existing?.username || '');
+  // Credentials are never pre-filled from secrets. Enter a real token or app password here.
   const [apiKey, setApiKey] = useState('');
-  const [isE2EE, setIsE2EE] = useState(account.encryptionLevel !== 'Standard TLS');
   const [autoSync, setAutoSync] = useState(true);
   const [isTesting, setIsTesting] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [testResult, setTestResult] = useState<'idle' | 'success' | 'failed'>('idle');
+  const [testError, setTestError] = useState<string | null>(null);
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
 
-  const handleTestConnection = () => {
-    setIsTesting(true);
+  React.useEffect(() => {
+    if (!account) return;
+    const saved = credentialStore.get(account.id);
+    const nextKind = asProviderKind(account.provider);
+    setAccountName(account.name);
+    setAccountEmail(account.email);
+    setServerEndpoint(account.endpoint || saved?.endpoint || (nextKind ? defaultEndpoint(nextKind) : ''));
+    setUsername(saved?.username || '');
+    setApiKey('');
+    setActiveTab('integration');
     setTestResult('idle');
-    setTimeout(() => {
-      setIsTesting(false);
-      setTestResult('success');
-      onShowToast?.(`Successfully connected to ${account.provider} API gateway (18ms latency)`);
-    }, 900);
+    setTestError(null);
+    setConfirmingDisconnect(false);
+  }, [account?.id]);
+
+  if (!isOpen || !account) return null;
+
+  const buildCreds = () => {
+    if (!kind) throw new Error(`Unsupported provider: ${account.provider}`);
+    const tokenOrPass = apiKey.trim() || existing?.accessToken || existing?.password || '';
+    return {
+      accountId: account.id,
+      provider: kind,
+      endpoint: serverEndpoint.trim() || defaultEndpoint(kind),
+      accessToken: kind === 'Nextcloud' || kind === 'MEGA Drive' ? undefined : tokenOrPass,
+      username: kind === 'Nextcloud' || kind === 'MEGA Drive'
+        ? (username.trim() || accountEmail.trim())
+        : undefined,
+      password: kind === 'Nextcloud' || kind === 'MEGA Drive' ? tokenOrPass : undefined,
+      updatedAt: new Date().toISOString(),
+    };
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleTestConnection = async () => {
+    setIsTesting(true);
+    setTestResult('idle');
+    setTestError(null);
+    try {
+      const info = await cloudService.testConnection(buildCreds());
+      setAccountEmail(info.email);
+      setTestResult('success');
+      onShowToast?.(`Verified ${account.provider} as ${info.email}`);
+    } catch (err) {
+      setTestResult('failed');
+      setTestError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    const updated: CloudAccount = {
-      ...account,
-      name: accountName.trim() || account.name,
-      email: accountEmail.trim() || account.email,
-      encryptionLevel: isE2EE ? 'Client E2EE AES-256' : 'Standard TLS',
-    };
-    onUpdateAccount?.(updated);
-    onShowToast?.(`Updated ${updated.name} integration settings`);
-    onClose();
+    if (!kind) {
+      onUpdateAccount?.({
+        ...account,
+        name: accountName.trim() || account.name,
+        email: accountEmail.trim() || account.email,
+      });
+      onClose();
+      return;
+    }
+
+    setIsSyncing(true);
+    setTestError(null);
+    try {
+      const { info, library, note } = await cloudService.connectAndSync(buildCreds());
+      const updated: CloudAccount = {
+        ...account,
+        name: accountName.trim() || account.name,
+        email: info.email || accountEmail.trim() || account.email,
+        usedBytes: info.usedBytes || account.usedBytes,
+        totalBytes: info.totalBytes || account.totalBytes,
+        status: 'connected',
+        liveConnected: true,
+        endpoint: serverEndpoint.trim() || defaultEndpoint(kind),
+      };
+      onSyncLibrary?.({ account: updated, folders: library.folders, files: library.files, note });
+      onUpdateAccount?.(updated);
+      onShowToast?.(note || `Synced ${library.files.length} items from ${updated.name}`);
+      onClose();
+    } catch (err) {
+      setTestResult('failed');
+      setTestError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const handleDisconnect = () => {
+    cloudService.disconnect(account.id);
     onDisconnect?.(account.id);
     onClose();
   };
 
-  const pct = Math.min(100, Math.round((account.usedBytes / account.totalBytes) * 100));
+  const pct = Math.min(100, Math.round((account.usedBytes / Math.max(account.totalBytes, 1)) * 100));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-150">
@@ -93,9 +184,15 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
                 <h2 className="text-sm font-semibold text-white tracking-tight">
                   {account.name} Integration
                 </h2>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-medium flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  <span>Connected</span>
+                <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-medium flex items-center gap-1 ${
+                  account.liveConnected || credentialStore.has(account.id)
+                    ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                    : 'bg-amber-500/15 text-amber-200 border border-amber-500/30'
+                }`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${
+                    account.liveConnected || credentialStore.has(account.id) ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
+                  }`} />
+                  <span>{account.liveConnected || credentialStore.has(account.id) ? 'Live API' : 'Demo data'}</span>
                 </span>
               </div>
               <p className="text-[11px] text-neutral-400 font-mono">
@@ -125,17 +222,6 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
             }`}
           >
             Provider Integration
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('security')}
-            className={`px-3 py-2 border-b-2 font-medium transition-all ${
-              activeTab === 'security'
-                ? 'border-sky-400 text-sky-200 font-semibold'
-                : 'border-transparent text-neutral-400 hover:text-neutral-200'
-            }`}
-          >
-            Security & E2EE
           </button>
           <button
             type="button"
@@ -210,89 +296,82 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
                 />
               </div>
 
-              {/* API Token / Credentials */}
-              <div>
-                <label className="text-xs font-medium text-neutral-300 block mb-1.5">
-                  {account.provider === 'Nextcloud' ? 'App Password / Access Token' : 'Integration OAuth / API Secret Key'}
-                </label>
-                <div className="relative">
+              {(account.provider === 'Nextcloud' || account.provider === 'MEGA Drive') && (
+                <div>
+                  <label className="text-xs font-medium text-neutral-300 block mb-1.5">
+                    {account.provider === 'MEGA Drive' ? 'MEGA Email' : 'WebDAV Username'}
+                  </label>
                   <input
-                    type="password"
-                    value={apiKey}
-                    onChange={e => setApiKey(e.target.value)}
-                    placeholder="Paste a token or app password"
-                    autoComplete="off"
-                    className="w-full bg-[#0e0e0f] border border-[#2c2c2f] rounded-lg px-3 py-2 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-sky-500 font-mono text-[11px] pr-10"
+                    type="text"
+                    value={username}
+                    onChange={e => setUsername(e.target.value)}
+                    placeholder={account.provider === 'MEGA Drive' ? 'you@example.com' : 'username'}
+                    className="w-full bg-[#0e0e0f] border border-[#2c2c2f] rounded-lg px-3 py-2 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-sky-500 font-sans"
                   />
-                  <div className="absolute right-2.5 top-2.5 text-neutral-500">
-                    <Key className="w-3.5 h-3.5" />
-                  </div>
                 </div>
+              )}
+
+              {/* API Token / Credentials */}
+              <div className="space-y-2.5">
+                <div>
+                  <label className="text-xs font-medium text-neutral-300 block mb-1.5">
+                    {account.provider === 'Nextcloud'
+                      ? 'App Password'
+                      : account.provider === 'MEGA Drive'
+                      ? 'Password'
+                      : 'OAuth Access Token'}
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="password"
+                      value={apiKey}
+                      onChange={e => setApiKey(e.target.value)}
+                      placeholder={existing ? 'Leave blank to keep saved credentials' : 'Paste a token or password'}
+                      autoComplete="off"
+                      className="w-full bg-[#0e0e0f] border border-[#2c2c2f] rounded-lg px-3 py-2 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-sky-500 font-mono text-[11px] pr-10"
+                    />
+                    <div className="absolute right-2.5 top-2.5 text-neutral-500">
+                      <Key className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                  {account.liveConnected && (
+                    <p className="text-[10px] text-emerald-400/80 mt-1.5">Live credentials on file for this account.</p>
+                  )}
+                </div>
+                {isTokenProvider(account.provider) && <AccessTokenGuide provider={account.provider} />}
               </div>
 
               {/* Test Connection Button */}
-              <div className="pt-1 flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={handleTestConnection}
-                  disabled={isTesting}
-                  className="px-3 py-2 rounded-lg bg-[#1c1c1f] hover:bg-[#27272b] border border-[#323236] text-neutral-200 text-xs font-medium flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 text-sky-400 ${isTesting ? 'animate-spin' : ''}`} />
-                  <span>{isTesting ? 'Testing connection...' : `Test ${account.provider} Integration`}</span>
-                </button>
-
-                {testResult === 'success' && (
-                  <span className="text-emerald-400 font-mono text-[11px] flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Gateway verified (18ms)</span>
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'security' && (
-            <div className="space-y-4">
-              {/* E2EE Toggle */}
-              <div className="p-3.5 rounded-xl bg-[#0b0b0c] border border-[#212124] space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                    <span className="font-semibold text-neutral-100">Client-Side E2EE AES-256</span>
-                  </div>
+              <div className="pt-1 flex flex-col gap-2">
+                <div className="flex items-center justify-between gap-3">
                   <button
                     type="button"
-                    onClick={() => setIsE2EE(prev => !prev)}
-                    className={`w-10 h-5 rounded-full transition-colors relative cursor-pointer ${isE2EE ? 'bg-emerald-500' : 'bg-neutral-700'}`}
+                    onClick={() => void handleTestConnection()}
+                    disabled={isTesting || !kind}
+                    className="px-3 py-2 rounded-lg bg-[#1c1c1f] hover:bg-[#27272b] border border-[#323236] text-neutral-200 text-xs font-medium flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
                   >
-                    <div className={`w-3.5 h-3.5 rounded-full bg-white absolute top-0.5 transition-transform ${isE2EE ? 'left-5.5' : 'left-1'}`} />
+                    <RefreshCw className={`w-3.5 h-3.5 text-sky-400 ${isTesting ? 'animate-spin' : ''}`} />
+                    <span>{isTesting ? 'Testing connection...' : `Test ${account.provider} Integration`}</span>
                   </button>
-                </div>
-                <p className="text-[11px] text-neutral-400 leading-relaxed">
-                  When enabled, all assets synchronized to {account.name} are client-encrypted with zero-knowledge keys before leaving this workstation.
-                </p>
-              </div>
 
-              {/* Key Fingerprint */}
-              <div className="p-3.5 rounded-xl bg-[#0b0b0c] border border-[#212124] space-y-1.5">
-                <span className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider block font-mono">
-                  Cryptographic Key Fingerprint
-                </span>
-                <div className="font-mono text-xs text-sky-300 bg-[#0e0e0f] p-2 rounded-lg border border-[#262629] break-all select-all">
-                  SHA256:7e:9b:12:44:8a:00:c3:91:ff:1a:28:cc:40:99:ee:b1
+                  {testResult === 'success' && (
+                    <span className="text-emerald-400 font-mono text-[11px] flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Gateway verified</span>
+                    </span>
+                  )}
+                  {testResult === 'failed' && (
+                    <span className="text-rose-400 font-mono text-[11px] flex items-center gap-1.5">
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      <span>Failed</span>
+                    </span>
+                  )}
                 </div>
-              </div>
-
-              {/* Encryption Algorithm */}
-              <div className="p-3.5 rounded-xl bg-[#0b0b0c] border border-[#212124] flex items-center justify-between">
-                <div>
-                  <div className="text-xs font-semibold text-neutral-200">Cipher Specification</div>
-                  <div className="text-[11px] text-neutral-400">Authenticated Galois/Counter Mode</div>
-                </div>
-                <span className="text-[11px] font-mono text-emerald-300 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded">
-                  AES-256-GCM
-                </span>
+                {testError && (
+                  <p className="text-[11px] text-rose-300 bg-rose-950/30 border border-rose-900/40 rounded-lg px-2.5 py-2">
+                    {testError}
+                  </p>
+                )}
               </div>
             </div>
           )}
@@ -379,7 +458,7 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
                 type="button"
                 onClick={() => setConfirmingDisconnect(true)}
                 className="px-4 py-2 rounded-lg bg-red-950/50 hover:bg-red-900/60 border border-red-800/60 text-red-300 hover:text-red-100 text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer"
-                title={`Disconnect ${account.name} from AetherCloud`}
+                title={`Disconnect ${account.name} from Cloudbreak Files`}
               >
                 <Unlink className="w-3.5 h-3.5" />
                 <span>Disconnect Account</span>
@@ -394,10 +473,13 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                  disabled={isSyncing}
+                  className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
                 >
-                  <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                  <span>Save & Apply Integration</span>
+                  {isSyncing
+                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    : <Check className="w-3.5 h-3.5 stroke-[2.5]" />}
+                  <span>{isSyncing ? 'Syncing…' : 'Save & Sync'}</span>
                 </button>
               </div>
             </div>
