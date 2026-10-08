@@ -194,7 +194,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
           {art ? (
             <img src={art} alt="" className="w-full h-full object-cover" />
           ) : (
-            <div className="w-full h-full bg-gradient-to-br from-violet-500/70 to-sky-600/60" />
+            <div className="w-full h-full bg-gradient-to-br from-neutral-700 to-neutral-850" />
           )}
         </div>
         <div className="audio-player-controls flex items-center gap-1.5">
@@ -384,7 +384,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
                   {art ? (
                     <img src={art} alt="" className="w-full h-full object-cover" />
                   ) : (
-                    <div className="w-full h-full bg-gradient-to-br from-violet-500/70 to-sky-600/60" />
+                    <div className="w-full h-full bg-gradient-to-br from-neutral-700 to-neutral-850" />
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
@@ -424,7 +424,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
                       {track.thumbnailUrl ? (
                         <img src={track.thumbnailUrl} alt="" className="w-full h-full object-cover" />
                       ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-violet-500/70 to-sky-600/60" />
+                        <div className="w-full h-full bg-gradient-to-br from-neutral-700 to-neutral-850" />
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
