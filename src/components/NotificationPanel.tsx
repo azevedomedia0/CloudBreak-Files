@@ -20,27 +20,27 @@ interface NotificationPanelProps {
 function TypeIcon({ type }: { type: AppNotification['type'] }) {
   if (type === 'incoming_library') {
     return (
-      <span className="w-6 h-6 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 flex items-center justify-center shrink-0">
+      <span className="w-6 h-6 rounded-md bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 flex items-center justify-center shrink-0">
         <FolderDown className="w-3 h-3" />
       </span>
     );
   }
   if (type === 'seeding_event') {
     return (
-      <span className="w-6 h-6 rounded-md bg-sky-500/15 text-sky-300 border border-sky-400/25 flex items-center justify-center shrink-0">
+      <span className="w-6 h-6 rounded-md bg-sky-500/15 text-sky-400 border border-sky-400/25 flex items-center justify-center shrink-0">
         <FolderUp className="w-3 h-3" />
       </span>
     );
   }
   if (type === 'security') {
     return (
-      <span className="w-6 h-6 rounded-md bg-cyan-500/15 text-cyan-300 border border-cyan-400/25 flex items-center justify-center shrink-0">
+      <span className="w-6 h-6 rounded-md bg-cyan-500/15 text-cyan-400 border border-cyan-400/25 flex items-center justify-center shrink-0">
         <ShieldCheck className="w-3 h-3" />
       </span>
     );
   }
   return (
-    <span className="w-6 h-6 rounded-md bg-amber-500/15 text-amber-300 border border-amber-400/25 flex items-center justify-center shrink-0">
+    <span className="w-6 h-6 rounded-md bg-amber-500/15 text-amber-500 border border-amber-400/25 flex items-center justify-center shrink-0">
       <HardDrive className="w-3 h-3" />
     </span>
   );
@@ -95,14 +95,14 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
   return (
     <div
       ref={panelRef}
-      className="absolute right-0 top-full mt-2 w-72 sm:w-80 max-h-[70vh] flex flex-col bg-[#0a0a0b] border border-[#2c2c2f] rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150"
+      className="notification-panel absolute right-0 top-full mt-2 w-72 sm:w-80 max-h-[70vh] flex flex-col bg-neutral-950 border border-neutral-800 rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150"
     >
-      <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-[#262629] bg-[#0e0e0f] select-none">
+      <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-white/10 bg-neutral-900 select-none">
         <div className="flex items-center gap-2 min-w-0">
-          <Bell className="w-3.5 h-3.5 text-sky-300 shrink-0" />
+          <Bell className="w-3.5 h-3.5 text-sky-400 shrink-0" />
           <span className="text-xs font-semibold text-white tracking-tight">Alerts</span>
           {unreadCount > 0 && (
-            <span className="text-[9px] font-mono px-1.5 py-px rounded-full bg-sky-500/20 text-sky-300 border border-sky-400/25 font-bold">
+            <span className="text-[9px] font-mono px-1.5 py-px rounded-full bg-sky-500/20 text-sky-400 border border-sky-400/25 font-bold">
               {unreadCount}
             </span>
           )}
@@ -112,7 +112,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
             <button
               type="button"
               onClick={onMarkAllAsRead}
-              className="p-1 rounded-md text-neutral-400 hover:text-white hover:bg-[#202023] transition-colors"
+              className="p-1 rounded-md text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
               title="Mark all as read"
             >
               <CheckCheck className="w-3.5 h-3.5" />
@@ -121,7 +121,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-md text-neutral-400 hover:text-white hover:bg-[#202023] transition-colors"
+            className="p-1 rounded-md text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
             title="Close"
           >
             <X className="w-3.5 h-3.5" />
@@ -129,7 +129,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
         </div>
       </div>
 
-      <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-[#262629] bg-[#111113] select-none">
+      <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-white/10 bg-neutral-850 select-none">
         {([
           { id: 'all' as const, label: `All ${notifications.length}` },
           { id: 'invites' as const, label: pendingInvitesCount ? `P2P ${pendingInvitesCount}` : 'P2P' },
@@ -142,9 +142,9 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
             className={`px-2 py-0.5 rounded-md text-[10px] font-medium transition-all ${
               filter === tab.id
                 ? tab.id === 'invites'
-                  ? 'bg-emerald-500/20 text-emerald-200'
-                  : 'bg-[#2c2c30] text-white'
-                : 'text-neutral-400 hover:text-neutral-200 hover:bg-[#19191b]'
+                  ? 'bg-emerald-500/20 text-emerald-400'
+                  : 'bg-neutral-750 text-white'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900'
             }`}
           >
             {tab.label}
@@ -152,7 +152,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
         ))}
       </div>
 
-      <div className="overflow-y-auto max-h-[52vh] p-1.5 space-y-1 bg-[#141416]">
+      <div className="overflow-y-auto max-h-[52vh] p-1.5 space-y-1 bg-neutral-900/80">
         {filteredNotifications.length === 0 ? (
           <div className="py-8 flex flex-col items-center justify-center text-center px-3">
             <Bell className="w-4 h-4 text-neutral-500 mb-1.5" />
@@ -171,8 +171,8 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
                 key={notification.id}
                 className={`px-2 py-1.5 rounded-lg border transition-colors ${
                   !notification.read
-                    ? 'bg-[#1c1c1f] border-[#323236]'
-                    : 'bg-[#0f0f10] border-[#1e1e21] hover:border-[#2c2c2f]'
+                    ? 'bg-neutral-800 border-neutral-700'
+                    : 'bg-neutral-950 border-neutral-850 hover:border-neutral-800'
                 }`}
               >
                 <div className="flex items-start gap-2">
@@ -219,7 +219,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
                             <button
                               type="button"
                               onClick={() => onDeclineLibrary(notification.id)}
-                              className="h-6 px-2 rounded-md text-[10px] font-medium bg-[#19191b] border border-[#323236] text-neutral-300 hover:text-red-300 hover:border-red-500/30"
+                              className="h-6 px-2 rounded-md text-[10px] font-medium bg-neutral-900 border border-neutral-700 text-neutral-300 hover:text-red-400 hover:border-red-500/30"
                             >
                               Decline
                             </button>
