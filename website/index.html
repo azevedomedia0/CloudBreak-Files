@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CloudBreak Files — A new wave of file browsing</title>
+    <meta
+      name="description"
+      content="CloudBreak Files: A new wave of file browsing. Multi-cloud libraries, a private vault, and media tools in one calm desktop surface."
+    />
+    <link rel="icon" type="image/png" href="./assets/icon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700;9..144,800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="grain" aria-hidden="true"></div>
+    <div class="wash" aria-hidden="true"></div>
+
+    <header class="nav-wrap">
+      <nav class="nav-pill" aria-label="Primary">
+        <a class="nav-brand" href="#top">
+          <img src="./assets/icon.png" alt="" width="28" height="28" />
+          <span>CLOUDBREAK</span>
+        </a>
+        <div class="nav-links">
+          <a href="#features">Product</a>
+          <a href="#flow">How it works</a>
+          <a href="#vault">Vault</a>
+        </div>
+        <a class="nav-cta" href="#download">Get the app</a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <h1 class="reveal">
+          <span class="brand-line">CloudBreak Files</span>
+          <span class="slogan-line">A new wave of file browsing</span>
+        </h1>
+        <p class="hero-lede reveal reveal-delay-1">
+          One calm surface for every cloud, a private vault that never leaves your machine,
+          and media tools that stay out of the way until you need them.
+        </p>
+        <div class="hero-actions reveal reveal-delay-2">
+          <a class="btn btn-primary" href="#download">Download for Mac</a>
+          <a class="btn btn-ghost" href="#features">See what’s inside</a>
+        </div>
+
+        <div class="hero-stage reveal reveal-delay-3" aria-hidden="true">
+          <div class="device">
+            <div class="device-chrome">
+              <span class="traffic"></span>
+              <span class="traffic"></span>
+              <span class="traffic"></span>
+              <span class="device-title">CloudBreak Files</span>
+            </div>
+            <div class="device-body">
+              <aside class="mock-side">
+                <div class="mock-label">Local Files</div>
+                <div class="mock-row active">Music</div>
+                <div class="mock-row">Photos</div>
+                <div class="mock-row">Videos</div>
+                <div class="mock-row">Documents</div>
+                <div class="mock-label late">Cloud</div>
+                <div class="mock-row">Google Drive</div>
+                <div class="mock-row">Dropbox</div>
+              </aside>
+              <div class="mock-main">
+                <div class="mock-tile">
+                  <div class="mock-art a1"></div>
+                  <span>Pacific Fog</span>
+                </div>
+                <div class="mock-tile">
+                  <div class="mock-art a2"></div>
+                  <span>Coast B-Roll</span>
+                </div>
+                <div class="mock-tile">
+                  <div class="mock-art a3"></div>
+                  <span>Brand Reel</span>
+                </div>
+                <div class="mock-tile">
+                  <div class="mock-art a4"></div>
+                  <span>Vault Notes</span>
+                </div>
+              </div>
+            </div>
+            <div class="mock-player">
+              <div class="mock-player-art"></div>
+              <div class="mock-player-meta">
+                <strong>Field Recording — Pacific Fog</strong>
+                <div class="mock-scrub"><i></i></div>
+              </div>
+              <div class="mock-vol"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="logos" aria-label="Works with">
+        <p>Mounts the clouds you already trust</p>
+        <ul>
+          <li>Google Drive</li>
+          <li>Dropbox</li>
+          <li>OneDrive</li>
+          <li>MEGA</li>
+          <li>Nextcloud</li>
+          <li>Local disks</li>
+        </ul>
+      </section>
+
+      <section id="features" class="features">
+        <div class="section-head">
+          <h2>Everything in one tide.</h2>
+        </div>
+        <div class="feature-list">
+          <article class="feature">
+            <span class="feature-index">01</span>
+            <h3>All your mounts, one browser</h3>
+            <p>
+              Local disks, network shares, and cloud accounts sit in the same sidebar.
+              Finder-fluent views without hopping between windows.
+            </p>
+          </article>
+          <article class="feature">
+            <span class="feature-index">02</span>
+            <h3>Private vault, real crypto</h3>
+            <p>
+              AES-256-GCM with a passphrase that never leaves your machine.
+              Encrypt when it matters. Stay honest when it doesn’t.
+            </p>
+          </article>
+          <article class="feature">
+            <span class="feature-index">03</span>
+            <h3>Media without the detour</h3>
+            <p>
+              Photos, video, documents, and a full-bleed audio player stay in context.
+              Edit, preview, play — then get back to the library.
+            </p>
+          </article>
+          <article class="feature">
+            <span class="feature-index">04</span>
+            <h3>Share libraries peer to peer</h3>
+            <p>
+              Seed encrypted libraries to trusted peers. Invites, chunks, and pull
+              without turning your drive into someone else’s cloud.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section id="flow" class="flow">
+        <div class="section-head">
+          <h2>From first open to daily habit.</h2>
+        </div>
+        <ol class="flow-steps">
+          <li>
+            <strong>Mount</strong>
+            <span>Connect the clouds and folders you already use.</span>
+          </li>
+          <li>
+            <strong>Browse</strong>
+            <span>Icons, list, columns, or gallery — same library, your rhythm.</span>
+          </li>
+          <li>
+            <strong>Protect</strong>
+            <span>Unlock the vault once. Encrypt the assets that should stay quiet.</span>
+          </li>
+          <li>
+            <strong>Ship</strong>
+            <span>Play audio, cut video, share a library, keep moving.</span>
+          </li>
+        </ol>
+      </section>
+
+      <section id="vault" class="vault">
+        <div class="vault-copy">
+          <h2>Your passphrase. Your keys. Our silence.</h2>
+          <p>
+            CloudBreak stores a salted verifier — never the passphrase, never a recoverable key.
+            Session crypto stays on-device so encrypted bytes mean what they say.
+          </p>
+          <ul class="vault-points">
+            <li>AES-256-GCM</li>
+            <li>PBKDF2 · 600,000 rounds</li>
+            <li>Client-side only</li>
+          </ul>
+        </div>
+        <div class="vault-panel" aria-hidden="true">
+          <div class="vault-badge">VAULT LOCKED</div>
+          <div class="vault-fingerprint">9c:a1:83:fe:72:0b:da:51</div>
+          <div class="vault-field">Enter vault passphrase</div>
+          <div class="vault-btn">Unlock</div>
+        </div>
+      </section>
+
+      <section class="stories">
+        <div class="section-head">
+          <h2>Made for people who touch files for a living.</h2>
+        </div>
+        <div class="story-grid">
+          <article class="story">
+            <h3>Editorial teams</h3>
+            <p>Keep selects, call sheets, and coast b-roll in one mount without losing the vault for the sensitive pack.</p>
+            <dl>
+              <div><dt>Clouds</dt><dd>3+</dd></div>
+              <div><dt>Views</dt><dd>4</dd></div>
+            </dl>
+          </article>
+          <article class="story">
+            <h3>Solo operators</h3>
+            <p>Drop local drives next to Drive and Dropbox. Play audio in place. Stop juggling five windows for one job.</p>
+            <dl>
+              <div><dt>Setup</dt><dd>Minutes</dd></div>
+              <div><dt>Focus</dt><dd>One surface</dd></div>
+            </dl>
+          </article>
+          <article class="story">
+            <h3>Peer collaborators</h3>
+            <p>Seed a library, send an invite, pull encrypted chunks — sharing that still feels like ownership.</p>
+            <dl>
+              <div><dt>Mode</dt><dd>P2P</dd></div>
+              <div><dt>Trust</dt><dd>Invite-only</dd></div>
+            </dl>
+          </article>
+        </div>
+      </section>
+
+      <section id="download" class="download">
+        <h2>Ride the next wave.</h2>
+        <p>CloudBreak Files for macOS. Linux COSMIC port in progress. Web preview available for exploring the surface.</p>
+        <div class="download-actions">
+          <a class="btn btn-primary" href="../">Open web preview</a>
+          <a class="btn btn-dark" href="https://github.com/azevedomedia0/Ultima-Files" target="_blank" rel="noreferrer">View on GitHub</a>
+        </div>
+      </section>
+
+      <section class="faq" id="faq">
+        <div class="section-head">
+          <h2>Questions, answered.</h2>
+        </div>
+        <div class="faq-list">
+          <details open>
+            <summary>Is CloudBreak Files a cloud itself?</summary>
+            <p>No. It sits on top of the clouds and disks you already have — a browser and vault, not another storage silo.</p>
+          </details>
+          <details>
+            <summary>Are my files encrypted by default?</summary>
+            <p>Only when you encrypt them or place them in the vault. We don’t claim encryption for plain previews or demo flags.</p>
+          </details>
+          <details>
+            <summary>Can I use it in the browser?</summary>
+            <p>Yes — the web preview runs the same UI with Web Crypto for vault work. Desktop unlocks the full Tauri bridge, tray, and PTY terminal.</p>
+          </details>
+          <details>
+            <summary>What about Linux?</summary>
+            <p>A native COSMIC port lives in the repo. Architecture and vault crypto are in place; polish continues on Pop!_OS.</p>
+          </details>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-brand">
+        <img src="./assets/icon.png" alt="" width="40" height="40" />
+        <div>
+          <strong>CloudBreak Files</strong>
+          <p>A new wave of file browsing.</p>
+        </div>
+      </div>
+      <div class="footer-links">
+        <a href="#features">Product</a>
+        <a href="#vault">Vault</a>
+        <a href="#faq">FAQ</a>
+        <a href="https://github.com/azevedomedia0/Ultima-Files" target="_blank" rel="noreferrer">GitHub</a>
+      </div>
+      <p class="footer-copy">© <span id="year"></span> CloudBreak Files</p>
+    </footer>
+
+    <script src="./main.js"></script>
+  </body>
+</html>
