@@ -6,6 +6,7 @@ import { FileThumbnail } from './FileThumbnail';
 import { FolderTile } from './FolderTile';
 import { SelectionAccent, SELECTION_CLASSES } from '../../utils/selectionAccent';
 import { formatBytes, formatTimecode } from '../../utils/format';
+import { setFileDragData } from '../../utils/fileDrag';
 
 export interface IconsViewProps {
   accent: SelectionAccent;
@@ -44,6 +45,8 @@ export const IconsView: React.FC<IconsViewProps> = ({
         return (
           <div
             key={file.id}
+            draggable
+            onDragStart={e => setFileDragData(e.dataTransfer, file)}
             onClick={() => onSelectFile(file)}
             onContextMenu={event => onFileContextMenu(file, event)}
             onDoubleClick={() => {

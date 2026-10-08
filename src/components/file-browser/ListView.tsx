@@ -6,6 +6,7 @@ import { FileThumbnail } from './FileThumbnail';
 import { FolderTile } from './FolderTile';
 import { SelectionAccent, SELECTION_CLASSES } from '../../utils/selectionAccent';
 import { formatBytes, formatDate } from '../../utils/format';
+import { setFileDragData } from '../../utils/fileDrag';
 
 const LOCAL_ROOTS = [
   '/desktop', '/documents', '/photos', '/videos', '/music', '/downloads', '/applications', '/trash',
@@ -94,6 +95,8 @@ export const ListView: React.FC<ListViewProps> = ({
             return (
               <tr
                 key={file.id}
+                draggable
+                onDragStart={e => setFileDragData(e.dataTransfer, file)}
                 onClick={() => onSelectFile(file)}
                 onContextMenu={event => onFileContextMenu(file, event)}
                 onDoubleClick={() => {

@@ -174,10 +174,15 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
           className="p-4 flex flex-col items-center justify-center text-center gap-3 cursor-pointer hover:bg-white/5 transition-colors flex-1"
           title="Click to expand inspector details"
         >
-          <div className="p-3 rounded-2xl bg-sky-500/10 border border-sky-400/20 text-sky-300 shadow-sm">
+          <div className={`p-3 rounded-2xl shadow-sm border ${
+            isZipArchive(file)
+              ? 'bg-pink-500/10 border-pink-400/25 text-pink-300'
+              : 'bg-sky-500/10 border-sky-400/20 text-sky-300'
+          }`}>
             {file.category === 'photo' && <ImageIcon className="w-6 h-6" />}
             {file.category === 'video' && <Video className="w-6 h-6" />}
-            {file.category !== 'photo' && file.category !== 'video' && <FileText className="w-6 h-6" />}
+            {isZipArchive(file) && <Archive className="w-6 h-6" />}
+            {file.category !== 'photo' && file.category !== 'video' && !isZipArchive(file) && <FileText className="w-6 h-6" />}
           </div>
           <div className="max-w-[200px]">
             <p className="text-xs font-semibold text-neutral-200 truncate">{file.name}</p>
@@ -410,7 +415,7 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                 <button
                   type="button"
                   onClick={() => onUnzipFile(file)}
-                  className="col-span-2 h-9 rounded-lg bg-violet-500/15 hover:bg-violet-500/25 border border-violet-400/30 text-violet-300 flex items-center justify-center gap-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer"
+                  className="col-span-2 h-9 rounded-lg bg-pink-500/15 hover:bg-pink-500/25 border border-pink-400/30 text-pink-300 flex items-center justify-center gap-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer"
                   title="Unzip archive"
                   aria-label="Unzip archive"
                 >
@@ -424,7 +429,7 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                     if (isEditableDocument(file)) onOpenDocument(file);
                     else onEditPhoto(file);
                   }}
-                  className="col-span-2 h-9 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/30 text-amber-300 flex items-center justify-center gap-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer"
+                  className="col-span-2 h-9 rounded-lg bg-[#c45c26]/18 hover:bg-[#c45c26]/28 border border-[#e07a45]/40 text-[#e8a070] flex items-center justify-center gap-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer"
                   title={isEditableDocument(file) ? 'Edit document' : 'Open'}
                   aria-label={isEditableDocument(file) ? 'Edit document' : 'Open'}
                 >
