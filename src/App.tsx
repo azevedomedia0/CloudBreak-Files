@@ -99,6 +99,7 @@ export default function App() {
   const [editingPhotoFile, setEditingPhotoFile] = useState<FileItem | null>(null);
   const [editingDocumentFile, setEditingDocumentFile] = useState<FileItem | null>(null);
   const [playingVideoFile, setPlayingVideoFile] = useState<FileItem | null>(null);
+  const [playingAudioFile, setPlayingAudioFile] = useState<FileItem | null>(null);
   const [videoPlayerInitialTab, setVideoPlayerInitialTab] = useState<'player' | 'trim' | 'convert'>('player');
   const [sharingLibrary, setSharingLibrary] = useState<SharedLibrary | null>(null);
   const [isVaultSecurityOpen, setIsVaultSecurityOpen] = useState<boolean>(false);
@@ -263,7 +264,7 @@ export default function App() {
   }, [isVaultUnlocked, appPreferences.autoLockMinutes, appPreferences.securityAlerts, showToast]);
 
   useGlobalShortcuts({
-    canQuickLook: !!selectedFileId && !editingPhotoFile && !editingDocumentFile && !playingVideoFile && !sharingLibrary,
+    canQuickLook: !!selectedFileId && !editingPhotoFile && !editingDocumentFile && !playingVideoFile && !playingAudioFile && !sharingLibrary,
     onToggleSidebar: () => setIsSidebarCollapsed(prev => !prev),
     onToggleQuickLook: () => setIsQuickLookOpen(prev => !prev),
   });
@@ -937,10 +938,13 @@ export default function App() {
                   selectedCategory={selectedCategory}
                   selectedFileId={selectedFileId}
                   viewMode={viewMode}
+                  playingAudioFile={playingAudioFile}
+                  audioPlaylist={files.filter(f => f.category === 'audio')}
                   onSelectFile={file => setSelectedFileId(file.id)}
                   onEditPhoto={file => setEditingPhotoFile(file)}
                   onOpenDocument={file => setEditingDocumentFile(file)}
                   onOpenVideo={async file => {
+                    setPlayingAudioFile(null);
                     if (file.tags.includes('P2P') && file.encryption?.algorithm === 'AES-256-GCM') {
                       const lib = sharedLibraries.find(l => l.fileIds.includes(file.id));
                       if (lib) {
@@ -957,6 +961,12 @@ export default function App() {
                     }
                     setPlayingVideoFile(file);
                   }}
+                  onOpenAudio={file => {
+                    setPlayingVideoFile(null);
+                    setSelectedFileId(file.id);
+                    setPlayingAudioFile(file);
+                  }}
+                  onCloseAudio={() => setPlayingAudioFile(null)}
                   onShareFile={file => {
                     const firstLib = sharedLibraries[0];
                     if (firstLib) setSharingLibrary(firstLib);
@@ -1021,8 +1031,14 @@ export default function App() {
                     onEditPhoto={file => setEditingPhotoFile(file)}
                     onOpenDocument={file => setEditingDocumentFile(file)}
                     onOpenVideo={(file, tab) => {
+                      setPlayingAudioFile(null);
                       setPlayingVideoFile(file);
                       if (tab) setVideoPlayerInitialTab(tab);
+                    }}
+                    onOpenAudio={file => {
+                      setPlayingVideoFile(null);
+                      setSelectedFileId(file.id);
+                      setPlayingAudioFile(file);
                     }}
                     onShare={file => {
                       const firstLib = sharedLibraries[0];

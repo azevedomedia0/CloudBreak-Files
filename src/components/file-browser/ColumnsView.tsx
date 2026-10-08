@@ -18,6 +18,7 @@ export interface ColumnsViewProps {
   onEditPhoto: (file: FileItem) => void;
   onOpenDocument: (file: FileItem) => void;
   onOpenVideo: (file: FileItem) => void;
+  onOpenAudio: (file: FileItem) => void;
   onOpenQuickLook: () => void;
   onFileContextMenu: (file: FileItem, event: React.MouseEvent) => void;
   onSelectFolder: (folderId: string | null) => void;
@@ -25,7 +26,7 @@ export interface ColumnsViewProps {
 
 export const ColumnsView: React.FC<ColumnsViewProps> = ({
   accent, files, selectedFolder, selectedFileId, folders, totalSize,
-  onSelectFile, onEditPhoto, onOpenDocument, onOpenVideo, onOpenQuickLook, onFileContextMenu, onSelectFolder,
+  onSelectFile, onEditPhoto, onOpenDocument, onOpenVideo, onOpenAudio, onOpenQuickLook, onFileContextMenu, onSelectFolder,
 }) => (
     <div className="h-full flex gap-3 overflow-x-auto min-h-[480px]">
       {/* Col 1: Local Files & Folders */}
@@ -101,6 +102,7 @@ export const ColumnsView: React.FC<ColumnsViewProps> = ({
                 onDoubleClick={() => {
                   if (file.category === 'photo') onEditPhoto(file);
                   else if (file.category === 'video') onOpenVideo(file);
+                  else if (file.category === 'audio') onOpenAudio(file);
                   else if (isEditableDocument(file)) onOpenDocument(file);
                   else onOpenQuickLook();
                 }}

@@ -24,6 +24,7 @@ interface FileInspectorProps {
   onEditPhoto: (file: FileItem) => void;
   onOpenDocument: (file: FileItem) => void;
   onOpenVideo: (file: FileItem, tab?: 'player' | 'trim' | 'convert') => void;
+  onOpenAudio?: (file: FileItem) => void;
   onShare: (file: FileItem) => void;
   onToggleEncrypt: (file: FileItem) => void;
   onDeleteFile: (fileId: string) => void;
@@ -47,6 +48,7 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
   onEditPhoto,
   onOpenDocument,
   onOpenVideo,
+  onOpenAudio,
   onShare,
   onToggleEncrypt,
   onDeleteFile,
@@ -181,8 +183,9 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
           }`}>
             {file.category === 'photo' && <ImageIcon className="w-6 h-6" />}
             {file.category === 'video' && <Video className="w-6 h-6" />}
+            {file.category === 'audio' && <Volume2 className="w-6 h-6" />}
             {isZipArchive(file) && <Archive className="w-6 h-6" />}
-            {file.category !== 'photo' && file.category !== 'video' && !isZipArchive(file) && <FileText className="w-6 h-6" />}
+            {file.category !== 'photo' && file.category !== 'video' && file.category !== 'audio' && !isZipArchive(file) && <FileText className="w-6 h-6" />}
           </div>
           <div className="max-w-[200px]">
             <p className="text-xs font-semibold text-neutral-200 truncate">{file.name}</p>
@@ -346,7 +349,32 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                 </div>
               )}
 
-              {file.category !== 'photo' && file.category !== 'video' && (
+              {file.category === 'audio' && (
+                <button
+                  type="button"
+                  onClick={() => onOpenAudio?.(file)}
+                  className="w-full h-full relative group/audio bg-gradient-to-br from-violet-950/80 to-neutral-950 flex items-center justify-center overflow-hidden"
+                  title="Play audio"
+                >
+                  {file.thumbnailUrl ? (
+                    <img src={file.thumbnailUrl} alt="" className="absolute inset-0 w-full h-full object-cover opacity-70" />
+                  ) : null}
+                  <div className="absolute inset-0 bg-black/35" />
+                  <div className="relative z-10 flex flex-col items-center gap-2 text-white">
+                    <span className="p-3 rounded-full bg-violet-400 text-neutral-950 shadow-lg shadow-violet-500/30 group-hover/audio:scale-105 transition-transform">
+                      <Play className="w-5 h-5 fill-current ml-0.5" />
+                    </span>
+                    <span className="text-[11px] font-medium text-white/90 truncate max-w-[90%] px-3">
+                      {file.name.replace(/\.[^.]+$/, '')}
+                    </span>
+                    {file.videoMeta && (
+                      <span className="text-[10px] font-mono text-white/70">{formatTimecode(file.videoMeta.durationSeconds)}</span>
+                    )}
+                  </div>
+                </button>
+              )}
+
+              {file.category !== 'photo' && file.category !== 'video' && file.category !== 'audio' && (
                 <DocumentPreview file={file} />
               )}
               </>
@@ -437,6 +465,17 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                 >
                   <Edit3 className="w-3.5 h-3.5" />
                   <span>Edit Photo</span>
+                </button>
+              ) : file.category === 'audio' && onOpenAudio ? (
+                <button
+                  type="button"
+                  onClick={() => onOpenAudio(file)}
+                  className="col-span-2 h-9 rounded-lg bg-violet-500/15 hover:bg-violet-500/25 border border-violet-400/30 text-violet-300 flex items-center justify-center gap-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer"
+                  title="Play audio"
+                  aria-label="Play audio"
+                >
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  <span>Play</span>
                 </button>
               ) : isZipArchive(file) && onUnzipFile ? (
                 <button
@@ -641,7 +680,7 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
               className="flex items-center justify-between text-[10px] font-semibold tracking-wider uppercase text-neutral-400 cursor-pointer hover:text-neutral-200 transition-colors group select-none"
             >
               <div className="flex items-center gap-1.5">
-                <span>Video Stream Specs</span>
+                <span>{file.category === 'audio' ? 'Audio Specs' : 'Video Stream Specs'}</span>
                 <ChevronDown className={`w-3 h-3 text-neutral-500 group-hover:text-neutral-300 transition-transform duration-200 ${collapsedSections.specs ? '-rotate-90' : ''}`} />
               </div>
             </div>
@@ -653,8 +692,10 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                   <span className="text-neutral-200 font-mono text-[11px]">{formatTimecode(file.videoMeta.durationSeconds)}</span>
                 </div>
                 <div className="p-2 bg-black/30 rounded-lg border border-white/5">
-                  <span className="text-neutral-500 text-[9px] block">Frame Rate</span>
-                  <span className="text-neutral-200 text-[11px]">{file.videoMeta.framerate} fps</span>
+                  <span className="text-neutral-500 text-[9px] block">{file.category === 'audio' ? 'Audio' : 'Frame Rate'}</span>
+                  <span className="text-neutral-200 text-[11px]">
+                    {file.category === 'audio' ? file.videoMeta.audioCodec : `${file.videoMeta.framerate} fps`}
+                  </span>
                 </div>
                 <div className="p-2 bg-black/30 rounded-lg border border-white/5">
                   <span className="text-neutral-500 text-[9px] block">Codec</span>

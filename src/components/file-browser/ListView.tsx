@@ -1,5 +1,5 @@
 import React from 'react';
-import { Share2, Edit3, Scissors, CheckSquare, Square } from 'lucide-react';
+import { Share2, Edit3, Scissors, CheckSquare, Square, Play } from 'lucide-react';
 import { FileItem, FolderItem, CloudAccount, CloudProviderId } from '../../types';
 import { isEditableDocument } from '../../utils/documentKind';
 import { FileThumbnail } from './FileThumbnail';
@@ -29,6 +29,7 @@ export interface ListViewProps {
   onEditPhoto: (file: FileItem) => void;
   onOpenDocument: (file: FileItem) => void;
   onOpenVideo: (file: FileItem) => void;
+  onOpenAudio: (file: FileItem) => void;
   onShareFile: (file: FileItem) => void;
   onOpenQuickLook: () => void;
   onFileContextMenu: (file: FileItem, event: React.MouseEvent) => void;
@@ -39,7 +40,7 @@ export interface ListViewProps {
 
 export const ListView: React.FC<ListViewProps> = ({
   accent, files, folders = [], selectedFileId, selectedIds,
-  onSelectFile, onOpenFolder, onEditPhoto, onOpenDocument, onOpenVideo, onShareFile, onOpenQuickLook, onFileContextMenu, toggleSelectOne, toggleSelectAll, getAccount,
+  onSelectFile, onOpenFolder, onEditPhoto, onOpenDocument, onOpenVideo, onOpenAudio, onShareFile, onOpenQuickLook, onFileContextMenu, toggleSelectOne, toggleSelectAll, getAccount,
 }) => (
     <div className="rounded-xl overflow-hidden border border-white/8 bg-black/20">
       <table className="w-full text-left text-xs text-neutral-300">
@@ -102,6 +103,7 @@ export const ListView: React.FC<ListViewProps> = ({
                 onDoubleClick={() => {
                   if (file.category === 'photo') onEditPhoto(file);
                   else if (file.category === 'video') onOpenVideo(file);
+                  else if (file.category === 'audio') onOpenAudio(file);
                   else if (isEditableDocument(file)) onOpenDocument(file);
                   else onOpenQuickLook();
                 }}
@@ -166,6 +168,15 @@ export const ListView: React.FC<ListViewProps> = ({
                         title="Cinema Suite"
                       >
                         <Scissors className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {file.category === 'audio' && (
+                      <button
+                        onClick={() => onOpenAudio(file)}
+                        className="p-1 rounded hover:bg-white/10 text-violet-400"
+                        title="Play audio"
+                      >
+                        <Play className="w-3.5 h-3.5 fill-current" />
                       </button>
                     )}
                     <button
