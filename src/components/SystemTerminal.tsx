@@ -45,7 +45,7 @@ function createTab(title?: string): TerminalTab {
   };
 }
 
-const XTERM_THEME = {
+const XTERM_THEME_DARK = {
   background: '#0c0c0e',
   foreground: '#c0c0c8',
   cursor: '#a3e635',
@@ -69,6 +69,21 @@ const XTERM_THEME = {
   brightWhite: '#fafafa',
 };
 
+const XTERM_THEME_LIGHT = {
+  ...XTERM_THEME_DARK,
+  background: '#001d3d',
+  foreground: '#c8d4e0',
+  cursorAccent: '#001d3d',
+  black: '#001d3d',
+};
+
+function currentXtermTheme() {
+  if (typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'light') {
+    return XTERM_THEME_LIGHT;
+  }
+  return XTERM_THEME_DARK;
+}
+
 /** One xterm + PTY session bound to a tab. Hidden when inactive. */
 const PtyPane: React.FC<{
   active: boolean;
@@ -91,7 +106,7 @@ const PtyPane: React.FC<{
       fontFamily: 'JetBrains Mono, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
       fontSize: 11,
       lineHeight: 1.35,
-      theme: XTERM_THEME,
+      theme: currentXtermTheme(),
       allowProposedApi: true,
       scrollback: 5000,
     });
@@ -100,6 +115,14 @@ const PtyPane: React.FC<{
     term.open(hostRef.current);
     termRef.current = term;
     fitRef.current = fit;
+
+    const themeObserver = new MutationObserver(() => {
+      term.options.theme = currentXtermTheme();
+    });
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    });
 
     let disposed = false;
     let unlistenData: (() => void) | undefined;
@@ -183,6 +206,7 @@ const PtyPane: React.FC<{
 
     return () => {
       disposed = true;
+      themeObserver.disconnect();
       registerInsert(tabId, null);
       unlistenData?.();
       unlistenExit?.();
@@ -319,21 +343,21 @@ export const SystemTerminal: React.FC<SystemTerminalProps> = ({ width = 320, con
   return (
     <aside
       style={{ width }}
-      className={`relative h-full shrink-0 flex flex-col border-l border-white/10 bg-[#0c0c0e] select-text ${
-        dragOver ? 'ring-1 ring-inset ring-lime-400/50' : ''
+      className={`system-terminal-panel relative h-full shrink-0 flex flex-col border-l border-white/10 bg-[#0c0c0e] select-text ${
+        dragOver ? 'ring-1 ring-inset ring-[#a3e635]/50' : ''
       }`}
       onDragEnter={onDragEnter}
       onDragLeave={onDragLeave}
       onDragOver={onDragOver}
       onDrop={onDrop}
     >
-      <div className="terminal-panel-header h-10 px-2 flex items-center gap-1.5 border-b border-white/10 bg-[#1B1B1B] shrink-0 select-none">
-        <TerminalIcon className="w-3.5 h-3.5 text-lime-400 shrink-0 ml-1" />
-        <span className="text-[11px] font-semibold text-neutral-200 tracking-tight shrink-0">
+      <div className="terminal-panel-header h-10 px-2 flex items-center gap-1.5 border-b border-[#2a2a2e] bg-[#1B1B1B] shrink-0 select-none">
+        <TerminalIcon className="w-3.5 h-3.5 text-[#a3e635] shrink-0 ml-1" />
+        <span className="text-[11px] font-semibold text-[#ececef] tracking-tight shrink-0">
           Terminal
         </span>
         {!terminalAvailable() && (
-          <span className="text-[9px] text-amber-500/90 font-medium shrink-0 hidden sm:inline">
+          <span className="text-[9px] text-[#fbbf24] font-medium shrink-0 hidden sm:inline">
             preview
           </span>
         )}
@@ -351,8 +375,8 @@ export const SystemTerminal: React.FC<SystemTerminalProps> = ({ width = 320, con
                 }}
                 className={`group flex items-center gap-1 max-w-[7.5rem] h-7 px-2 rounded-md text-[10px] font-mono transition-colors shrink-0 ${
                   selected
-                    ? 'bg-lime-500/15 text-lime-200 border border-lime-400/30'
-                    : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/5 border border-transparent'
+                    ? 'bg-[#a3e635]/15 text-[#a3e635] border border-[#a3e635]/35'
+                    : 'text-[#a1a1aa] hover:text-[#ececef] hover:bg-white/5 border border-transparent'
                 }`}
                 title={tab.title}
               >
@@ -382,7 +406,7 @@ export const SystemTerminal: React.FC<SystemTerminalProps> = ({ width = 320, con
             e.stopPropagation();
             addTab();
           }}
-          className="shrink-0 h-7 px-2 rounded-md text-[10px] font-medium text-lime-300/90 hover:text-lime-200 bg-lime-500/10 hover:bg-lime-500/20 border border-lime-400/25 flex items-center gap-1 transition-colors"
+          className="shrink-0 h-7 px-2 rounded-md text-[10px] font-medium text-[#a3e635] hover:text-[#bef264] bg-[#a3e635]/10 hover:bg-[#a3e635]/20 border border-[#a3e635]/30 flex items-center gap-1 transition-colors"
           title="New terminal tab"
           aria-label="New terminal tab"
         >
@@ -409,8 +433,8 @@ export const SystemTerminal: React.FC<SystemTerminalProps> = ({ width = 320, con
       </div>
 
       {dragOver && (
-        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-lime-500/10 border border-lime-400/40 m-1 rounded-lg">
-          <span className="text-xs font-medium text-lime-200 bg-black/70 px-3 py-1.5 rounded-lg border border-lime-400/30">
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-[#a3e635]/10 border border-[#a3e635]/40 m-1 rounded-lg">
+          <span className="text-xs font-medium text-[#a3e635] bg-black/70 px-3 py-1.5 rounded-lg border border-[#a3e635]/35">
             Drop files to insert paths
           </span>
         </div>

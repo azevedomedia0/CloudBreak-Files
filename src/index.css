@@ -263,71 +263,86 @@ html.reduce-motion *::after {
   scroll-behavior: auto !important;
 }
 
-/* —— Light appearance (~3 shades darker medium grays; dark remains default) —— */
+/* —— Light appearance: readable ink on gray surfaces (WCAG-minded) —— */
 html[data-theme="light"] {
+  /* Surfaces stay mid-gray; ink steps are darker for contrast */
   --color-neutral-700: #8e8e94;
   --color-neutral-750: #9c9ca2;
   --color-neutral-800: #b0b0b6;
   --color-neutral-850: #bcbcc2;
   --color-neutral-900: #c8c8ce;
   --color-neutral-950: #d2d2d8;
-  --color-neutral-600: #74747a;
-  --color-neutral-500: #5a5a62;
-  --color-neutral-400: #484850;
-  --color-neutral-300: #323238;
-  --color-neutral-200: #222228;
-  --color-neutral-100: #161618;
-  --color-neutral-50: #0e0e10;
+  /* Muted / secondary / primary text (darker = higher contrast on #c8–d2 grays) */
+  --color-neutral-600: #52525b;
+  --color-neutral-500: #3f3f46;
+  --color-neutral-400: #2e2e36;
+  --color-neutral-300: #1c1c22;
+  --color-neutral-200: #141418;
+  --color-neutral-100: #0e0e12;
+  --color-neutral-50: #09090b;
 
-  /* Accent families — shifted darker for contrast on gray surfaces */
+  /* *-200 used as labels in dark UI — map to dark readable hues in light */
+  --color-sky-200: #0369a1;
   --color-sky-300: #0284c7;
   --color-sky-400: #0369a1;
   --color-sky-500: #075985;
   --color-sky-600: #0c4a6e;
+  --color-cyan-200: #0e7490;
   --color-cyan-300: #0891b2;
   --color-cyan-400: #0e7490;
   --color-cyan-500: #155e75;
+  --color-emerald-200: #047857;
   --color-emerald-300: #059669;
   --color-emerald-400: #047857;
   --color-emerald-500: #065f46;
   --color-emerald-600: #064e3b;
+  --color-green-200: #15803d;
   --color-green-300: #16a34a;
   --color-green-400: #15803d;
   --color-green-500: #166534;
+  --color-purple-200: #7e22ce;
   --color-purple-300: #9333ea;
   --color-purple-400: #7e22ce;
   --color-purple-500: #6b21a8;
+  --color-violet-200: #6d28d9;
   --color-violet-300: #7c3aed;
   --color-violet-400: #6d28d9;
   --color-violet-500: #5b21b6;
+  --color-indigo-200: #4338ca;
   --color-indigo-300: #4f46e5;
   --color-indigo-400: #4338ca;
   --color-indigo-500: #3730a3;
+  --color-pink-200: #be185d;
   --color-pink-300: #db2777;
   --color-pink-400: #be185d;
   --color-pink-500: #9d174d;
-  /* Lime: another ~4 steps darker (New Tab / terminal chrome on gray) */
-  --color-lime-200: #1a2e05;
+  --color-rose-200: #e11d48;
+  --color-rose-300: #e11d48;
+  --color-rose-400: #be123c;
+  --color-lime-200: #3f6212;
   --color-lime-300: #365314;
   --color-lime-400: #3f6212;
   --color-lime-500: #365314;
   --color-lime-600: #1a2e05;
+  --color-orange-200: #c2410c;
   --color-orange-300: #ea580c;
   --color-orange-400: #c2410c;
   --color-orange-500: #9a3412;
+  --color-amber-200: #b45309;
   --color-amber-300: #d97706;
   --color-amber-400: #b45309;
   --color-amber-500: #92400e;
   --color-amber-600: #78350f;
   --color-amber-700: #92400e;
   --color-amber-800: #78350f;
+  --color-red-200: #b91c1c;
   --color-red-300: #dc2626;
   --color-red-400: #b91c1c;
   --color-red-500: #991b1b;
 }
 
 html[data-theme="light"] body {
-  color: #222228;
+  color: #141418;
   background-color: #c8c8ce;
 }
 
@@ -359,8 +374,41 @@ html[data-theme="light"] .macos-toolbar-glass {
   box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.5);
 }
 
-html[data-theme="light"] .terminal-panel-header {
-  background-color: #1B1B1B;
+/* Light mode terminal — navy console (#001d3d) */
+html[data-theme="light"] .system-terminal-panel {
+  background-color: #001d3d !important;
+  border-left-color: rgba(255, 255, 255, 0.12);
+}
+html[data-theme="light"] .system-terminal-panel .terminal-panel-header {
+  background-color: #00152e;
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+html[data-theme="light"] .system-terminal-panel .xterm,
+html[data-theme="light"] .system-terminal-panel .xterm-viewport,
+html[data-theme="light"] .system-terminal-panel .xterm-screen {
+  background-color: #001d3d !important;
+}
+html[data-theme="light"] .system-terminal-panel .bg-white\/5,
+html[data-theme="light"] .system-terminal-panel .hover\:bg-white\/5:hover,
+html[data-theme="light"] .system-terminal-panel .hover\:bg-white\/10:hover {
+  background-color: rgba(255, 255, 255, 0.06);
+}
+html[data-theme="light"] .system-terminal-panel .border-white\/10 {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+/* Undo global light-mode lime darkening inside the terminal */
+html[data-theme="light"] .system-terminal-panel [class*="text-lime-"],
+html[data-theme="light"] .system-terminal-panel [class*="ring-lime-"] {
+  color: #a3e635;
+}
+html[data-theme="light"] .system-terminal-panel [class*="border-lime-"] {
+  border-color: rgb(163 230 53 / 0.4);
+}
+html[data-theme="light"] .system-terminal-panel [class*="bg-lime-"] {
+  background-color: rgb(163 230 53 / 0.12);
+}
+html[data-theme="light"] .system-terminal-panel .xterm {
+  color: #c8d4e0;
 }
 
 html[data-theme="light"] .notification-panel,
@@ -370,7 +418,21 @@ html[data-theme="light"] .app-modal-panel {
     0 0 0 1px rgba(0, 0, 0, 0.08);
 }
 
-/* P2P recipients row — deeper black label/names on the tinted banner */
+/* Soften dark P2P banner washes so remapped dark text stays readable */
+html[data-theme="light"] .bg-purple-950\/40 {
+  background-color: rgba(126, 34, 206, 0.14);
+}
+html[data-theme="light"] .bg-emerald-950\/40 {
+  background-color: rgba(5, 150, 105, 0.14);
+}
+html[data-theme="light"] .border-purple-500\/25 {
+  border-color: rgba(126, 34, 206, 0.35);
+}
+html[data-theme="light"] .border-emerald-500\/25 {
+  border-color: rgba(5, 150, 105, 0.35);
+}
+
+/* P2P recipients row — deep ink on the tinted banner */
 html[data-theme="light"] .p2p-recipients-row .text-neutral-400,
 html[data-theme="light"] .p2p-recipients-row .text-white,
 html[data-theme="light"] .p2p-recipients-row .text-neutral-200 {
@@ -408,8 +470,9 @@ html[data-theme="light"] .gallery-scrubber::-webkit-scrollbar-thumb {
 
 /* Remap common dark-only utilities used across the UI */
 html[data-theme="light"] .text-white {
-  color: #1c1c20;
+  color: #141418;
 }
+/* Solid / gradient accent chips keep white glyph ink */
 html[data-theme="light"] [class*="bg-sky-"].text-white,
 html[data-theme="light"] [class*="bg-purple-"].text-white,
 html[data-theme="light"] [class*="bg-cyan-"].text-white,
@@ -417,13 +480,23 @@ html[data-theme="light"] [class*="bg-emerald-"].text-white,
 html[data-theme="light"] [class*="bg-green-"].text-white,
 html[data-theme="light"] [class*="bg-amber-"].text-white,
 html[data-theme="light"] [class*="bg-red-"].text-white,
+html[data-theme="light"] [class*="bg-rose-"].text-white,
 html[data-theme="light"] [class*="bg-violet-"].text-white,
 html[data-theme="light"] [class*="bg-indigo-"].text-white,
 html[data-theme="light"] [class*="bg-orange-"].text-white,
 html[data-theme="light"] [class*="bg-pink-"].text-white,
 html[data-theme="light"] [class*="bg-lime-"].text-white,
 html[data-theme="light"] [class*="from-sky-"].text-white,
-html[data-theme="light"] [class*="from-indigo-"].text-white {
+html[data-theme="light"] [class*="from-indigo-"].text-white,
+html[data-theme="light"] [class*="bg-\[#0060df\]"].text-white,
+html[data-theme="light"] [class*="bg-\[#0250bb\]"].text-white {
+  color: #ffffff;
+}
+/* Video / media overlays stay dark — force light ink */
+html[data-theme="light"] .bg-black .text-white,
+html[data-theme="light"] .bg-black\/50 .text-white,
+html[data-theme="light"] .group\/player .text-white,
+html[data-theme="light"] .from-black\/90 .text-white {
   color: #ffffff;
 }
 
@@ -457,8 +530,15 @@ html[data-theme="light"] .bg-white\/15 {
   background-color: rgba(0, 0, 0, 0.06);
 }
 html[data-theme="light"] .placeholder-neutral-500::placeholder,
-html[data-theme="light"] .placeholder-neutral-400::placeholder {
-  color: #74747a;
+html[data-theme="light"] .placeholder-neutral-400::placeholder,
+html[data-theme="light"] .placeholder-neutral-600::placeholder {
+  color: #52525b;
+}
+
+/* Disabled / idle tab labels stay readable */
+html[data-theme="light"] .text-neutral-400\/80,
+html[data-theme="light"] .text-neutral-500\/80 {
+  color: rgb(46 46 54 / 0.85);
 }
 
 /* Stronger tinted surfaces so selection / badges stay visible */

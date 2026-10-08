@@ -1,16 +1,41 @@
-use crate::crypto::{self, EncryptedAsset, PassphraseVerifier};
-use crate::media::{MediaProcessResult, PhotoAdjustments, VideoTrimRequest};
+use crate::crypto::{self, EncryptedAsset, PassphraseVerifier, KEY_LEN, MAX_SESSION_BYTES};
+use crate::media::{
+    self, MediaProcessResult, PhotoRenderRequest, PhotoRenderResult, VideoTrimRequest,
+};
 use crate::storage::{CloudAccount, StorageManager, StorageStats};
+use crate::vault_store;
+use base64::engine::general_purpose::STANDARD as B64;
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::sync::{Mutex, MutexGuard};
 use tauri::{AppHandle, Manager, State};
-use crate::vault_store;
+use zeroize::Zeroize;
 
 /// Vault state. The verifier is saved in the app data folder. The first unlock ever sets the passphrase.
+/// After unlock, a file-encryption session key stays in Rust memory only (never sent to JS).
 #[derive(Default)]
 pub struct VaultState {
     pub verifier: Option<PassphraseVerifier>,
     pub unlocked: bool,
+    session_key: Option<[u8; KEY_LEN]>,
+}
+
+impl VaultState {
+    fn clear_session(&mut self) {
+        if let Some(ref mut key) = self.session_key {
+            key.zeroize();
+        }
+        self.session_key = None;
+        self.unlocked = false;
+    }
+
+    fn set_session(&mut self, key: [u8; KEY_LEN]) {
+        if let Some(ref mut old) = self.session_key {
+            old.zeroize();
+        }
+        self.session_key = Some(key);
+        self.unlocked = true;
+    }
 }
 
 pub struct AppState {
@@ -37,6 +62,20 @@ pub struct DecryptRequest {
     pub passphrase: String,
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionEncryptRequest {
+    pub plaintext_base64: String,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionDecryptRequest {
+    pub ciphertext: String,
+    pub nonce: String,
+    pub salt: String,
+}
+
 #[tauri::command]
 pub fn encrypt_data(req: EncryptRequest) -> Result<EncryptedAsset, String> {
     crypto::encrypt_bytes(req.plaintext.as_bytes(), &req.passphrase).map_err(|e| e.to_string())
@@ -53,6 +92,49 @@ pub fn decrypt_data(req: DecryptRequest) -> Result<String, String> {
     };
     let bytes = crypto::decrypt_bytes(&asset, &req.passphrase).map_err(|e| e.to_string())?;
     String::from_utf8(bytes).map_err(|_| "Decrypted data is not valid UTF-8".to_string())
+}
+
+#[tauri::command]
+pub fn encrypt_session_data(
+    req: SessionEncryptRequest,
+    state: State<'_, AppState>,
+) -> Result<EncryptedAsset, String> {
+    let vault = lock(&state.vault);
+    let key = vault
+        .session_key
+        .as_ref()
+        .ok_or_else(|| "Vault is locked — unlock to encrypt files".to_string())?;
+    let data = B64
+        .decode(req.plaintext_base64.as_bytes())
+        .map_err(|_| "Invalid base64 plaintext".to_string())?;
+    if data.len() > MAX_SESSION_BYTES {
+        return Err(format!(
+            "File is too large to encrypt in-session (max {} MB)",
+            MAX_SESSION_BYTES / (1024 * 1024)
+        ));
+    }
+    crypto::encrypt_with_key(&data, key).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn decrypt_session_data(
+    req: SessionDecryptRequest,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let vault = lock(&state.vault);
+    let key = vault
+        .session_key
+        .as_ref()
+        .ok_or_else(|| "Vault is locked — unlock to decrypt files".to_string())?;
+    let asset = EncryptedAsset {
+        ciphertext: req.ciphertext,
+        nonce: req.nonce,
+        salt: req.salt,
+        key_fingerprint: String::new(),
+        sha256_checksum: String::new(),
+    };
+    let plain = crypto::decrypt_with_key(&asset, key).map_err(|e| e.to_string())?;
+    Ok(B64.encode(plain))
 }
 
 #[tauri::command]
@@ -98,21 +180,24 @@ pub fn unlock_sovereign_vault(
             if !crypto::verify_passphrase(verifier, &passphrase) {
                 return Err("Incorrect passphrase".into());
             }
+            let key = crypto::derive_session_key(&passphrase, verifier.salt(), verifier.iterations());
+            vault.set_session(key);
         }
         None => {
             let verifier = crypto::create_verifier(&passphrase).map_err(|e| e.to_string())?;
             // Save first, so the vault is never unlocked with a passphrase that was not stored.
             vault_store::save(&path, &verifier)?;
+            let key = crypto::derive_session_key(&passphrase, verifier.salt(), verifier.iterations());
             vault.verifier = Some(verifier);
+            vault.set_session(key);
         }
     }
-    vault.unlocked = true;
     Ok(true)
 }
 
 #[tauri::command]
 pub fn lock_sovereign_vault(state: State<'_, AppState>) -> bool {
-    lock(&state.vault).unlocked = false;
+    lock(&state.vault).clear_session();
     false
 }
 
@@ -121,14 +206,68 @@ pub fn check_vault_status(state: State<'_, AppState>) -> bool {
     lock(&state.vault).unlocked
 }
 
-/// Not implemented yet. It returns an error instead of a fake success.
 #[tauri::command]
-pub fn process_photo_render(_adjustments: PhotoAdjustments) -> Result<String, String> {
-    Err("Native photo rendering is not implemented yet".into())
+pub fn process_photo_render(req: PhotoRenderRequest) -> Result<PhotoRenderResult, String> {
+    let data = B64
+        .decode(req.image_base64.as_bytes())
+        .map_err(|_| "Invalid base64 image data".to_string())?;
+    media::process_photo_bytes(&data, &req.adjustments, &req.output_format, req.quality)
+        .map_err(|e| e.to_string())
 }
 
-/// Not implemented yet. It returns an error instead of a fake success.
 #[tauri::command]
-pub fn trim_video_stream(_req: VideoTrimRequest) -> Result<MediaProcessResult, String> {
-    Err("Native video trimming is not implemented yet".into())
+pub fn trim_video_stream(req: VideoTrimRequest) -> Result<MediaProcessResult, String> {
+    media::trim_video_stream(&req).map_err(|e| e.to_string())
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StageTempRequest {
+    pub data_base64: String,
+    pub extension: String,
+}
+
+/// Write media bytes into the app temp folder. Used to stage blob/URL downloads for ffmpeg.
+#[tauri::command]
+pub fn media_stage_temp(req: StageTempRequest, app: AppHandle) -> Result<String, String> {
+    let data = B64
+        .decode(req.data_base64.as_bytes())
+        .map_err(|_| "Invalid base64 media data".to_string())?;
+    if data.len() > 200 * 1024 * 1024 {
+        return Err("Media file exceeds the 200 MB staging limit".into());
+    }
+    let temp = app
+        .path()
+        .temp_dir()
+        .map_err(|e| format!("Could not find temp dir: {e}"))?
+        .join("cloudbreak-media");
+    let path = media::stage_temp_file(&temp, &data, &req.extension).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadTempRequest {
+    pub path: String,
+}
+
+/// Read a staged/output media file as base64 (capped at 200 MB).
+#[tauri::command]
+pub fn media_read_temp(req: ReadTempRequest) -> Result<String, String> {
+    let path = std::path::Path::new(&req.path);
+    let meta = std::fs::metadata(path).map_err(|e| e.to_string())?;
+    if meta.len() > 200 * 1024 * 1024 {
+        return Err("Output file exceeds the 200 MB read limit".into());
+    }
+    let data = std::fs::read(path).map_err(|e| e.to_string())?;
+    Ok(B64.encode(data))
+}
+
+#[tauri::command]
+pub fn media_cleanup_temp(req: ReadTempRequest) -> Result<(), String> {
+    let path = std::path::Path::new(&req.path);
+    if path.exists() {
+        std::fs::remove_file(path).map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }

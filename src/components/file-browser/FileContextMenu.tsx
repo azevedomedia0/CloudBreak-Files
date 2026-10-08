@@ -22,6 +22,7 @@ export interface FileContextMenuProps {
   onUnzip?: (file: FileItem) => void;
   onTrash: (files: FileItem[]) => void;
   onToggleTag: (files: FileItem[], tag: string) => void;
+  onToggleEncrypt?: (file: FileItem) => void;
 }
 
 export const FileContextMenu: React.FC<FileContextMenuProps> = ({
@@ -40,6 +41,7 @@ export const FileContextMenu: React.FC<FileContextMenuProps> = ({
   onUnzip,
   onTrash,
   onToggleTag,
+  onToggleEncrypt,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ x, y });
@@ -125,6 +127,12 @@ export const FileContextMenu: React.FC<FileContextMenuProps> = ({
       <Separator />
       <MenuItem label="Copy" shortcut="⌘C" onClick={() => run(() => onCopy(targets))} />
       <MenuItem label="Share…" onClick={() => run(() => onShare(file))} />
+      {onToggleEncrypt && !multiple && (
+        <MenuItem
+          label={file.encryption.isEncrypted ? 'Decrypt with Vault' : 'Encrypt with Vault'}
+          onClick={() => run(() => onToggleEncrypt(file))}
+        />
+      )}
       <Separator />
       <SubmenuItem
         label="Tags"

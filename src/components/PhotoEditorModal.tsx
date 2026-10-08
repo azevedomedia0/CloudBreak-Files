@@ -5,6 +5,7 @@ import {
   Sparkles, Layers, ZoomIn, ZoomOut, Maximize2, Minimize2, Crop
 } from 'lucide-react';
 import { FileItem, PhotoAdjustments } from '../types';
+import { photoResultToDataUrl, renderPhotoNative } from '../services/mediaBridge';
 import { PhotoNav, PhotoNavArrows } from './PhotoNavArrows';
 
 interface PhotoEditorModalProps {
@@ -509,39 +510,88 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
     }
   };
 
-  const handleSaveAsVersion = () => {
+  const nativeOutputFormat = (): 'jpeg' | 'png' | 'webp' | 'bmp' | null => {
+    switch (selectedExportFormat.id) {
+      case 'jpeg': return 'jpeg';
+      case 'png':
+      case 'png-alpha': return 'png';
+      case 'webp':
+      case 'webp-lossless': return 'webp';
+      case 'bmp': return 'bmp';
+      default: return null;
+    }
+  };
+
+  const finishSave = (dataUrl: string, sizeBytes: number) => {
+    const updatedFile: FileItem = {
+      ...file,
+      version: file.version + 1,
+      updatedAt: new Date().toISOString(),
+      url: dataUrl,
+      thumbnailUrl: dataUrl,
+      sizeBytes,
+    };
+    onSaveAsVersion(updatedFile, dataUrl);
+    setIsProcessing(false);
+    setStatusMessage(`Saved as Version ${updatedFile.version}`);
+    setTimeout(() => {
+      setStatusMessage(null);
+      onClose();
+    }, 1200);
+  };
+
+  const handleSaveAsVersion = async () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     setIsProcessing(true);
-    setStatusMessage('Rendering high-fidelity raster...');
+    setStatusMessage('Rendering high-fidelity raster…');
 
-    setTimeout(() => {
+    try {
+      const fmt = nativeOutputFormat();
+      if (fmt && fmt !== 'bmp') {
+        const sourceBytes = new Uint8Array(await (await fetch(file.url)).arrayBuffer());
+        const native = await renderPhotoNative(sourceBytes, adjustments, fmt, exportQuality);
+        if (native) {
+          finishSave(photoResultToDataUrl(native), native.processedBytes);
+          return;
+        }
+      }
+      // Canvas fallback (browser, BMP, or native unavailable)
       const dataUrl = canvasToExportDataUrl(canvas, selectedExportFormat, exportQuality);
-      const updatedFile: FileItem = {
-        ...file,
-        version: file.version + 1,
-        updatedAt: new Date().toISOString(),
-        url: dataUrl,
-        thumbnailUrl: dataUrl,
-        sizeBytes: Math.round(file.sizeBytes * 1.05),
-      };
-
-      onSaveAsVersion(updatedFile, dataUrl);
-      setIsProcessing(false);
-      setStatusMessage('Saved as Version ' + updatedFile.version + ' to cloud storage!');
-      setTimeout(() => {
-        setStatusMessage(null);
-        onClose();
-      }, 1200);
-    }, 400);
+      finishSave(dataUrl, Math.round(file.sizeBytes * 1.05));
+    } catch (err) {
+      // Fall back to canvas if native render fails
+      try {
+        const dataUrl = canvasToExportDataUrl(canvas, selectedExportFormat, exportQuality);
+        finishSave(dataUrl, Math.round(file.sizeBytes * 1.05));
+      } catch {
+        setIsProcessing(false);
+        setStatusMessage(err instanceof Error ? err.message : String(err));
+      }
+    }
   };
 
-  const handleExportDownload = () => {
+  const handleExportDownload = async () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const link = document.createElement('a');
     link.download = `${file.name.replace(/\.[^/.]+$/, '')}_graded_v${file.version + 1}.${selectedExportFormat.ext}`;
+
+    try {
+      const fmt = nativeOutputFormat();
+      if (fmt && fmt !== 'bmp') {
+        const sourceBytes = new Uint8Array(await (await fetch(file.url)).arrayBuffer());
+        const native = await renderPhotoNative(sourceBytes, adjustments, fmt, exportQuality);
+        if (native) {
+          link.href = photoResultToDataUrl(native);
+          link.click();
+          return;
+        }
+      }
+    } catch {
+      /* canvas fallback */
+    }
     link.href = canvasToExportDataUrl(canvas, selectedExportFormat, exportQuality);
     link.click();
   };

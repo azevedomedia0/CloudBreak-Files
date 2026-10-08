@@ -39,6 +39,8 @@ export interface AppModalsProps {
   onNextMedia?: () => void;
   sharingLibrary: SharedLibrary | null;
   setSharedLibraries: React.Dispatch<React.SetStateAction<SharedLibrary[]>>;
+  selectedLibraryId?: string | null;
+  setSelectedLibraryId?: (id: string | null) => void;
   isVaultSecurityOpen: boolean;
   setIsVaultSecurityOpen: (open: boolean) => void;
   isVaultUnlocked: boolean;
@@ -109,6 +111,8 @@ export const AppModals: React.FC<AppModalsProps> = ({
   onNextMedia,
   sharingLibrary,
   setSharedLibraries,
+  selectedLibraryId = null,
+  setSelectedLibraryId,
   isVaultSecurityOpen,
   setIsVaultSecurityOpen,
   isVaultUnlocked,
@@ -211,6 +215,12 @@ export const AppModals: React.FC<AppModalsProps> = ({
       onUpdateLibrary={updated => {
         setSharedLibraries(prev => prev.map(l => l.id === updated.id ? updated : l));
         setSharingLibrary(updated);
+      }}
+      onDisconnectLibrary={id => {
+        setSharedLibraries(prev => prev.filter(l => l.id !== id));
+        if (selectedLibraryId === id) setSelectedLibraryId?.(null);
+        setSharingLibrary(null);
+        showToast('Disconnected from incoming library');
       }}
     />
   )}

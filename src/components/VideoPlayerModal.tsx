@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Play } from 'lucide-react';
 import { FileItem, VideoConvertOptions, CloudAccount, FolderItem, isAudioConvertFormat, convertFormatMime } from '../types';
+import { trimAndTranscode } from '../services/mediaBridge';
 import { PlayerHeader } from './video-player/PlayerHeader';
 import { TrimPanel } from './video-player/TrimPanel';
 import { ConvertPanel, SaveDestination } from './video-player/ConvertPanel';
@@ -267,31 +268,55 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const defaultBaseName = `${sourceBaseName}${isTrimmed ? '_clip' : ''}${isAudioConvertFormat(convertOptions.format) ? '' : `_${convertOptions.resolution}`}`;
   const outputName = `${customBaseName.trim() || defaultBaseName}.${convertOptions.format}`;
 
-  // Perform Transcode / Convert
-  const startTranscode = () => {
+  // Perform Transcode / Convert (ffmpeg in Tauri, MediaRecorder in browser)
+  const startTranscode = async () => {
     setIsTranscoding(true);
     setTranscodeProgress(5);
     setTranscodeComplete(false);
+    setSaveError(null);
+    if (transcodedResultUrl?.startsWith('blob:')) {
+      try { URL.revokeObjectURL(transcodedResultUrl); } catch { /* ignore */ }
+    }
+    setTranscodedResultUrl(null);
 
-    let progress = 5;
-    const interval = setInterval(() => {
-      progress += Math.floor(Math.random() * 15) + 8;
-      if (progress >= 100) {
-        clearInterval(interval);
-        setTranscodeProgress(100);
-        setIsTranscoding(false);
-        setTranscodeComplete(true);
-        setTranscodedResultUrl(file.url);
-      } else {
-        setTranscodeProgress(progress);
-      }
-    }, 250);
+    try {
+      const result = await trimAndTranscode(
+        {
+          sourceUrl: file.url,
+          sourceExtension: file.name.split('.').pop() || 'mp4',
+          startSeconds: trimStart,
+          endSeconds: trimEnd,
+          format: convertOptions.format,
+          resolution: convertOptions.resolution,
+          quality: convertOptions.quality,
+          fps: convertOptions.fps,
+          includeAudio: convertOptions.includeAudio,
+        },
+        pct => setTranscodeProgress(pct),
+      );
+      setTranscodedResultUrl(result.blobUrl);
+      setTranscodeProgress(100);
+      setTranscodeComplete(true);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : String(err));
+      setTranscodeComplete(false);
+    } finally {
+      setIsTranscoding(false);
+    }
   };
 
-  const handleSaveConvertedToCloud = () => {
+  const handleSaveConvertedToCloud = async () => {
+    if (!transcodedResultUrl) {
+      setSaveError('Run Convert first to produce an output file');
+      return;
+    }
     const ext = convertOptions.format;
     const folder = folders.find(f => f.id === destination.folderId);
-    const resolutionScale = convertOptions.resolution === '4k' ? 1.6 : convertOptions.resolution === '2k' ? 1.2 : convertOptions.resolution === '720p' ? 0.5 : 0.8;
+    let sizeBytes = Math.round(file.sizeBytes * (clipLength / Math.max(duration, 1)));
+    try {
+      sizeBytes = (await (await fetch(transcodedResultUrl)).blob()).size;
+    } catch { /* keep estimate */ }
+
     const convertedFile: FileItem = {
       ...file,
       id: `file-conv-${Date.now()}`,
@@ -299,20 +324,25 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       accountId: destination.accountId,
       folderId: folder?.id,
       folderPath: folder ? `/${folder.name}` : '/',
+      url: transcodedResultUrl,
+      thumbnailUrl: ext === 'gif' ? transcodedResultUrl : undefined,
       mimeType: convertFormatMime(ext),
       category: ext === 'gif' ? 'photo' : isAudioConvertFormat(ext) ? 'audio' : 'video',
-      sizeBytes: Math.round(file.sizeBytes * resolutionScale * (clipLength / Math.max(duration, 1))),
+      sizeBytes,
       updatedAt: new Date().toISOString(),
       version: 1,
+      tags: [...file.tags.filter(t => t !== 'New Upload'), 'Converted'],
       videoMeta: isAudioConvertFormat(ext) ? undefined : {
         ...(file.videoMeta || {
           dimensions: { width: 1920, height: 1080 },
-          framerate: 30,
+          framerate: convertOptions.fps,
           codec: ext.toUpperCase(),
           bitrate: '15 Mbps',
           audioCodec: 'AAC',
         }),
         durationSeconds: parseFloat(clipLength.toFixed(2)),
+        framerate: convertOptions.fps,
+        codec: ext.toUpperCase(),
       },
     };
 
@@ -340,9 +370,14 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
   const handleSaveToComputer = async () => {
     setSaveError(null);
+    const sourceUrl = transcodedResultUrl || file.url;
+    if (!transcodedResultUrl) {
+      setSaveError('Run Convert first to produce an output file');
+      return;
+    }
     try {
       if (localFolder) {
-        const blob = await (await fetch(file.url)).blob();
+        const blob = await (await fetch(sourceUrl)).blob();
         const fileHandle = await localFolder.handle.getFileHandle(outputName, { create: true });
         const writable = await fileHandle.createWritable();
         await writable.write(blob);
@@ -357,14 +392,14 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
       if (showSaveFilePicker) {
         const handle = await showSaveFilePicker({ suggestedName: outputName });
-        const blob = await (await fetch(file.url)).blob();
+        const blob = await (await fetch(sourceUrl)).blob();
         const writable = await handle.createWritable();
         await writable.write(blob);
         await writable.close();
         setSavedLocalName(handle.name);
       } else {
         const link = document.createElement('a');
-        link.href = file.url;
+        link.href = sourceUrl;
         link.download = outputName;
         link.click();
         setSavedLocalName(outputName);

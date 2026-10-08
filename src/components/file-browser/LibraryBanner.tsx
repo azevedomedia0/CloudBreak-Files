@@ -27,7 +27,7 @@ export const LibraryBanner: React.FC<LibraryBannerProps> = ({
         <div className="flex items-start gap-3 min-w-0">
           <div className={`p-2 rounded-xl shrink-0 mt-0.5 border ${
             selectedLibrary.direction === 'incoming'
-              ? 'bg-emerald-500/15 border-emerald-500/30 text-[#ffffff]'
+              ? 'bg-emerald-500/15 border-emerald-500/30 text-white'
               : 'bg-purple-500/15 border-purple-400/30 text-purple-300'
           }`}>
             {selectedLibrary.direction === 'incoming' ? (
@@ -41,7 +41,7 @@ export const LibraryBanner: React.FC<LibraryBannerProps> = ({
               <h3 className="text-sm font-semibold text-white tracking-tight">{selectedLibrary.name}</h3>
               <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-semibold border flex items-center gap-1 ${
                 selectedLibrary.direction === 'incoming'
-                  ? 'bg-emerald-500/15 text-[#ffffff] border-emerald-500/30'
+                  ? 'bg-emerald-500/15 text-white border-emerald-500/30'
                   : 'bg-purple-500/15 text-purple-300 border-purple-400/30'
               }`}>
                 <span className="w-1.5 h-1.5 rounded-full animate-pulse bg-current" />
@@ -57,7 +57,7 @@ export const LibraryBanner: React.FC<LibraryBannerProps> = ({
             <p className="text-xs text-neutral-300 mt-0.5 leading-snug line-clamp-1">
               {selectedLibrary.direction === 'incoming' ? (
                 <>
-                  Received from <strong className="text-[#ffffff] font-semibold">{selectedLibrary.senderPeerName || selectedLibrary.ownerName}</strong> ({selectedLibrary.senderPeerEmail || selectedLibrary.ownerEmail}) via encrypted P2P protocol.
+                  Received from <strong className="text-white font-semibold">{selectedLibrary.senderPeerName || selectedLibrary.ownerName}</strong> ({selectedLibrary.senderPeerEmail || selectedLibrary.ownerEmail}) via encrypted P2P protocol.
                 </>
               ) : (
                 <>
@@ -92,7 +92,7 @@ export const LibraryBanner: React.FC<LibraryBannerProps> = ({
               {(selectedLibrary.transferSpeed || swarmStatus) && (
                 <span className={`px-2 py-0.5 rounded font-semibold border ${
                   selectedLibrary.direction === 'incoming'
-                    ? 'bg-emerald-500/10 text-[#ffffff] border-emerald-500/20'
+                    ? 'bg-emerald-500/10 text-white border-emerald-500/20'
                     : 'bg-purple-500/10 text-white border-purple-400/20'
                 }`}>
                   {selectedLibrary.direction === 'incoming'
@@ -133,7 +133,7 @@ export const LibraryBanner: React.FC<LibraryBannerProps> = ({
             onClick={() => onShareFile(files[0] || ({} as FileItem))}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all ${
               selectedLibrary.direction === 'incoming'
-                ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-[#ffffff] border border-emerald-500/40'
+                ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-white border border-emerald-500/40'
                 : 'bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 border border-purple-400/40'
             }`}
             title={selectedLibrary.direction === 'incoming' ? 'View P2P Peer Connection Info' : 'Manage Specified P2P Users & Seeding'}

@@ -503,7 +503,7 @@ export const MacFinderToolbar: React.FC<MacFinderToolbarProps> = ({
               onClick={onShowTerminal}
               className={`p-1.5 rounded-lg transition-all ${
                 isInspectorOpen && sidePanelMode === 'terminal'
-                  ? 'text-lime-300 bg-lime-500/15 hover:bg-lime-500/20'
+                  ? 'text-[#65a30d] bg-[#65a30d]/15 hover:bg-[#65a30d]/25 border border-[#65a30d]/30'
                   : 'text-neutral-400 hover:text-white hover:bg-white/10'
               }`}
               title={

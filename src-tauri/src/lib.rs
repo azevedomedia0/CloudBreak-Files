@@ -35,6 +35,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::encrypt_data,
             commands::decrypt_data,
+            commands::encrypt_session_data,
+            commands::decrypt_session_data,
             commands::compute_sha256_checksum,
             commands::get_storage_overview,
             commands::list_cloud_accounts,
@@ -43,6 +45,9 @@ pub fn run() {
             commands::check_vault_status,
             commands::process_photo_render,
             commands::trim_video_stream,
+            commands::media_stage_temp,
+            commands::media_read_temp,
+            commands::media_cleanup_temp,
             cloud_http::cloud_http,
             p2p::commands::p2p_get_identity,
             p2p::commands::p2p_create_library,

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   X, Share2, Users, Shield, Copy, Check, Lock, UserPlus,
   Mail, Clock, Key, Globe, Eye, Sparkles, ChevronDown, Trash2,
-  Radio, Wifi, ArrowUpRight, ArrowDownLeft, ShieldCheck, Play, Pause, FolderDown
+  Radio, Wifi, ArrowUpRight, ArrowDownLeft, ShieldCheck, Play, Pause, FolderDown, Unlink,
 } from 'lucide-react';
 import { SharedLibrary, SharedMember, P2PPeer } from '../types';
 
@@ -11,6 +11,8 @@ interface ShareLibraryModalProps {
   isOpen: boolean;
   onClose: () => void;
   onUpdateLibrary: (updated: SharedLibrary) => void;
+  /** Remove an incoming library from this device (stop receiving / unlink). */
+  onDisconnectLibrary?: (libraryId: string) => void;
 }
 
 export const ShareLibraryModal: React.FC<ShareLibraryModalProps> = ({
@@ -18,6 +20,7 @@ export const ShareLibraryModal: React.FC<ShareLibraryModalProps> = ({
   isOpen,
   onClose,
   onUpdateLibrary,
+  onDisconnectLibrary,
 }) => {
   const isOutgoing = library.direction === 'outgoing';
   const [activeTab, setActiveTab] = useState<'peers' | 'link' | 'protocol'>(isOutgoing ? 'peers' : 'protocol');
@@ -28,47 +31,79 @@ export const ShareLibraryModal: React.FC<ShareLibraryModalProps> = ({
   const [bandwidthCap, setBandwidthCap] = useState<string>(library.seedingBandwidthCap || '100 MB/s');
   const [isSeedingActive, setIsSeedingActive] = useState<boolean>(library.seedingStatus !== 'paused');
   const [showNotification, setShowNotification] = useState<string | null>(null);
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
 
   if (!isOpen) return null;
 
   const handleAddSpecifiedPeer = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inviteEmail.trim()) return;
-
-    const email = inviteEmail.trim();
-    const name = email.split('@')[0];
-    const newPeer: P2PPeer = {
-      id: `p-${Date.now()}`,
-      name,
-      email,
-      peerNodeId: peerNodeId.trim() || `node-${name.toLowerCase().replace(/[^a-z0-9]/g, '')}-mesh`,
-      status: 'seeding',
-      transferSpeed: '12.8 MB/s',
-      progressPercent: 10,
-      role: inviteRole,
-      publicKey: `0x${Math.random().toString(16).substring(2, 10)}...${Math.random().toString(16).substring(2, 6)}`,
-    };
-
-    const newMember: SharedMember = {
-      id: `m-${Date.now()}`,
-      name,
-      email,
-      role: inviteRole,
-      status: 'active',
-    };
+    const tokens = inviteEmail
+      .split(/[,;\n]+/)
+      .map(s => s.trim())
+      .filter(Boolean);
+    if (!tokens.length) return;
 
     const currentPeers = library.seedingPeers || [];
+    const existing = new Set(
+      currentPeers.map(p => (p.email || p.peerNodeId || '').toLowerCase()),
+    );
+    const stamp = Date.now();
+    const addedPeers: P2PPeer[] = [];
+    const addedMembers: SharedMember[] = [];
+    let skipped = 0;
+
+    tokens.forEach((token, i) => {
+      const key = token.toLowerCase();
+      if (existing.has(key)) {
+        skipped += 1;
+        return;
+      }
+      existing.add(key);
+      const name = token.includes('@') ? token.split('@')[0] : token;
+      const nodeHint = i === 0 && peerNodeId.trim()
+        ? peerNodeId.trim()
+        : `node-${name.toLowerCase().replace(/[^a-z0-9]/g, '')}-mesh`;
+      addedPeers.push({
+        id: `p-${stamp}-${i}`,
+        name,
+        email: token,
+        peerNodeId: nodeHint,
+        status: 'seeding',
+        transferSpeed: addedPeers.length === 0 ? '12.8 MB/s' : undefined,
+        progressPercent: addedPeers.length === 0 ? 10 : undefined,
+        role: inviteRole,
+        publicKey: `0x${Math.random().toString(16).substring(2, 10)}...${Math.random().toString(16).substring(2, 6)}`,
+      });
+      addedMembers.push({
+        id: `m-${stamp}-${i}`,
+        name,
+        email: token,
+        role: inviteRole,
+        status: 'active',
+      });
+    });
+
+    if (!addedPeers.length) {
+      setShowNotification(skipped ? 'Those peers are already authorized.' : 'Enter at least one email or node ID.');
+      setTimeout(() => setShowNotification(null), 3000);
+      return;
+    }
+
+    const nextMembers = [...library.members, ...addedMembers];
     const updated: SharedLibrary = {
       ...library,
-      seedingPeers: [...currentPeers, newPeer],
-      members: [...library.members, newMember],
-      memberCount: library.members.length + 1,
+      seedingPeers: [...currentPeers, ...addedPeers],
+      members: nextMembers,
+      memberCount: nextMembers.length,
     };
 
     onUpdateLibrary(updated);
     setInviteEmail('');
     setPeerNodeId('');
-    setShowNotification(`Added specified P2P peer: ${newPeer.name} (${newPeer.email}). Seeding initiated!`);
+    const label = addedPeers.length === 1
+      ? `Added ${addedPeers[0].name} (${addedPeers[0].email}). Seeding initiated.`
+      : `Added ${addedPeers.length} specified P2P peers. Seeding initiated.`;
+    setShowNotification(skipped ? `${label} (${skipped} skipped — already listed)` : label);
     setTimeout(() => setShowNotification(null), 3500);
   };
 
@@ -105,6 +140,13 @@ export const ShareLibraryModal: React.FC<ShareLibraryModalProps> = ({
     navigator.clipboard.writeText(p2pDirectLink);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
+  };
+
+  const handleDisconnectIncoming = () => {
+    if (!onDisconnectLibrary) return;
+    onDisconnectLibrary(library.id);
+    setConfirmDisconnect(false);
+    onClose();
   };
 
   return (
@@ -257,29 +299,38 @@ export const ShareLibraryModal: React.FC<ShareLibraryModalProps> = ({
                 </div>
               </div>
 
-              {/* Add Specified Peer Form */}
+              {/* Add Specified Peers Form — supports multiple emails */}
               <form onSubmit={handleAddSpecifiedPeer} className="space-y-3 p-4 rounded-xl bg-black/40 border border-white/10">
                 <label className="text-xs font-semibold text-neutral-200 block">
-                  Specify P2P Peer User to Seed To
+                  Add Specified P2P Users
                 </label>
                 <p className="text-[11px] text-neutral-400 -mt-1 mb-2">
-                  Add the email or node ID of the recipient user you want to seed this library to.
+                  Enter one email or node ID, or paste several separated by commas / new lines.
                 </p>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-2.5 w-4 h-4 text-neutral-500" />
+                  <textarea
+                    value={inviteEmail}
+                    onChange={e => setInviteEmail(e.target.value)}
+                    rows={2}
+                    placeholder={"peer@example.org\neditor@studio.com, viewer@client.org"}
+                    className="w-full bg-neutral-950 border border-white/10 rounded-xl pl-9 pr-3 py-2 text-xs text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-sky-400 font-mono resize-y min-h-[2.75rem]"
+                  />
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-2">
-                  <div className="md:col-span-6 relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
+                  <div className="md:col-span-5">
                     <input
                       type="text"
-                      value={inviteEmail}
-                      onChange={e => setInviteEmail(e.target.value)}
-                      placeholder="peer@example.org or user email"
-                      className="w-full bg-neutral-950 border border-white/10 rounded-xl pl-9 pr-3 py-2 text-xs text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-sky-400"
+                      value={peerNodeId}
+                      onChange={e => setPeerNodeId(e.target.value)}
+                      placeholder="Optional node ID for first peer"
+                      className="w-full bg-neutral-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-sky-400 font-mono"
                     />
                   </div>
-                  <div className="md:col-span-3">
+                  <div className="md:col-span-4">
                     <select
                       value={inviteRole}
-                      onChange={e => setInviteRole(e.target.value as any)}
+                      onChange={e => setInviteRole(e.target.value as 'editor' | 'viewer' | 'admin')}
                       className="w-full bg-neutral-950 border border-white/10 rounded-xl px-2.5 py-2 text-xs text-neutral-200 focus:outline-none focus:border-sky-400"
                     >
                       <option value="editor">Editor (Sync & Grade)</option>
@@ -293,7 +344,7 @@ export const ShareLibraryModal: React.FC<ShareLibraryModalProps> = ({
                       className="w-full bg-sky-500 hover:bg-sky-400 text-white py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors shadow-lg shadow-sky-500/20"
                     >
                       <UserPlus className="w-3.5 h-3.5" />
-                      <span>Authorize Peer</span>
+                      <span>Authorize</span>
                     </button>
                   </div>
                 </div>
@@ -400,6 +451,47 @@ export const ShareLibraryModal: React.FC<ShareLibraryModalProps> = ({
                   <span className="font-mono text-emerald-400 font-semibold">{library.transferSpeed || '42.8 MB/s'}</span>
                 </div>
               </div>
+
+              {onDisconnectLibrary && (
+                <div className="pt-2 border-t border-white/10">
+                  {confirmDisconnect ? (
+                    <div className="p-3.5 rounded-xl bg-red-950/30 border border-red-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <div className="text-xs font-semibold text-red-200">Disconnect from this library?</div>
+                        <p className="text-[11px] text-neutral-400 mt-0.5">
+                          Stops receiving encrypted chunks from {library.senderPeerName || library.ownerName}. Files already on this device stay local; you can re-join later with an invite.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDisconnect(false)}
+                          className="px-3 py-1.5 rounded-lg bg-neutral-850 hover:bg-neutral-800 text-neutral-300 text-xs font-medium transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleDisconnectIncoming}
+                          className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-semibold transition-colors flex items-center gap-1.5"
+                        >
+                          <Unlink className="w-3.5 h-3.5" />
+                          Disconnect
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDisconnect(true)}
+                      className="w-full sm:w-auto px-4 py-2 rounded-xl bg-red-950/40 hover:bg-red-900/50 border border-red-800/50 text-red-300 hover:text-red-100 text-xs font-medium transition-all flex items-center justify-center gap-1.5"
+                    >
+                      <Unlink className="w-3.5 h-3.5" />
+                      Disconnect from Incoming Library
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

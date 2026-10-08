@@ -352,33 +352,44 @@ export default function App() {
       ? new Date(Date.now() + form.expiresInDays * 86400000).toISOString()
       : undefined;
     newLib.allowDownloads = form.allowDownloads;
-    if (form.memberEmail) {
+    const recipientList = (form.memberEmails?.length
+      ? form.memberEmails
+      : form.memberEmail
+        ? [form.memberEmail]
+        : []
+    ).map(e => e.trim()).filter(Boolean);
+    if (recipientList.length) {
+      const stamp = Date.now();
       newLib.members = [
         ...newLib.members,
-        {
-          id: `m-${Date.now()}`,
-          name: form.memberEmail.split('@')[0],
-          email: form.memberEmail,
+        ...recipientList.map((email, i) => ({
+          id: `m-${stamp}-${i}`,
+          name: email.includes('@') ? email.split('@')[0] : email,
+          email,
           role: form.role,
-          status: 'pending',
-        },
+          status: 'pending' as const,
+        })),
       ];
-      newLib.seedingPeers = [{
-        id: `p-${Date.now()}`,
-        name: form.memberEmail.split('@')[0],
-        email: form.memberEmail,
-        peerNodeId: result.record.ownerPeerId,
-        status: 'seeding',
+      newLib.seedingPeers = recipientList.map((email, i) => ({
+        id: `p-${stamp}-${i}`,
+        name: email.includes('@') ? email.split('@')[0] : email,
+        email,
+        peerNodeId: `node-${email.toLowerCase().replace(/[^a-z0-9]/g, '')}-mesh`,
+        status: 'seeding' as const,
         role: form.role,
-      }];
+        transferSpeed: i === 0 ? '18.4 MB/s' : undefined,
+      }));
+      newLib.memberCount = newLib.members.length;
     }
     setSharedLibraries(prev => [...prev.filter(l => l.id !== newLib.id), newLib]);
     setSelectedLibraryId(newLib.id);
+    const peerCount = recipientList.length;
+    const peerNote = peerCount > 1 ? ` to ${peerCount} peers` : peerCount === 1 ? ' to 1 peer' : '';
     try {
       await navigator.clipboard.writeText(result.invite);
-      showToast(`Seeding “${form.name}” — invite copied to clipboard`);
+      showToast(`Seeding “${form.name}”${peerNote} — invite copied to clipboard`);
     } catch {
-      showToast(`Seeding “${form.name}” — export invite from Share`);
+      showToast(`Seeding “${form.name}”${peerNote} — export invite from Share`);
     }
   };
 
@@ -678,6 +689,7 @@ export default function App() {
     selectedFolder,
     showToast,
     confirmBeforeDelete: appPreferences.confirmBeforeDelete,
+    isVaultUnlocked,
   });
 
   // Picking an account, folder or library leaves any open network share / device.
@@ -1064,6 +1076,8 @@ export default function App() {
         onNextMedia={onNextMedia}
         sharingLibrary={sharingLibrary}
         setSharedLibraries={setSharedLibraries}
+        selectedLibraryId={selectedLibraryId}
+        setSelectedLibraryId={setSelectedLibraryId}
         isVaultSecurityOpen={isVaultSecurityOpen}
         setIsVaultSecurityOpen={setIsVaultSecurityOpen}
         isVaultUnlocked={isVaultUnlocked}

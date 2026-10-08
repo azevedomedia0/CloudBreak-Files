@@ -464,6 +464,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
           onUnzip={onUnzipFile}
           onTrash={trashFiles}
           onToggleTag={(items, tag) => onToggleTag(items.map(item => item.id), tag)}
+          onToggleEncrypt={onToggleEncrypt}
         />
       )}
 
