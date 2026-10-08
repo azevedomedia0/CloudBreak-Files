@@ -13,6 +13,7 @@ import { isEditableDocument } from '../utils/documentKind';
 import { getFolderIcon } from '../utils/folderIcons';
 import { childFoldersOf, groupFilesByLocalFolders } from '../utils/groupFilesByLocation';
 import { accentForSelection } from '../utils/selectionAccent';
+import { isZipArchive } from '../utils/unzipArchive';
 import { FILE_CONTEXT_MENU_EVENT, FileContextMenuDetail } from '../utils/fileContextMenuBus';
 import type { SwarmStatus } from '../services/p2pBridge';
 
@@ -88,7 +89,9 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   const rootRef = useRef<HTMLDivElement>(null);
 
   const selectedFile = files.find(f => f.id === selectedFileId) || files[0] || null;
-  const accent = accentForSelection(selectedLibrary, selectedSourceId);
+  const accent = selectedFile && isZipArchive(selectedFile)
+    ? 'pink'
+    : accentForSelection(selectedLibrary, selectedSourceId);
   const groupByLocation =
     (selectedCategory === 'files' || selectedCategory === 'photo' || selectedCategory === 'video')
     && (viewMode === 'icons' || viewMode === 'list');

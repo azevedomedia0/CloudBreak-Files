@@ -5,6 +5,7 @@ import { isEditableDocument } from '../../utils/documentKind';
 import { FileThumbnail } from './FileThumbnail';
 import { SelectionAccent, SELECTION_CLASSES } from '../../utils/selectionAccent';
 import { formatBytes } from '../../utils/format';
+import { setFileDragData } from '../../utils/fileDrag';
 
 export interface ColumnsViewProps {
   accent: SelectionAccent;
@@ -92,6 +93,9 @@ export const ColumnsView: React.FC<ColumnsViewProps> = ({
             return (
               <button
                 key={file.id}
+                type="button"
+                draggable
+                onDragStart={e => setFileDragData(e.dataTransfer, file)}
                 onClick={() => onSelectFile(file)}
                 onContextMenu={event => onFileContextMenu(file, event)}
                 onDoubleClick={() => {

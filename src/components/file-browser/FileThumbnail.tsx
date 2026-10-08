@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Image as ImageIcon, Video, FileText, Lock } from 'lucide-react';
+import { Image as ImageIcon, Video, FileText, Archive } from 'lucide-react';
 import { FileItem } from '../../types';
 import { DocumentPreview } from '../document-editor/DocumentPreview';
 import { isEditableDocument } from '../../utils/documentKind';
+import { isZipArchive } from '../../utils/unzipArchive';
 
 interface FileThumbnailProps {
   file: FileItem;
@@ -28,6 +29,7 @@ const DOC_STYLES: Record<string, { badge: string; label: string }> = {
   txt: { badge: 'bg-neutral-500', label: 'TXT' },
   md: { badge: 'bg-neutral-500', label: 'MD' },
   rtf: { badge: 'bg-neutral-500', label: 'RTF' },
+  zip: { badge: 'bg-pink-500', label: 'ZIP' },
 };
 
 const DocumentPage: React.FC<{ name: string; compact: boolean }> = ({ name, compact }) => {
@@ -64,7 +66,7 @@ const FALLBACK_ICONS = {
   photo: ImageIcon,
   video: Video,
   document: FileText,
-  archive: Lock,
+  archive: Archive,
 } as const;
 
 export const FileThumbnail: React.FC<FileThumbnailProps> = ({
@@ -115,6 +117,12 @@ export const FileThumbnail: React.FC<FileThumbnailProps> = ({
         onContextMenu={handleContextMenu}
       />
     );
+  } else if (isZipArchive(file) || file.category === 'archive') {
+    content = (
+      <div className="w-full h-full flex items-center justify-center bg-gradient-to-b from-pink-950/40 to-neutral-950/80">
+        <Archive className={`${iconClassName} text-pink-400`} />
+      </div>
+    );
   } else if (isEditableDocument(file)) {
     content = <DocumentPreview file={file} compact={compact} className="w-full h-full" />;
   } else if (file.category === 'document') {
@@ -123,7 +131,7 @@ export const FileThumbnail: React.FC<FileThumbnailProps> = ({
     const Icon = FALLBACK_ICONS[file.category as keyof typeof FALLBACK_ICONS] ?? FileText;
     content = (
       <div className="w-full h-full flex items-center justify-center text-neutral-500">
-        <Icon className={`${iconClassName} ${file.category === 'archive' ? 'text-cyan-400' : file.category === 'video' ? 'text-amber-400' : ''}`} />
+        <Icon className={`${iconClassName} ${file.category === 'video' ? 'text-amber-400' : ''}`} />
       </div>
     );
   }

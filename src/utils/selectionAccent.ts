@@ -1,11 +1,12 @@
 import { SharedLibrary } from '../types';
 import { isIncomingLibrary, isOutgoingLibrary } from './libraryDirection';
 
-export type SelectionAccent = 'sky' | 'purple' | 'emerald' | 'orange';
+export type SelectionAccent = 'sky' | 'purple' | 'emerald' | 'orange' | 'pink';
 
 /**
  * Selected-file color: orange on a network share or removable device, purple inside an outgoing
  * library, green inside an incoming one, blue everywhere else.
+ * Callers may override with `pink` when the selected item is a zip archive.
  */
 export const accentForSelection = (lib: SharedLibrary | null, sourceId: string | null): SelectionAccent => {
   if (sourceId) return 'orange';
@@ -58,5 +59,14 @@ export const SELECTION_CLASSES: Record<SelectionAccent, {
     columnRow: 'bg-orange-500/25 text-white font-medium shadow-sm',
     galleryRing: 'ring-2 ring-orange-400 border-orange-400 scale-102 shadow-lg',
     checkIcon: 'text-orange-400',
+  },
+  pink: {
+    card: 'bg-pink-500/25 ring-1 ring-pink-400/60 shadow-lg shadow-pink-950/50',
+    cardMulti: 'bg-pink-500/15 ring-1 ring-pink-500/30',
+    row: 'bg-pink-500/20 text-white font-medium',
+    rowMulti: 'bg-pink-500/10',
+    columnRow: 'bg-pink-500/25 text-white font-medium shadow-sm',
+    galleryRing: 'ring-2 ring-pink-400 border-pink-400 scale-102 shadow-lg',
+    checkIcon: 'text-pink-400',
   },
 };

@@ -21,6 +21,7 @@ import { DropOverlay } from './components/DropOverlay';
 import { Toast } from './components/Toast';
 import { FileBrowser } from './components/FileBrowser';
 import { FileInspector } from './components/FileInspector';
+import { SystemTerminal } from './components/SystemTerminal';
 import { DocumentEditorModal } from './components/document-editor/DocumentEditorModal';
 
 import {
@@ -106,6 +107,7 @@ export default function App() {
   const [isAddAccountOpen, setIsAddAccountOpen] = useState<boolean>(false);
   const [integratingAccount, setIntegratingAccount] = useState<CloudAccount | null>(null);
   const [isInspectorOpen, setIsInspectorOpen] = useState<boolean>(() => loadPreferences().showInspectorOnLaunch);
+  const [sidePanelMode, setSidePanelMode] = useState<'inspector' | 'terminal'>('inspector');
 
   const setUserProfile = (profile: UserProfile) => {
     setUserProfileState(profile);
@@ -809,7 +811,23 @@ export default function App() {
             isSidebarCollapsed={isSidebarCollapsed}
             onToggleSidebar={() => setIsSidebarCollapsed(prev => !prev)}
             isInspectorOpen={isInspectorOpen}
-            onToggleInspector={() => setIsInspectorOpen(prev => !prev)}
+            sidePanelMode={sidePanelMode}
+            onToggleInspector={() => {
+              if (isInspectorOpen && sidePanelMode === 'inspector') {
+                setIsInspectorOpen(false);
+              } else {
+                setSidePanelMode('inspector');
+                setIsInspectorOpen(true);
+              }
+            }}
+            onShowTerminal={() => {
+              if (isInspectorOpen && sidePanelMode === 'terminal') {
+                setIsInspectorOpen(false);
+              } else {
+                setSidePanelMode('terminal');
+                setIsInspectorOpen(true);
+              }
+            }}
             isNotificationOpen={isNotificationOpen}
             onToggleNotifications={() => setIsNotificationOpen(prev => !prev)}
             onCloseNotifications={() => setIsNotificationOpen(false)}
@@ -953,22 +971,35 @@ export default function App() {
                   onRefreshSwarm={() => { void refreshSwarm(); }}
                 />
 
-                {/* Inspector Draggable Splitter Handle */}
-                {isInspectorOpen && selectedFile && (
+                {/* Right panel: File Inspector or System Terminal */}
+                {isInspectorOpen && (sidePanelMode === 'terminal' || selectedFile) && (
                   <div
                     onMouseDown={startResizeInspector}
                     onDoubleClick={resetInspectorWidth}
                     className={`w-1.5 -mr-1 z-30 cursor-col-resize hover:bg-sky-400/60 transition-colors select-none shrink-0 group ${
                       isResizingInspector ? 'bg-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.8)]' : 'bg-transparent'
                     }`}
-                    title="Drag to resize file inspector (Double-click to reset)"
+                    title="Drag to resize side panel (Double-click to reset)"
                   >
                     <div className="w-0.5 h-6 mx-auto mt-2 rounded bg-white/20 group-hover:bg-sky-300 transition-colors" />
                   </div>
                 )}
 
-                {/* Right File Inspector */}
-                {isInspectorOpen && selectedFile && (
+                {isInspectorOpen && sidePanelMode === 'terminal' && (
+                  <SystemTerminal
+                    width={inspectorWidth}
+                    context={{
+                      cwdLabel: activePathTitle || 'All Files',
+                      userName: userProfile.name,
+                      isVaultUnlocked,
+                      peerId: swarmStatus?.peerId ?? null,
+                      fileNames: filteredFiles.map(f => f.name),
+                      libraryNames: sharedLibraries.map(l => l.name),
+                    }}
+                  />
+                )}
+
+                {isInspectorOpen && sidePanelMode === 'inspector' && selectedFile && (
                   <FileInspector
                     file={selectedFile}
                     photoNav={photoNav}

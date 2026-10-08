@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Edit3 } from 'lucide-react';
 import { FileItem } from '../../types';
 import { isEditableDocument } from '../../utils/documentKind';
 import { SelectionAccent, SELECTION_CLASSES } from '../../utils/selectionAccent';
+import { setFileDragData } from '../../utils/fileDrag';
 import { FileThumbnail } from './FileThumbnail';
 
 export interface GalleryViewProps {
@@ -153,6 +154,8 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
               <div
                 key={file.id}
                 data-file-id={file.id}
+                draggable
+                onDragStart={e => setFileDragData(e.dataTransfer, file)}
                 onClick={() => onSelectFile(file)}
                 onContextMenu={event => onFileContextMenu(file, event)}
                 className={`h-[calc(100%-6px)] aspect-video rounded-lg overflow-hidden border shrink-0 cursor-pointer relative transition-all ${

@@ -3,7 +3,7 @@ import {
   ChevronLeft, ChevronRight, LayoutGrid, List, Columns,
   GalleryVertical, Search, HardDrive, PanelLeft, PanelRight, Bell,
   ArrowUpDown, ArrowUpAZ, ArrowDownAZ, Check, ListFilter,
-  FileText, Image as ImageIcon, Video, Music, Lock, Star,
+  FileText, Image as ImageIcon, Video, Music, Archive, Star, SquareTerminal,
 } from 'lucide-react';
 import { CloudAccount, AppNotification, FileCategory } from '../types';
 import { DateFilter, FileSortDirection, FileSortKey } from '../utils/filterFiles';
@@ -37,6 +37,9 @@ interface MacFinderToolbarProps {
   onToggleSidebar?: () => void;
   isInspectorOpen?: boolean;
   onToggleInspector?: () => void;
+  /** Right panel content: file inspector vs system terminal. */
+  sidePanelMode?: 'inspector' | 'terminal';
+  onShowTerminal?: () => void;
   isNotificationOpen?: boolean;
   onToggleNotifications?: () => void;
   onCloseNotifications?: () => void;
@@ -61,7 +64,7 @@ const KIND_OPTIONS: { id: FileCategory; label: string; icon: React.ElementType }
   { id: 'photo', label: 'Images', icon: ImageIcon },
   { id: 'video', label: 'Movies', icon: Video },
   { id: 'audio', label: 'Music', icon: Music },
-  { id: 'archive', label: 'Encrypted', icon: Lock },
+  { id: 'archive', label: 'Archives', icon: Archive },
 ];
 
 const DATE_OPTIONS: { id: DateFilter; label: string }[] = [
@@ -91,6 +94,8 @@ export const MacFinderToolbar: React.FC<MacFinderToolbarProps> = ({
   onToggleSidebar,
   isInspectorOpen = true,
   onToggleInspector,
+  sidePanelMode = 'inspector',
+  onShowTerminal,
   isNotificationOpen = false,
   onToggleNotifications,
   onCloseNotifications,
@@ -338,9 +343,15 @@ export const MacFinderToolbar: React.FC<MacFinderToolbarProps> = ({
                             selected ? 'bg-white/12 text-white' : 'text-neutral-300 hover:bg-white/6 hover:text-neutral-100'
                           }`}
                         >
-                          <Icon className="w-3.5 h-3.5 shrink-0 text-neutral-400" />
+                          <Icon className={`w-3.5 h-3.5 shrink-0 ${
+                            option.id === 'archive'
+                              ? selected ? 'text-pink-400' : 'text-pink-400/70'
+                              : 'text-neutral-400'
+                          }`} />
                           <span className="flex-1 font-medium">{option.label}</span>
-                          {selected && <Check className="w-3.5 h-3.5 text-cyan-300" />}
+                          {selected && (
+                            <Check className={`w-3.5 h-3.5 ${option.id === 'archive' ? 'text-pink-300' : 'text-cyan-300'}`} />
+                          )}
                         </button>
                       );
                     })}
@@ -485,22 +496,54 @@ export const MacFinderToolbar: React.FC<MacFinderToolbarProps> = ({
           </div>
         </div>
 
-        {onToggleInspector && (
-          <button
-            type="button"
-            onClick={onToggleInspector}
-            className={`ml-auto shrink-0 p-1.5 rounded-lg transition-all ${
-              isInspectorOpen
-                ? 'text-neutral-200 hover:text-white hover:bg-white/10'
-                : 'text-sky-300 hover:bg-white/10'
-            }`}
-            title={isInspectorOpen ? 'Hide File Inspector' : 'Show File Inspector'}
-            aria-label={isInspectorOpen ? 'Hide File Inspector' : 'Show File Inspector'}
-            aria-pressed={isInspectorOpen}
-          >
-            <PanelRight className="w-[18px] h-[18px]" />
-          </button>
-        )}
+        <div className="ml-auto shrink-0 flex items-center gap-0.5">
+          {onShowTerminal && (
+            <button
+              type="button"
+              onClick={onShowTerminal}
+              className={`p-1.5 rounded-lg transition-all ${
+                isInspectorOpen && sidePanelMode === 'terminal'
+                  ? 'text-lime-300 bg-lime-500/15 hover:bg-lime-500/20'
+                  : 'text-neutral-400 hover:text-white hover:bg-white/10'
+              }`}
+              title={
+                isInspectorOpen && sidePanelMode === 'terminal'
+                  ? 'Terminal open'
+                  : 'Show system terminal'
+              }
+              aria-label="Show system terminal"
+              aria-pressed={isInspectorOpen && sidePanelMode === 'terminal'}
+            >
+              <SquareTerminal className="w-[18px] h-[18px]" />
+            </button>
+          )}
+          {onToggleInspector && (
+            <button
+              type="button"
+              onClick={onToggleInspector}
+              className={`p-1.5 rounded-lg transition-all ${
+                isInspectorOpen && sidePanelMode === 'inspector'
+                  ? 'text-neutral-200 hover:text-white hover:bg-white/10'
+                  : !isInspectorOpen
+                    ? 'text-sky-300 hover:bg-white/10'
+                    : 'text-neutral-400 hover:text-white hover:bg-white/10'
+              }`}
+              title={
+                isInspectorOpen && sidePanelMode === 'inspector'
+                  ? 'Hide File Inspector'
+                  : 'Show File Inspector'
+              }
+              aria-label={
+                isInspectorOpen && sidePanelMode === 'inspector'
+                  ? 'Hide File Inspector'
+                  : 'Show File Inspector'
+              }
+              aria-pressed={isInspectorOpen && sidePanelMode === 'inspector'}
+            >
+              <PanelRight className="w-[18px] h-[18px]" />
+            </button>
+          )}
+        </div>
       </div>
 
     </div>

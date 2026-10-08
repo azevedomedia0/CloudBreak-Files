@@ -343,6 +343,8 @@ html[data-theme="light"] [class*="bg-red-"].text-white,
 html[data-theme="light"] [class*="bg-violet-"].text-white,
 html[data-theme="light"] [class*="bg-indigo-"].text-white,
 html[data-theme="light"] [class*="bg-orange-"].text-white,
+html[data-theme="light"] [class*="bg-pink-"].text-white,
+html[data-theme="light"] [class*="bg-lime-"].text-white,
 html[data-theme="light"] [class*="from-sky-"].text-white,
 html[data-theme="light"] [class*="from-indigo-"].text-white {
   color: #ffffff;
