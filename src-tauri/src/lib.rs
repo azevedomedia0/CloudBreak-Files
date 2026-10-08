@@ -4,6 +4,7 @@ pub mod crypto;
 pub mod media;
 pub mod p2p;
 pub mod storage;
+pub mod terminal;
 pub mod tray;
 pub mod vault_store;
 
@@ -11,6 +12,7 @@ use commands::{AppState, VaultState};
 use p2p::P2pState;
 use std::sync::Mutex;
 use storage::StorageManager;
+use terminal::TerminalState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -20,6 +22,7 @@ pub fn run() {
             vault: Mutex::new(VaultState::default()),
         })
         .manage(P2pState::default())
+        .manage(TerminalState::default())
         .setup(|app| {
             #[cfg(desktop)]
             {
@@ -52,6 +55,10 @@ pub fn run() {
             p2p::commands::p2p_stream_chunk,
             p2p::commands::p2p_fetch_manifest,
             tray::tray_refresh_status,
+            terminal::terminal_create,
+            terminal::terminal_write,
+            terminal::terminal_resize,
+            terminal::terminal_kill,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Cloudbreak Files");

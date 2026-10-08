@@ -41,6 +41,7 @@ x25519-dalek = { version = "2", features = ["static_secrets"] }
 hkdf = "0.12"
 zeroize = { version = "1", features = ["zeroize_derive"] }
 parking_lot = "0.12"
+portable-pty = "0.8"
 
 # Debug builds run the PBKDF2 key derivation at full speed, so tests and `tauri dev` stay fast.
 [profile.dev.package.sha2]

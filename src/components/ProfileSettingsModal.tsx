@@ -193,7 +193,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fadeIn">
-      <div className="relative flex flex-col w-full max-w-2xl bg-neutral-900 border border-white/10 rounded-2xl overflow-hidden shadow-2xl macos-glass-card max-h-[min(860px,92vh)]">
+      <div className="app-modal-panel relative flex flex-col w-full max-w-2xl bg-neutral-900 border border-white/10 rounded-2xl overflow-hidden shadow-2xl macos-glass-card max-h-[min(860px,92vh)]">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/10 bg-neutral-950/80 shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-sky-500/15 border border-sky-400/30 flex items-center justify-center text-sky-300">

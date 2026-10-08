@@ -171,10 +171,10 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-150">
-      <div className="relative flex flex-col w-full max-w-xl bg-[#141416] border border-[#2c2c2f] rounded-2xl shadow-2xl overflow-hidden select-none">
+      <div className="app-modal-panel relative flex flex-col w-full max-w-xl bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl overflow-hidden select-none">
         
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#262629] bg-[#0e0e0f]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-neutral-950">
           <div className="flex items-center gap-3">
             <div className={`w-9 h-9 rounded-xl bg-gradient-to-tr ${account.avatarColor} flex items-center justify-center text-white font-bold text-sm shadow-md`}>
               {account.provider[0].toUpperCase()}
@@ -203,7 +203,7 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-neutral-400 hover:text-white hover:bg-[#202023] rounded-lg transition-colors cursor-pointer"
+            className="p-1.5 text-neutral-400 hover:text-white hover:bg-neutral-800 rounded-lg transition-colors cursor-pointer"
             title="Close dialog"
           >
             <X className="w-5 h-5" />
@@ -211,13 +211,13 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex items-center gap-1 px-6 pt-3 border-b border-[#262629] bg-[#111113] text-xs">
+        <div className="flex items-center gap-1 px-6 pt-3 border-b border-white/10 bg-neutral-950/80 text-xs">
           <button
             type="button"
             onClick={() => setActiveTab('integration')}
             className={`px-3 py-2 border-b-2 font-medium transition-all ${
               activeTab === 'integration'
-                ? 'border-sky-400 text-sky-200 font-semibold'
+                ? 'border-sky-400 text-sky-400 font-semibold'
                 : 'border-transparent text-neutral-400 hover:text-neutral-200'
             }`}
           >
@@ -228,7 +228,7 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
             onClick={() => setActiveTab('sync')}
             className={`px-3 py-2 border-b-2 font-medium transition-all ${
               activeTab === 'sync'
-                ? 'border-sky-400 text-sky-200 font-semibold'
+                ? 'border-sky-400 text-sky-400 font-semibold'
                 : 'border-transparent text-neutral-400 hover:text-neutral-200'
             }`}
           >
@@ -241,7 +241,7 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
           {activeTab === 'integration' && (
             <div className="space-y-4">
               {/* Provider Info Banner */}
-              <div className="p-3.5 rounded-xl bg-[#0b0b0c] border border-[#212124] flex items-start gap-3">
+              <div className="p-3.5 rounded-xl bg-neutral-950 border border-neutral-800 flex items-start gap-3">
                 <Globe className="w-5 h-5 text-sky-400 shrink-0 mt-0.5" />
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-semibold text-neutral-200">
@@ -266,7 +266,7 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
                   type="text"
                   value={accountName}
                   onChange={e => setAccountName(e.target.value)}
-                  className="w-full bg-[#0e0e0f] border border-[#2c2c2f] rounded-lg px-3 py-2 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-sky-500 font-sans"
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-sky-500 font-sans"
                 />
               </div>
 
@@ -279,7 +279,7 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
                   type="text"
                   value={accountEmail}
                   onChange={e => setAccountEmail(e.target.value)}
-                  className="w-full bg-[#0e0e0f] border border-[#2c2c2f] rounded-lg px-3 py-2 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-sky-500 font-sans"
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-sky-500 font-sans"
                 />
               </div>
 
@@ -292,7 +292,7 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
                   type="text"
                   value={serverEndpoint}
                   onChange={e => setServerEndpoint(e.target.value)}
-                  className="w-full bg-[#0e0e0f] border border-[#2c2c2f] rounded-lg px-3 py-2 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-sky-500 font-mono text-[11px]"
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-sky-500 font-mono text-[11px]"
                 />
               </div>
 
@@ -306,7 +306,7 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
                     value={username}
                     onChange={e => setUsername(e.target.value)}
                     placeholder={account.provider === 'MEGA Drive' ? 'you@example.com' : 'username'}
-                    className="w-full bg-[#0e0e0f] border border-[#2c2c2f] rounded-lg px-3 py-2 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-sky-500 font-sans"
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-sky-500 font-sans"
                   />
                 </div>
               )}
@@ -328,7 +328,7 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
                       onChange={e => setApiKey(e.target.value)}
                       placeholder={existing ? 'Leave blank to keep saved credentials' : 'Paste a token or password'}
                       autoComplete="off"
-                      className="w-full bg-[#0e0e0f] border border-[#2c2c2f] rounded-lg px-3 py-2 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-sky-500 font-mono text-[11px] pr-10"
+                      className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-sky-500 font-mono text-[11px] pr-10"
                     />
                     <div className="absolute right-2.5 top-2.5 text-neutral-500">
                       <Key className="w-3.5 h-3.5" />
@@ -348,7 +348,7 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
                     type="button"
                     onClick={() => void handleTestConnection()}
                     disabled={isTesting || !kind}
-                    className="px-3 py-2 rounded-lg bg-[#1c1c1f] hover:bg-[#27272b] border border-[#323236] text-neutral-200 text-xs font-medium flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                    className="px-3 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-750 border border-neutral-700 text-neutral-200 text-xs font-medium flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 text-sky-400 ${isTesting ? 'animate-spin' : ''}`} />
                     <span>{isTesting ? 'Testing connection...' : `Test ${account.provider} Integration`}</span>
@@ -379,7 +379,7 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
           {activeTab === 'sync' && (
             <div className="space-y-4">
               {/* Storage Quota Progress */}
-              <div className="p-4 rounded-xl bg-[#0b0b0c] border border-[#212124] space-y-2">
+              <div className="p-4 rounded-xl bg-neutral-950 border border-neutral-800 space-y-2">
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-neutral-300">Allocated Cloud Storage</span>
                   <span className="font-mono text-white font-medium">
@@ -395,7 +395,7 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
               </div>
 
               {/* Auto Sync Toggle */}
-              <div className="p-3.5 rounded-xl bg-[#0b0b0c] border border-[#212124] flex items-center justify-between">
+              <div className="p-3.5 rounded-xl bg-neutral-950 border border-neutral-800 flex items-center justify-between">
                 <div>
                   <div className="text-xs font-semibold text-neutral-200">Realtime Background Sync</div>
                   <div className="text-[11px] text-neutral-400">Stream file changes and P2P replicas automatically</div>
@@ -410,7 +410,7 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
               </div>
 
               {/* Node Specifications */}
-              <div className="p-3.5 rounded-xl bg-[#0b0b0c] border border-[#212124] space-y-2 text-[11px]">
+              <div className="p-3.5 rounded-xl bg-neutral-950 border border-neutral-800 space-y-2 text-[11px]">
                 <div className="flex justify-between text-neutral-400 font-mono">
                   <span>Transfer Threads:</span>
                   <span className="text-neutral-200">8 parallel streams</span>
@@ -429,7 +429,7 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
 
           {/* Dialog Action Buttons */}
           {confirmingDisconnect ? (
-            <div className="flex items-center justify-between gap-3 pt-4 border-t border-[#262629]">
+            <div className="flex items-center justify-between gap-3 pt-4 border-t border-white/10">
               <div>
                 <div className="text-xs font-semibold text-red-200">Disconnect {account.name}?</div>
                 <div className="text-[11px] text-neutral-400">Syncing stops and it leaves the sidebar. Your files stay in the provider.</div>
@@ -438,7 +438,7 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
                 <button
                   type="button"
                   onClick={() => setConfirmingDisconnect(false)}
-                  className="px-4 py-2 rounded-lg bg-[#19191b] hover:bg-[#232326] text-neutral-300 text-xs font-medium transition-colors cursor-pointer"
+                  className="px-4 py-2 rounded-lg bg-neutral-850 hover:bg-neutral-800 text-neutral-300 text-xs font-medium transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -453,7 +453,7 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
               </div>
             </div>
           ) : (
-            <div className="flex items-center justify-between pt-4 border-t border-[#262629]">
+            <div className="flex items-center justify-between pt-4 border-t border-white/10">
               <button
                 type="button"
                 onClick={() => setConfirmingDisconnect(true)}
@@ -467,7 +467,7 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-4 py-2 rounded-lg bg-[#19191b] hover:bg-[#232326] text-neutral-300 text-xs font-medium transition-colors cursor-pointer"
+                  className="px-4 py-2 rounded-lg bg-neutral-850 hover:bg-neutral-800 text-neutral-300 text-xs font-medium transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>

@@ -57,7 +57,7 @@ export const QuickLookModal: React.FC<QuickLookModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xl p-4 animate-fadeIn">
       <div 
-        className="relative flex flex-col w-full max-w-4xl max-h-[85vh] rounded-2xl overflow-hidden macos-window animate-scaleUp select-none"
+        className="app-modal-panel relative flex flex-col w-full max-w-4xl max-h-[85vh] rounded-2xl overflow-hidden macos-window animate-scaleUp select-none"
         onClick={e => e.stopPropagation()}
       >
         {/* macOS Quick Look Header */}

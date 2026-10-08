@@ -550,7 +550,7 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-2 sm:p-4">
-      <div className="relative flex flex-col w-full h-[95vh] max-w-7xl bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden shadow-2xl">
+      <div className="app-modal-panel relative flex flex-col w-full h-[95vh] max-w-7xl bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden shadow-2xl">
         
         {/* Top Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-neutral-800 bg-neutral-950/80">

@@ -107,7 +107,7 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
-      <div className="relative flex flex-col w-full max-w-lg bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden shadow-2xl max-h-[90vh]">
+      <div className="app-modal-panel relative flex flex-col w-full max-w-lg bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden shadow-2xl max-h-[90vh]">
         <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800 bg-neutral-950/80 shrink-0">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-cyan-500/10 text-cyan-400">
