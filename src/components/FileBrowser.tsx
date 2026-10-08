@@ -1,6 +1,6 @@
-import React, { useRef, useState } from 'react';
-import { Folder, Lock, Trash2, ChevronRight, HardDrive } from 'lucide-react';
-import { FileItem, CloudAccount, FolderItem, SharedLibrary, CloudProviderId } from '../types';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Folder, RotateCcw, Trash2, ChevronRight, HardDrive } from 'lucide-react';
+import { FileItem, CloudAccount, FolderItem, SharedLibrary, CloudProviderId, FileCategory } from '../types';
 import { MacViewMode } from './MacFinderToolbar';
 import { LibraryBanner } from './file-browser/LibraryBanner';
 import { IconsView } from './file-browser/IconsView';
@@ -10,7 +10,11 @@ import { GalleryView } from './file-browser/GalleryView';
 import { FileContextMenu, FileRenameField } from './file-browser/FileContextMenu';
 import { FileGetInfo } from './file-browser/FileGetInfo';
 import { isEditableDocument } from '../utils/documentKind';
+import { getFolderIcon } from '../utils/folderIcons';
+import { childFoldersOf, groupFilesByLocalFolders } from '../utils/groupFilesByLocation';
 import { accentForSelection } from '../utils/selectionAccent';
+import { FILE_CONTEXT_MENU_EVENT, FileContextMenuDetail } from '../utils/fileContextMenuBus';
+import type { SwarmStatus } from '../services/p2pBridge';
 
 interface FileBrowserProps {
   files: FileItem[];
@@ -18,6 +22,7 @@ interface FileBrowserProps {
   selectedAccountId: CloudProviderId;
   selectedFolder: FolderItem | null;
   selectedLibrary: SharedLibrary | null;
+  selectedCategory?: FileCategory;
   /** Network share name or removable device id when one is open. */
   selectedSourceId?: string | null;
   selectedFileId: string | null;
@@ -29,15 +34,19 @@ interface FileBrowserProps {
   onShareFile: (file: FileItem) => void;
   onToggleEncrypt: (file: FileItem) => void;
   onDeleteFile: (fileId: string) => void;
-  onBatchEncrypt: (fileIds: string[]) => void;
+  onBatchRestore: (fileIds: string[]) => void;
   onBatchDelete: (fileIds: string[]) => void;
   onRenameFile: (fileId: string, name: string) => void;
   onDuplicateFiles: (files: FileItem[]) => string[];
   onCopyFiles: (files: FileItem[]) => void;
   onToggleTag: (fileIds: string[], tag: string) => void;
+  onUnzipFile: (file: FileItem) => void;
   onOpenQuickLook: () => void;
   folders: FolderItem[];
   onSelectFolder: (folderId: string | null) => void;
+  swarmStatus?: SwarmStatus | null;
+  onCopyLibraryInvite?: () => void;
+  onRefreshSwarm?: () => void;
 }
 
 export const FileBrowser: React.FC<FileBrowserProps> = ({
@@ -46,6 +55,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   selectedAccountId,
   selectedFolder,
   selectedLibrary,
+  selectedCategory = 'all',
   selectedSourceId = null,
   selectedFileId,
   viewMode,
@@ -56,15 +66,19 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   onShareFile,
   onToggleEncrypt,
   onDeleteFile,
-  onBatchEncrypt,
+  onBatchRestore,
   onBatchDelete,
   onRenameFile,
   onDuplicateFiles,
   onCopyFiles,
   onToggleTag,
+  onUnzipFile,
   onOpenQuickLook,
   folders,
   onSelectFolder,
+  swarmStatus = null,
+  onCopyLibraryInvite,
+  onRefreshSwarm,
 }) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [iconScale, setIconScale] = useState<number>(100); // 75 to 150%
@@ -75,6 +89,22 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
 
   const selectedFile = files.find(f => f.id === selectedFileId) || files[0] || null;
   const accent = accentForSelection(selectedLibrary, selectedSourceId);
+  const groupByLocation =
+    (selectedCategory === 'files' || selectedCategory === 'photo' || selectedCategory === 'video')
+    && (viewMode === 'icons' || viewMode === 'list');
+  const localFolders = useMemo(() => folders.filter(folder => folder.accountId === 'all'), [folders]);
+  const locationSections = useMemo(
+    () => (groupByLocation
+      ? groupFilesByLocalFolders(files, localFolders, folders, {
+          includeEmptySubfolders: selectedCategory === 'files',
+        })
+      : []),
+    [groupByLocation, files, localFolders, folders, selectedCategory],
+  );
+  const browseSubfolders = useMemo(
+    () => (groupByLocation ? [] : childFoldersOf(selectedFolder?.id, folders)),
+    [groupByLocation, selectedFolder?.id, folders],
+  );
 
   const toggleSelectOne = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -117,6 +147,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     if (file.category === 'photo') onEditPhoto(file);
     else if (file.category === 'video') onOpenVideo(file);
     else if (isEditableDocument(file)) onOpenDocument(file);
+    else if (file.name.toLowerCase().endsWith('.zip') || file.mimeType === 'application/zip') onUnzipFile(file);
     else onOpenQuickLook();
   };
 
@@ -136,13 +167,78 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     if (ids.length) setSelectedIds(new Set(ids));
   };
 
-  const openContextMenu = (file: FileItem, event: React.MouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
+  const openContextMenuAt = (file: FileItem, x: number, y: number) => {
     if (!selectedIds.has(file.id)) setSelectedIds(new Set([file.id]));
     selectFile(file);
     setRenaming(null);
-    setContextMenu({ file, x: event.clientX, y: event.clientY });
+    setContextMenu({ file, x, y });
+  };
+
+  const openContextMenu = (file: FileItem, event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    openContextMenuAt(file, event.clientX, event.clientY);
+  };
+
+  useEffect(() => {
+    const onExternalMenu = (event: Event) => {
+      const detail = (event as CustomEvent<FileContextMenuDetail>).detail;
+      if (!detail?.file) return;
+      setSelectedIds(prev => (prev.has(detail.file.id) ? prev : new Set([detail.file.id])));
+      onSelectFile(detail.file);
+      rootRef.current?.focus({ preventScroll: true });
+      setRenaming(null);
+      setContextMenu({ file: detail.file, x: detail.clientX, y: detail.clientY });
+    };
+    window.addEventListener(FILE_CONTEXT_MENU_EVENT, onExternalMenu);
+    return () => window.removeEventListener(FILE_CONTEXT_MENU_EVENT, onExternalMenu);
+  }, [onSelectFile]);
+
+  const renderSectionViews = (sectionFiles: FileItem[], sectionFolders: FolderItem[] = []) => {
+    const hasItems = sectionFiles.length > 0 || sectionFolders.length > 0;
+    if (!hasItems) return null;
+    return (
+      <>
+        {viewMode === 'icons' && (
+          <IconsView
+            accent={accent}
+            files={sectionFiles}
+            folders={sectionFolders}
+            selectedFileId={selectedFileId}
+            selectedIds={selectedIds}
+            iconScale={iconScale}
+            onSelectFile={selectFile}
+            onOpenFolder={onSelectFolder}
+            onEditPhoto={onEditPhoto}
+            onOpenDocument={onOpenDocument}
+            onOpenVideo={onOpenVideo}
+            onOpenQuickLook={onOpenQuickLook}
+            onFileContextMenu={openContextMenu}
+            toggleSelectOne={toggleSelectOne}
+          />
+        )}
+        {viewMode === 'list' && (
+          <ListView
+            accent={accent}
+            files={sectionFiles}
+            folders={sectionFolders}
+            selectedFileId={selectedFileId}
+            selectedIds={selectedIds}
+            onSelectFile={selectFile}
+            onOpenFolder={onSelectFolder}
+            onEditPhoto={onEditPhoto}
+            onOpenDocument={onOpenDocument}
+            onOpenVideo={onOpenVideo}
+            onShareFile={onShareFile}
+            onOpenQuickLook={onOpenQuickLook}
+            onFileContextMenu={openContextMenu}
+            toggleSelectOne={toggleSelectOne}
+            toggleSelectAll={toggleSelectAll}
+            getAccount={getAccount}
+          />
+        )}
+      </>
+    );
   };
 
   const onBrowserKeyDown = (event: React.KeyboardEvent) => {
@@ -193,11 +289,11 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => onBatchEncrypt(Array.from(selectedIds))}
+              onClick={() => onBatchRestore(Array.from(selectedIds))}
               className="px-2.5 py-1 rounded-md bg-white/10 hover:bg-white/20 border border-white/10 text-xs flex items-center gap-1.5 transition-colors"
             >
-              <Lock className="w-3 h-3 text-cyan-400" />
-              <span>Encrypt with AES-256</span>
+              <RotateCcw className="w-3 h-3 text-cyan-400" />
+              <span>Restore</span>
             </button>
             <button
               onClick={() => onBatchDelete(Array.from(selectedIds))}
@@ -212,13 +308,21 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
 
       {/* P2P Media Library Protocol & Seeding Status Banner */}
       {selectedLibrary && (
-        <LibraryBanner files={files} selectedLibrary={selectedLibrary} totalSize={totalSize} onShareFile={onShareFile} />
+        <LibraryBanner
+          files={files}
+          selectedLibrary={selectedLibrary}
+          totalSize={totalSize}
+          onShareFile={onShareFile}
+          swarmStatus={swarmStatus}
+          onCopyInvite={onCopyLibraryInvite}
+          onRefreshSwarm={onRefreshSwarm}
+        />
       )}
 
       {/* Main Viewport Content based on macOS View Mode */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 relative">
         
-        {files.length === 0 && (
+        {files.length === 0 && browseSubfolders.length === 0 && !groupByLocation && (
           <div className="h-full flex flex-col items-center justify-center text-center p-8 text-neutral-400">
             <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-neutral-500 mb-3 shadow-inner">
               <Folder className="w-8 h-8" />
@@ -230,17 +334,53 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
           </div>
         )}
 
-        {/* 1. ICONS / GRID MODE */}
-        {viewMode === 'icons' && files.length > 0 && <IconsView accent={accent} files={files} selectedFileId={selectedFileId} selectedIds={selectedIds} iconScale={iconScale} onSelectFile={selectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenQuickLook={onOpenQuickLook} onFileContextMenu={openContextMenu} toggleSelectOne={toggleSelectOne} />}
-
-        {/* 2. LIST MODE */}
-        {viewMode === 'list' && files.length > 0 && <ListView accent={accent} files={files} selectedFileId={selectedFileId} selectedIds={selectedIds} onSelectFile={selectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onShareFile={onShareFile} onOpenQuickLook={onOpenQuickLook} onFileContextMenu={openContextMenu} toggleSelectOne={toggleSelectOne} toggleSelectAll={toggleSelectAll} getAccount={getAccount} />}
-
-        {/* 3. COLUMNS (MILLER COLUMNS) MODE */}
-        {viewMode === 'columns' && <ColumnsView accent={accent} files={files} selectedFolder={selectedFolder} selectedFileId={selectedFileId} selectedFile={selectedFile} folders={folders} totalSize={totalSize} onSelectFile={selectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenQuickLook={onOpenQuickLook} onFileContextMenu={openContextMenu} onSelectFolder={onSelectFolder} getAccount={getAccount} />}
-
-        {/* 4. GALLERY MODE */}
-        {viewMode === 'gallery' && selectedFile && <GalleryView accent={accent} files={files} selectedFile={selectedFile} onSelectFile={selectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onFileContextMenu={openContextMenu} />}
+        {groupByLocation && locationSections.length > 0 ? (
+          <div className="space-y-8">
+            {locationSections.map(section => (
+              <section key={section.folder?.id ?? 'other-locations'} className="space-y-3">
+                <header className="flex items-center gap-2 sticky top-0 z-10 -mx-1 px-1 py-1.5">
+                  {section.folder ? (
+                    <button
+                      type="button"
+                      onClick={() => onSelectFolder(section.folder!.id)}
+                      className="flex items-center gap-2 min-w-0 rounded-md hover:bg-white/6 px-1 -mx-1 py-0.5 transition-colors group/folder group"
+                      title={`Open ${section.title}`}
+                    >
+                      {getFolderIcon(section.title, false)}
+                      <h2 className="text-sm font-semibold text-neutral-100 tracking-tight group-hover/folder:text-white">
+                        {section.title}
+                      </h2>
+                    </button>
+                  ) : (
+                    <>
+                      {getFolderIcon(section.title, false)}
+                      <h2 className="text-sm font-semibold text-neutral-100 tracking-tight">{section.title}</h2>
+                    </>
+                  )}
+                  <span className="text-[10px] font-mono text-neutral-500 bg-white/8 px-1.5 py-0.5 rounded">
+                    {section.subfolders.length + section.files.length}
+                  </span>
+                </header>
+                {renderSectionViews(section.files, section.subfolders)}
+              </section>
+            ))}
+          </div>
+        ) : (
+          <>
+            {viewMode === 'icons' && (files.length > 0 || browseSubfolders.length > 0) && (
+              <IconsView accent={accent} files={files} folders={browseSubfolders} selectedFileId={selectedFileId} selectedIds={selectedIds} iconScale={iconScale} onSelectFile={selectFile} onOpenFolder={onSelectFolder} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenQuickLook={onOpenQuickLook} onFileContextMenu={openContextMenu} toggleSelectOne={toggleSelectOne} />
+            )}
+            {viewMode === 'list' && (files.length > 0 || browseSubfolders.length > 0) && (
+              <ListView accent={accent} files={files} folders={browseSubfolders} selectedFileId={selectedFileId} selectedIds={selectedIds} onSelectFile={selectFile} onOpenFolder={onSelectFolder} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onShareFile={onShareFile} onOpenQuickLook={onOpenQuickLook} onFileContextMenu={openContextMenu} toggleSelectOne={toggleSelectOne} toggleSelectAll={toggleSelectAll} getAccount={getAccount} />
+            )}
+            {viewMode === 'columns' && (
+              <ColumnsView accent={accent} files={files} selectedFolder={selectedFolder} selectedFileId={selectedFileId} folders={folders.filter(f => f.accountId === 'all' ? !f.parentId : true)} totalSize={totalSize} onSelectFile={selectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenQuickLook={onOpenQuickLook} onFileContextMenu={openContextMenu} onSelectFolder={onSelectFolder} />
+            )}
+            {viewMode === 'gallery' && selectedFile && (
+              <GalleryView accent={accent} files={files} selectedFile={selectedFile} onSelectFile={selectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onFileContextMenu={openContextMenu} />
+            )}
+          </>
+        )}
 
       </div>
 
@@ -249,17 +389,33 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         {/* Clickable Breadcrumbs Path */}
         <div className="flex items-center gap-1 text-neutral-300 truncate">
           <HardDrive className="w-3 h-3 text-sky-400" />
-          <button onClick={() => { onSelectFolder(null); }} className="hover:text-sky-300 transition-colors cursor-pointer">AetherCloud</button>
+          <button onClick={() => { onSelectFolder(null); }} className="hover:text-sky-300 transition-colors cursor-pointer">Cloudbreak</button>
           <ChevronRight className="w-3 h-3 text-neutral-600" />
           <button onClick={() => { onSelectFolder(null); }} className="text-neutral-400 hover:text-sky-300 transition-colors cursor-pointer">
             {selectedLibrary ? selectedLibrary.name : selectedAccountId === 'all' ? 'All Mounted Clouds' : accounts.find(a => a.id === selectedAccountId)?.name}
           </button>
-          {selectedFolder && (
-            <>
-              <ChevronRight className="w-3 h-3 text-neutral-600" />
-              <span className="text-neutral-400">{selectedFolder.name}</span>
-            </>
-          )}
+          {selectedFolder && (() => {
+            const trail: FolderItem[] = [];
+            let current: FolderItem | undefined = selectedFolder;
+            while (current) {
+              trail.unshift(current);
+              current = current.parentId ? folders.find(f => f.id === current!.parentId) : undefined;
+            }
+            return trail.map(folder => (
+              <React.Fragment key={folder.id}>
+                <ChevronRight className="w-3 h-3 text-neutral-600" />
+                <button
+                  type="button"
+                  onClick={() => onSelectFolder(folder.id)}
+                  className={`transition-colors cursor-pointer ${
+                    folder.id === selectedFolder.id ? 'text-neutral-300' : 'text-neutral-400 hover:text-sky-300'
+                  }`}
+                >
+                  {folder.name}
+                </button>
+              </React.Fragment>
+            ));
+          })()}
           {selectedFile && (
             <>
               <ChevronRight className="w-3 h-3 text-neutral-600" />
@@ -281,7 +437,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                 max={150}
                 value={iconScale}
                 onChange={e => setIconScale(parseInt(e.target.value, 10))}
-                className="w-16 custom-range"
+                className="w-28 custom-range"
               />
             </div>
           )}
@@ -302,6 +458,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
           onDuplicate={duplicateFiles}
           onCopy={onCopyFiles}
           onShare={onShareFile}
+          onUnzip={onUnzipFile}
           onTrash={trashFiles}
           onToggleTag={(items, tag) => onToggleTag(items.map(item => item.id), tag)}
         />

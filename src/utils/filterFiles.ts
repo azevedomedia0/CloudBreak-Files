@@ -1,5 +1,10 @@
 import { CloudProviderId, FileCategory, FileItem, SharedLibrary } from '../types';
 
+export type DateFilter = 'any' | 'today' | '7d' | '30d';
+
+export type FileSortKey = 'name' | 'date' | 'size' | 'kind';
+export type FileSortDirection = 'asc' | 'desc';
+
 export interface FileFilterOptions {
   selectedLibrary: SharedLibrary | null;
   selectedLibraryId: string | null;
@@ -9,6 +14,8 @@ export interface FileFilterOptions {
   selectedCategory: FileCategory;
   searchQuery: string;
   disconnectedAccountIds?: ReadonlySet<string>;
+  starredOnly?: boolean;
+  dateFilter?: DateFilter;
 }
 
 function matchesAccount(file: FileItem, selectedAccountId: CloudProviderId): boolean {
@@ -25,8 +32,23 @@ function matchesAccount(file: FileItem, selectedAccountId: CloudProviderId): boo
   );
 }
 
+function matchesDateFilter(updatedAt: string, dateFilter: DateFilter): boolean {
+  if (dateFilter === 'any') return true;
+  const updated = new Date(updatedAt).getTime();
+  if (!Number.isFinite(updated)) return true;
+  const now = Date.now();
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  if (dateFilter === 'today') return updated >= startOfToday.getTime();
+  const days = dateFilter === '7d' ? 7 : 30;
+  return updated >= now - days * 24 * 60 * 60 * 1000;
+}
+
 export function filterFiles(files: FileItem[], opts: FileFilterOptions): FileItem[] {
-  const { selectedLibrary, selectedLibraryId, selectedSourceId, selectedAccountId, selectedFolderId, selectedCategory, searchQuery, disconnectedAccountIds } = opts;
+  const {
+    selectedLibrary, selectedLibraryId, selectedSourceId, selectedAccountId, selectedFolderId,
+    selectedCategory, searchQuery, disconnectedAccountIds, starredOnly = false, dateFilter = 'any',
+  } = opts;
   const query = searchQuery.trim().toLowerCase();
 
   return files.filter(file => {
@@ -35,8 +57,12 @@ export function filterFiles(files: FileItem[], opts: FileFilterOptions): FileIte
     // Network-share and device files only show while that source is open.
     if (selectedSourceId ? file.sourceId !== selectedSourceId : file.sourceId) return false;
 
+    // Files / Photos / Videos tabs: every matching item across locations (ignore folder / library scope).
+    const locationBrowse =
+      selectedCategory === 'files' || selectedCategory === 'photo' || selectedCategory === 'video';
+
     // An open source is the whole scope; otherwise a library, then account and folder.
-    if (!selectedSourceId) {
+    if (!locationBrowse && !selectedSourceId) {
       if (selectedLibraryId) {
         if (!selectedLibrary?.fileIds.includes(file.id)) return false;
       } else {
@@ -45,13 +71,16 @@ export function filterFiles(files: FileItem[], opts: FileFilterOptions): FileIte
       }
     }
 
-    if (selectedCategory !== 'all') {
+    if (selectedCategory !== 'all' && selectedCategory !== 'files') {
       if (selectedCategory === 'archive') {
         if (!file.encryption.isEncrypted) return false;
       } else if (file.category !== selectedCategory) {
         return false;
       }
     }
+
+    if (starredOnly && !file.starred) return false;
+    if (!matchesDateFilter(file.updatedAt, dateFilter)) return false;
 
     if (query) {
       const matchName = file.name.toLowerCase().includes(query);
@@ -60,5 +89,37 @@ export function filterFiles(files: FileItem[], opts: FileFilterOptions): FileIte
     }
 
     return true;
+  });
+}
+
+/** Stable sort of filtered file lists for the browser toolbar. */
+export function sortFiles(
+  files: FileItem[],
+  key: FileSortKey = 'name',
+  direction: FileSortDirection = 'asc',
+): FileItem[] {
+  const dir = direction === 'asc' ? 1 : -1;
+  return [...files].sort((a, b) => {
+    let cmp = 0;
+    switch (key) {
+      case 'date': {
+        const ta = new Date(a.updatedAt).getTime();
+        const tb = new Date(b.updatedAt).getTime();
+        cmp = (Number.isFinite(ta) ? ta : 0) - (Number.isFinite(tb) ? tb : 0);
+        break;
+      }
+      case 'size':
+        cmp = a.sizeBytes - b.sizeBytes;
+        break;
+      case 'kind':
+        cmp = a.category.localeCompare(b.category) || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+        break;
+      case 'name':
+      default:
+        cmp = a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+        break;
+    }
+    if (cmp === 0) cmp = a.id.localeCompare(b.id);
+    return cmp * dir;
   });
 }

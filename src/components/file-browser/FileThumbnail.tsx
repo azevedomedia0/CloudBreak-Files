@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Image as ImageIcon, Video, FileText, Lock } from 'lucide-react';
 import { FileItem } from '../../types';
+import { DocumentPreview } from '../document-editor/DocumentPreview';
+import { isEditableDocument } from '../../utils/documentKind';
 
 interface FileThumbnailProps {
   file: FileItem;
@@ -8,6 +10,7 @@ interface FileThumbnailProps {
   iconClassName?: string;
   hoverZoom?: boolean;
   compact?: boolean;
+  onContextMenu?: (event: React.MouseEvent) => void;
 }
 
 const DOC_STYLES: Record<string, { badge: string; label: string }> = {
@@ -64,16 +67,40 @@ const FALLBACK_ICONS = {
   archive: Lock,
 } as const;
 
-export const FileThumbnail: React.FC<FileThumbnailProps> = ({ file, className = 'w-full h-full', iconClassName = 'w-10 h-10', hoverZoom = false, compact = false }) => {
+export const FileThumbnail: React.FC<FileThumbnailProps> = ({
+  file,
+  className = 'w-full h-full',
+  iconClassName = 'w-10 h-10',
+  hoverZoom = false,
+  compact = false,
+  onContextMenu,
+}) => {
   const [posterFailed, setPosterFailed] = useState(false);
   const [videoFailed, setVideoFailed] = useState(false);
 
   const mediaClass = `w-full h-full object-cover ${hoverZoom ? 'transition-transform duration-300 group-hover:scale-105' : ''}`;
   const hasRealUrl = file.url && file.url !== '#';
 
+  const handleContextMenu = onContextMenu
+    ? (event: React.MouseEvent) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onContextMenu(event);
+      }
+    : undefined;
+
   let content: React.ReactNode;
   if (file.thumbnailUrl && !posterFailed) {
-    content = <img src={file.thumbnailUrl} alt={file.name} className={mediaClass} onError={() => setPosterFailed(true)} loading="lazy" />;
+    content = (
+      <img
+        src={file.thumbnailUrl}
+        alt={file.name}
+        className={mediaClass}
+        onError={() => setPosterFailed(true)}
+        loading="lazy"
+        onContextMenu={handleContextMenu}
+      />
+    );
   } else if (file.category === 'video' && hasRealUrl && !videoFailed) {
     content = (
       <video
@@ -85,8 +112,11 @@ export const FileThumbnail: React.FC<FileThumbnailProps> = ({ file, className = 
         tabIndex={-1}
         aria-label={file.name}
         onError={() => setVideoFailed(true)}
+        onContextMenu={handleContextMenu}
       />
     );
+  } else if (isEditableDocument(file)) {
+    content = <DocumentPreview file={file} compact={compact} className="w-full h-full" />;
   } else if (file.category === 'document') {
     content = <DocumentPage name={file.name} compact={compact} />;
   } else {
@@ -98,5 +128,9 @@ export const FileThumbnail: React.FC<FileThumbnailProps> = ({ file, className = 
     );
   }
 
-  return <div className={`${className} overflow-hidden`}>{content}</div>;
+  return (
+    <div className={`${className} overflow-hidden`} onContextMenu={handleContextMenu}>
+      {content}
+    </div>
+  );
 };

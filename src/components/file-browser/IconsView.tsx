@@ -1,18 +1,21 @@
 import React from 'react';
 import { Edit3, Scissors, Play, CheckSquare, Square } from 'lucide-react';
-import { FileItem } from '../../types';
+import { FileItem, FolderItem } from '../../types';
 import { isEditableDocument } from '../../utils/documentKind';
 import { FileThumbnail } from './FileThumbnail';
+import { FolderTile } from './FolderTile';
 import { SelectionAccent, SELECTION_CLASSES } from '../../utils/selectionAccent';
 import { formatBytes, formatTimecode } from '../../utils/format';
 
 export interface IconsViewProps {
   accent: SelectionAccent;
   files: FileItem[];
+  folders?: FolderItem[];
   selectedFileId: string | null;
   selectedIds: Set<string>;
   iconScale: number;
   onSelectFile: (file: FileItem) => void;
+  onOpenFolder?: (folderId: string) => void;
   onEditPhoto: (file: FileItem) => void;
   onOpenDocument: (file: FileItem) => void;
   onOpenVideo: (file: FileItem) => void;
@@ -21,13 +24,19 @@ export interface IconsViewProps {
   toggleSelectOne: (id: string, e: React.MouseEvent) => void;
 }
 
-export const IconsView: React.FC<IconsViewProps> = ({ accent, files, selectedFileId, selectedIds, iconScale, onSelectFile, onEditPhoto, onOpenDocument, onOpenVideo, onOpenQuickLook, onFileContextMenu, toggleSelectOne }) => (
+export const IconsView: React.FC<IconsViewProps> = ({
+  accent, files, folders = [], selectedFileId, selectedIds, iconScale,
+  onSelectFile, onOpenFolder, onEditPhoto, onOpenDocument, onOpenVideo, onOpenQuickLook, onFileContextMenu, toggleSelectOne,
+}) => (
     <div 
       className="grid gap-4"
       style={{
         gridTemplateColumns: `repeat(auto-fill, minmax(${Math.round(200 * (iconScale / 100))}px, 1fr))`,
       }}
     >
+      {onOpenFolder && folders.map(folder => (
+        <FolderTile key={folder.id} folder={folder} iconScale={iconScale} onOpen={onOpenFolder} />
+      ))}
       {files.map(file => {
         const isSelected = selectedIds.has(file.id);
         const isCurrent = selectedFileId === file.id;
@@ -53,7 +62,7 @@ export const IconsView: React.FC<IconsViewProps> = ({ accent, files, selectedFil
           >
             {/* Thumbnail / Glass Card */}
             <div className="aspect-[4/3] rounded-lg overflow-hidden relative bg-black/40 border border-white/8 group-hover:border-white/15 transition-all shadow-md">
-              <FileThumbnail file={file} hoverZoom />
+              <FileThumbnail file={file} hoverZoom onContextMenu={event => onFileContextMenu(file, event)} />
 
               {/* Checkbox */}
               <button

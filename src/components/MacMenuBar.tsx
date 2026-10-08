@@ -48,7 +48,7 @@ export const MacMenuBar: React.FC<MacMenuBarProps> = ({
           
         </span>
         <span className="font-semibold text-white tracking-tight cursor-pointer">
-          AetherVault
+          Cloudbreak
         </span>
         <div className="hidden sm:flex items-center gap-3.5 text-xs text-neutral-300">
           <span className="hover:text-white cursor-pointer transition-colors">File</span>

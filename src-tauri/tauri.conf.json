@@ -1,8 +1,8 @@
 {
   "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-cli/schema.json",
-  "productName": "AetherCloud Vault",
+  "productName": "Cloudbreak Files",
   "version": "0.1.0",
-  "identifier": "com.aethercloud.vault",
+  "identifier": "com.cloudbreak.files",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:3000",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "AetherCloud Vault",
+        "title": "Cloudbreak Files",
         "width": 1440,
         "height": 900,
         "minWidth": 960,

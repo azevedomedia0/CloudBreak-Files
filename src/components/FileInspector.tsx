@@ -1,29 +1,39 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  X, Image as ImageIcon, Video, FileText, Lock, 
-  Unlock, Download, Trash2, Edit3, Scissors, 
+  Image as ImageIcon, Video, FileText, Lock, 
+  Unlock, Download, Trash2, Edit3, Scissors, Archive,
   Share2, Info, HardDrive, Sparkles, Key,
   ChevronDown, ChevronUp, ChevronRight, Minimize2, Maximize2,
-  PanelRightClose, PanelRight, Play, Pause, RotateCcw, Volume2, VolumeX
+  PanelRightClose, PanelRight, Play, Pause, RotateCcw, Volume2, VolumeX,
+  Copy, ClipboardPaste, Pencil, FolderInput, FileArchive,
 } from 'lucide-react';
-import { FileItem, CloudAccount } from '../types';
+import { FileItem, CloudAccount, FolderItem } from '../types';
 import { isEditableDocument } from '../utils/documentKind';
 import { formatBytes, formatDate, formatTimecode } from '../utils/format';
+import { isZipArchive } from '../utils/unzipArchive';
 import { DocumentPreview } from './document-editor/DocumentPreview';
+import { emitFileContextMenu } from '../utils/fileContextMenuBus';
 
 import { PhotoNav, PhotoNavArrows } from './PhotoNavArrows';
 
 interface FileInspectorProps {
   file: FileItem | null;
   accounts: CloudAccount[];
+  folders?: FolderItem[];
   isOpen: boolean;
-  onClose: () => void;
   onEditPhoto: (file: FileItem) => void;
   onOpenDocument: (file: FileItem) => void;
   onOpenVideo: (file: FileItem, tab?: 'player' | 'trim' | 'convert') => void;
   onShare: (file: FileItem) => void;
   onToggleEncrypt: (file: FileItem) => void;
   onDeleteFile: (fileId: string) => void;
+  onUnzipFile?: (file: FileItem) => void;
+  onCopyFile?: (file: FileItem) => void;
+  onPasteFiles?: () => void;
+  onRenameFile?: (fileId: string, name: string) => void;
+  onMoveFile?: (fileId: string, folder: FolderItem) => void;
+  onCompressFile?: (file: FileItem) => void;
+  canPaste?: boolean;
   width?: number;
   photoNav?: PhotoNav | null;
 }
@@ -31,14 +41,21 @@ interface FileInspectorProps {
 export const FileInspector: React.FC<FileInspectorProps> = ({
   file,
   accounts,
+  folders = [],
   isOpen,
-  onClose,
   onEditPhoto,
   onOpenDocument,
   onOpenVideo,
   onShare,
   onToggleEncrypt,
   onDeleteFile,
+  onUnzipFile,
+  onCopyFile,
+  onPasteFiles,
+  onRenameFile,
+  onMoveFile,
+  onCompressFile,
+  canPaste = false,
   width = 320,
   photoNav,
 }) => {
@@ -48,6 +65,11 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [duration, setDuration] = useState<number>(file?.videoMeta?.durationSeconds || 15);
   const [isMuted, setIsMuted] = useState<boolean>(false);
+  const [movePickerOpen, setMovePickerOpen] = useState(false);
+
+  useEffect(() => {
+    setMovePickerOpen(false);
+  }, [file?.id]);
 
   useEffect(() => {
     setIsPlaying(false);
@@ -136,19 +158,10 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
     >
       
       {/* Inspector Header */}
-      <div className="flex items-center justify-between px-3.5 py-2.5 macos-toolbar-glass border-b border-white/8 shrink-0">
+      <div className="flex items-center px-3.5 py-2.5 macos-toolbar-glass border-b border-white/8 shrink-0">
         <div className="flex items-center gap-2">
           <Info className="w-4 h-4 text-sky-400" />
           <span className="text-xs font-semibold text-neutral-200">File Inspector</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={onClose}
-            className="p-1 text-neutral-400 hover:text-white rounded-md hover:bg-white/10 transition-colors"
-            title="Close Inspector"
-          >
-            <X className="w-4 h-4" />
-          </button>
         </div>
       </div>
 
@@ -196,9 +209,23 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
           </div>
 
           {!collapsedSections.preview && (
-            <div className="aspect-video rounded-xl overflow-hidden bg-black/50 border border-white/10 relative shadow-lg">
+            <div
+              className="aspect-video rounded-xl overflow-hidden bg-black/50 border border-white/10 relative shadow-lg"
+              onContextMenu={event => {
+                event.preventDefault();
+                emitFileContextMenu(file, event.clientX, event.clientY);
+              }}
+            >
               {file.category === 'photo' && (
-                <img src={file.url} alt={file.name} className="w-full h-full object-cover" />
+                <img
+                  src={file.url}
+                  alt={file.name}
+                  className="w-full h-full object-cover"
+                  onContextMenu={event => {
+                    event.preventDefault();
+                    emitFileContextMenu(file, event.clientX, event.clientY);
+                  }}
+                />
               )}
               {file.category === 'photo' && photoNav && <PhotoNavArrows nav={photoNav} compact />}
 
@@ -214,6 +241,10 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                     onClick={togglePlay}
                     className="w-full h-full object-contain cursor-pointer"
                     playsInline
+                    onContextMenu={event => {
+                      event.preventDefault();
+                      emitFileContextMenu(file, event.clientX, event.clientY);
+                    }}
                   />
 
                   {/* Center Play Button Overlay (when paused) */}
@@ -373,6 +404,17 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                   <Edit3 className="w-3.5 h-3.5" />
                   <span>Edit Photo</span>
                 </button>
+              ) : isZipArchive(file) && onUnzipFile ? (
+                <button
+                  type="button"
+                  onClick={() => onUnzipFile(file)}
+                  className="col-span-2 h-9 rounded-lg bg-violet-500/15 hover:bg-violet-500/25 border border-violet-400/30 text-violet-300 flex items-center justify-center gap-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer"
+                  title="Unzip archive"
+                  aria-label="Unzip archive"
+                >
+                  <Archive className="w-3.5 h-3.5" />
+                  <span>Unzip</span>
+                </button>
               ) : (
                 <button
                   type="button"
@@ -412,6 +454,91 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
               </button>
             </div>
           )}
+        </div>
+
+        {/* File management actions */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-[10px] font-semibold tracking-wider uppercase text-neutral-400 select-none">
+            <span>Organize</span>
+          </div>
+          <div className="grid grid-cols-5 gap-2">
+            <button
+              type="button"
+              onClick={() => onCopyFile?.(file)}
+              disabled={!onCopyFile}
+              className="h-9 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 hover:border-sky-400/30 text-neutral-200 hover:text-sky-200 flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Copy"
+              aria-label="Copy"
+            >
+              <Copy className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onPasteFiles?.()}
+              disabled={!onPasteFiles || !canPaste}
+              className="h-9 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 hover:border-sky-400/30 text-neutral-200 hover:text-sky-200 flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              title={canPaste ? 'Paste' : 'Copy a file first'}
+              aria-label="Paste"
+            >
+              <ClipboardPaste className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (!onRenameFile) return;
+                const next = window.prompt('Rename file', file.name);
+                if (next && next.trim() && next.trim() !== file.name) {
+                  onRenameFile(file.id, next.trim());
+                }
+              }}
+              disabled={!onRenameFile}
+              className="h-9 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 hover:border-amber-400/30 text-neutral-200 hover:text-amber-200 flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Rename"
+              aria-label="Rename"
+            >
+              <Pencil className="w-4 h-4" />
+            </button>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setMovePickerOpen(open => !open)}
+                disabled={!onMoveFile || folders.length === 0}
+                className="w-full h-9 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 hover:border-violet-400/30 text-neutral-200 hover:text-violet-200 flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Move to…"
+                aria-label="Move to…"
+                aria-expanded={movePickerOpen}
+              >
+                <FolderInput className="w-4 h-4" />
+              </button>
+              {movePickerOpen && onMoveFile && (
+                <div className="absolute right-0 left-auto top-[calc(100%+4px)] z-40 w-44 max-h-48 overflow-y-auto rounded-xl border border-white/12 bg-neutral-950/95 shadow-xl backdrop-blur-xl py-1">
+                  {folders.map(folder => (
+                    <button
+                      key={folder.id}
+                      type="button"
+                      onClick={() => {
+                        onMoveFile(file.id, folder);
+                        setMovePickerOpen(false);
+                      }}
+                      className="w-full px-3 py-1.5 text-left text-xs text-neutral-200 hover:bg-white/10 truncate"
+                    >
+                      {folder.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => onCompressFile?.(file)}
+              disabled={!onCompressFile || isZipArchive(file)}
+              className="h-9 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 hover:border-emerald-400/30 text-neutral-200 hover:text-emerald-200 flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              title={isZipArchive(file) ? 'Already an archive' : 'Compress'}
+              aria-label="Compress"
+            >
+              <FileArchive className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Technical EXIF or Video Info Section */}
@@ -489,7 +616,7 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
         <div className="pt-2">
           <button
             onClick={() => onDeleteFile(file.id)}
-            className="w-full py-1.5 px-3 rounded-lg text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-950/30 transition-colors flex items-center justify-center gap-1.5"
+            className="w-full h-9 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-400/30 text-red-300 flex items-center justify-center gap-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer"
           >
             <Trash2 className="w-3.5 h-3.5" />
             <span>Move to Trash</span>

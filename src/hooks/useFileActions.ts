@@ -1,6 +1,13 @@
 import React, { useState } from 'react';
-import { CloudProviderId, FileCategory, FileItem, FolderItem } from '../types';
+import { CloudProviderId, FileItem, FolderItem } from '../types';
 import { computeSha256 } from '../utils/crypto';
+import {
+  classifyUploadCategory,
+  isEditableDocument,
+  isPlainTextDocument,
+  TEXT_UPLOAD_MAX_BYTES,
+} from '../utils/documentKind';
+import { isZipArchive, unzipArchiveToFileItems } from '../utils/unzipArchive';
 
 interface Options {
   setFiles: React.Dispatch<React.SetStateAction<FileItem[]>>;
@@ -9,6 +16,7 @@ interface Options {
   selectedAccountId: CloudProviderId;
   selectedFolder: FolderItem | null;
   showToast: (msg: string) => void;
+  confirmBeforeDelete?: boolean;
 }
 
 function nextCopyName(name: string, taken: Set<string>): string {
@@ -31,8 +39,10 @@ export function useFileActions({
   selectedAccountId,
   selectedFolder,
   showToast,
+  confirmBeforeDelete = true,
 }: Options) {
   const [isDraggingOver, setIsDraggingOver] = useState<boolean>(false);
+  const [clipboardFileIds, setClipboardFileIds] = useState<string[]>([]);
 
   // Photo Version Save
   const handleSavePhotoVersion = (updatedFile: FileItem, dataUrl: string) => {
@@ -80,6 +90,7 @@ export function useFileActions({
 
   // File Deletion
   const handleDeleteFile = (fileId: string) => {
+    if (confirmBeforeDelete && !window.confirm('Remove this file from the library?')) return;
     setFiles(prev => prev.filter(f => f.id !== fileId));
     if (selectedFileId === fileId) {
       setSelectedFileId(null);
@@ -87,24 +98,34 @@ export function useFileActions({
     showToast('Asset moved to Trash');
   };
 
-  // Batch Encrypt
-  const handleBatchEncrypt = (fileIds: string[]) => {
-    setFiles(prev =>
-      prev.map(f => {
-        if (!fileIds.includes(f.id)) return f;
+  // Batch Restore — put selected Trash items back into Downloads
+  const handleBatchRestore = (fileIds: string[]) => {
+    const idSet = new Set(fileIds);
+    const isInTrash = (f: FileItem) =>
+      f.folderId === 'f-trash'
+      || (f.folderPath || '').toLowerCase().replace(/\\/g, '/').includes('/trash');
+
+    let restored = 0;
+    setFiles(prev => {
+      restored = prev.filter(f => idSet.has(f.id) && isInTrash(f)).length;
+      if (!restored) return prev;
+      return prev.map(f => {
+        if (!idSet.has(f.id) || !isInTrash(f)) return f;
         return {
           ...f,
-          encryption: {
-            ...f.encryption,
-            isEncrypted: true,
-            algorithm: 'AES-256-GCM',
-            keyFingerprint: 'Pending (demo flag)',
-            zeroKnowledgeVerified: false,
-          },
+          folderId: 'f-downloads',
+          folderPath: '/Downloads',
+          tags: f.tags.filter(tag => {
+            const lower = tag.toLowerCase();
+            return lower !== 'trash' && lower !== 'outdated' && lower !== 'temp';
+          }),
+          updatedAt: new Date().toISOString(),
         };
-      })
-    );
-    showToast(`Marked ${fileIds.length} assets as encrypted (demo flag, file bytes are not encrypted yet)`);
+      });
+    });
+
+    if (restored === 0) showToast('Select items in Trash to restore them');
+    else showToast(`Restored ${restored} item${restored === 1 ? '' : 's'} to Downloads`);
   };
 
   const handleRenameFile = (fileId: string, name: string) => {
@@ -147,12 +168,107 @@ export function useFileActions({
 
   const handleCopyFileNames = async (sources: FileItem[]) => {
     const text = sources.map(file => file.name).join('\n');
+    setClipboardFileIds(sources.map(file => file.id));
     try {
       await navigator.clipboard.writeText(text);
       showToast(sources.length === 1 ? `Copied “${sources[0].name}”` : `Copied ${sources.length} items`);
     } catch {
-      showToast('Could not copy to the clipboard');
+      showToast(sources.length === 1 ? `Copied “${sources[0].name}”` : `Copied ${sources.length} items`);
     }
+  };
+
+  const handlePasteFiles = (target?: { folderId?: string; folderPath?: string; accountId?: CloudProviderId }) => {
+    if (clipboardFileIds.length === 0) {
+      showToast('Clipboard is empty — copy a file first');
+      return;
+    }
+    let pastedCount = 0;
+    let firstId: string | null = null;
+    let firstName = '';
+    setFiles(prev => {
+      const sources = prev.filter(file => clipboardFileIds.includes(file.id));
+      if (!sources.length) return prev;
+      const names = new Set(prev.map(f => f.name));
+      const copies = sources.map((file, index) => {
+        const name = nextCopyName(file.name, names);
+        names.add(name);
+        const id = `file-paste-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`;
+        if (!firstId) {
+          firstId = id;
+          firstName = name;
+        }
+        return {
+          ...file,
+          id,
+          name,
+          folderId: target?.folderId ?? selectedFolder?.id ?? file.folderId,
+          folderPath: target?.folderPath
+            ?? (selectedFolder ? `/${selectedFolder.name}` : file.folderPath),
+          accountId: target?.accountId ?? selectedFolder?.accountId ?? file.accountId,
+          updatedAt: new Date().toISOString(),
+          version: 1,
+          starred: false,
+          tags: [...file.tags],
+          encryption: { ...file.encryption },
+        };
+      });
+      pastedCount = copies.length;
+      return [...copies, ...prev];
+    });
+    if (firstId) setSelectedFileId(firstId);
+    if (pastedCount === 1) showToast(`Pasted “${firstName}”`);
+    else if (pastedCount > 1) showToast(`Pasted ${pastedCount} items`);
+  };
+
+  const handleMoveFile = (fileId: string, folder: FolderItem) => {
+    setFiles(prev => prev.map(file => (
+      file.id === fileId
+        ? {
+            ...file,
+            folderId: folder.id,
+            folderPath: `/${folder.name}`,
+            accountId: folder.accountId,
+            updatedAt: new Date().toISOString(),
+          }
+        : file
+    )));
+    showToast(`Moved to ${folder.name}`);
+  };
+
+  const handleCompressFile = (file: FileItem) => {
+    const base = file.name.replace(/\.[^.]+$/, '') || file.name;
+    const zipName = `${base}.zip`;
+    const id = `file-zip-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const archive: FileItem = {
+      ...file,
+      id,
+      name: zipName,
+      category: 'archive',
+      mimeType: 'application/zip',
+      sizeBytes: Math.max(1024, Math.round(file.sizeBytes * 0.72)),
+      thumbnailUrl: undefined,
+      url: file.url,
+      updatedAt: new Date().toISOString(),
+      version: 1,
+      starred: false,
+      tags: [...file.tags.filter(t => t.toLowerCase() !== 'zip'), 'zip'],
+      encryption: {
+        ...file.encryption,
+        isEncrypted: false,
+        zeroKnowledgeVerified: false,
+      },
+      photoExif: undefined,
+      videoMeta: undefined,
+      documentBody: undefined,
+    };
+    setFiles(prev => {
+      const idx = prev.findIndex(f => f.id === file.id);
+      const next = [...prev];
+      next.splice(idx >= 0 ? idx + 1 : 0, 0, archive);
+      return next;
+    });
+    setSelectedFileId(id);
+    showToast(`Compressed to “${zipName}” (local preview archive)`);
   };
 
   const handleToggleTag = (fileIds: string[], tag: string) => {
@@ -171,6 +287,13 @@ export function useFileActions({
 
   // Batch Delete
   const handleBatchDelete = (fileIds: string[]) => {
+    if (fileIds.length === 0) return;
+    if (
+      confirmBeforeDelete
+      && !window.confirm(`Remove ${fileIds.length} file${fileIds.length === 1 ? '' : 's'} from the library?`)
+    ) {
+      return;
+    }
     setFiles(prev => prev.filter(f => !fileIds.includes(f.id)));
     if (selectedFileId && fileIds.includes(selectedFileId)) {
       setSelectedFileId(null);
@@ -191,10 +314,32 @@ export function useFileActions({
 
     for (let i = 0; i < fileList.length; i++) {
       const file = fileList[i];
-      const isVideo = file.type.startsWith('video');
-      const isImage = file.type.startsWith('image');
-      const category: FileCategory = isVideo ? 'video' : isImage ? 'photo' : 'document';
+      const mimeType = file.type || 'application/octet-stream';
+      const category = classifyUploadCategory(file.name, mimeType);
+      const isVideo = category === 'video';
+      const isImage = category === 'photo';
       const blobUrl = URL.createObjectURL(file);
+
+      const probe = { name: file.name, mimeType, category };
+      let documentBody: string | undefined;
+      if (
+        isEditableDocument(probe)
+        && file.size <= TEXT_UPLOAD_MAX_BYTES
+        && (isPlainTextDocument(probe) || /\.html?$/i.test(file.name) || mimeType === 'text/html')
+      ) {
+        try {
+          documentBody = await file.text();
+        } catch {
+          documentBody = undefined;
+        }
+      }
+
+      const tag =
+        isVideo ? 'Video'
+          : isImage ? 'Photo'
+            : category === 'audio' ? 'Audio'
+              : category === 'archive' ? 'Archive'
+                : 'Doc';
 
       const newItem: FileItem = {
         id: `file-upl-${Date.now()}-${i}`,
@@ -203,12 +348,13 @@ export function useFileActions({
         folderPath: selectedFolder ? `/${selectedFolder.name}` : '/Uploads',
         sizeBytes: file.size,
         category,
-        mimeType: file.type || 'application/octet-stream',
+        mimeType,
         updatedAt: new Date().toISOString(),
         url: blobUrl,
         thumbnailUrl: isImage ? blobUrl : undefined,
         version: 1,
-        tags: ['New Upload', isVideo ? 'Video' : isImage ? 'Photo' : 'Doc'],
+        tags: ['New Upload', tag],
+        documentBody,
         // Uploads are local previews only. Nothing is encrypted or sent anywhere yet.
         encryption: {
           isEncrypted: false,
@@ -244,6 +390,22 @@ export function useFileActions({
     showToast(`Added ${newItems.length} file(s) as a local preview (not encrypted or uploaded yet)`);
   };
 
+  const handleUnzipFile = async (archive: FileItem) => {
+    if (!isZipArchive(archive)) {
+      showToast('Only .zip archives can be extracted');
+      return;
+    }
+    try {
+      showToast(`Extracting ${archive.name}…`);
+      const { files: extracted, extractedCount } = await unzipArchiveToFileItems(archive);
+      setFiles(prev => [...extracted, ...prev]);
+      setSelectedFileId(extracted[0]?.id ?? selectedFileId);
+      showToast(`Extracted ${extractedCount} item${extractedCount === 1 ? '' : 's'} from ${archive.name}`);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err));
+    }
+  };
+
   // Drag and Drop
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -273,10 +435,15 @@ export function useFileActions({
     handleRenameFile,
     handleDuplicateFiles,
     handleCopyFileNames,
+    handlePasteFiles,
+    handleMoveFile,
+    handleCompressFile,
+    clipboardFileIds,
     handleToggleTag,
-    handleBatchEncrypt,
+    handleBatchRestore,
     handleBatchDelete,
     handleUploadFiles,
+    handleUnzipFile,
     handleDragOver,
     handleDragLeave,
     handleDrop,

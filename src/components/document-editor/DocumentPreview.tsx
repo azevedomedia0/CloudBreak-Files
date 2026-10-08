@@ -1,17 +1,18 @@
 import React, { useMemo } from 'react';
 import { FileText } from 'lucide-react';
 import { FileItem } from '../../types';
-import { initialDocumentBody, isEditableDocument, isPlainTextDocument } from '../../utils/documentKind';
+import { editorHtmlFromFile, isEditableDocument } from '../../utils/documentKind';
 
 interface DocumentPreviewProps {
   file: FileItem;
   className?: string;
+  /** Tighter paper scale for grid / list thumbnails. */
+  compact?: boolean;
 }
 
 /** Compact read-only preview of a document for the inspector / cards. */
-export const DocumentPreview: React.FC<DocumentPreviewProps> = ({ file, className = '' }) => {
-  const body = useMemo(() => initialDocumentBody(file), [file.id, file.documentBody, file.name]);
-  const plain = isPlainTextDocument(file);
+export const DocumentPreview: React.FC<DocumentPreviewProps> = ({ file, className = '', compact = false }) => {
+  const html = useMemo(() => editorHtmlFromFile(file), [file.id, file.documentBody, file.name, file.mimeType]);
 
   if (!isEditableDocument(file)) {
     return (
@@ -22,27 +23,27 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({ file, classNam
     );
   }
 
-  if (plain) {
-    const text = body.trim() || 'Empty document';
-    return (
-      <div className={`w-full h-full overflow-hidden bg-[#faf6f1] relative ${className}`}>
-        <pre className="absolute inset-0 p-3 text-[9px] leading-[1.35] text-stone-800 font-mono whitespace-pre-wrap break-words overflow-hidden select-none">
-          {text}
-        </pre>
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-[#faf6f1] to-transparent" />
-      </div>
-    );
-  }
-
   return (
-    <div className={`w-full h-full overflow-hidden bg-stone-800/40 relative ${className}`}>
-      <div className="absolute inset-0 flex items-start justify-center pt-2 px-3 pb-0 overflow-hidden">
+    <div className={`w-full h-full overflow-hidden bg-neutral-900/50 relative ${className}`}>
+      <div
+        className={`absolute inset-0 flex items-start justify-center overflow-hidden ${
+          compact ? 'pt-1 px-1.5' : 'pt-2 px-3 pb-0'
+        }`}
+      >
         <div
-          className="doc-page w-[210%] origin-top scale-[0.48] bg-[#faf6f1] text-[#1c1917] shadow-md rounded-sm px-8 py-6 pointer-events-none select-none"
-          dangerouslySetInnerHTML={{ __html: body }}
+          className={`doc-page origin-top bg-[#faf6f1] text-[#1c1917] shadow-md rounded-sm pointer-events-none select-none ${
+            compact
+              ? 'w-[280%] scale-[0.36] px-5 py-4'
+              : 'w-[210%] scale-[0.48] px-8 py-6'
+          }`}
+          dangerouslySetInnerHTML={{ __html: html }}
         />
       </div>
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-stone-900/50 to-transparent" />
+      <div
+        className={`pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-neutral-950/70 to-transparent ${
+          compact ? 'h-5' : 'h-10'
+        }`}
+      />
     </div>
   );
 };

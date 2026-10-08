@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   X, RotateCw, RotateCcw, FlipHorizontal, FlipVertical,
   Sliders, Wand2, Download, Save, Undo2, Redo2, Check,
-  Sparkles, Layers, ZoomIn, ZoomOut, Maximize2, Crop
+  Sparkles, Layers, ZoomIn, ZoomOut, Maximize2, Minimize2, Crop
 } from 'lucide-react';
 import { FileItem, PhotoAdjustments } from '../types';
 import { PhotoNav, PhotoNavArrows } from './PhotoNavArrows';
@@ -181,6 +181,7 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
   const [activeTab, setActiveTab] = useState<'adjust' | 'presets' | 'geometry'>('adjust');
   const [activePreset, setActivePreset] = useState<string>('natural');
   const [zoomLevel, setZoomLevel] = useState<number>(100);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [exportFormat, setExportFormat] = useState<ExportFormatId>('jpeg');
   const [exportQuality, setExportQuality] = useState<number>(0.92);
   const selectedExportFormat = EXPORT_FORMATS.find(f => f.id === exportFormat) ?? EXPORT_FORMATS[0];
@@ -188,6 +189,7 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const histogramCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const adjustmentsRef = useRef<PhotoAdjustments>(DEFAULT_ADJUSTMENTS);
@@ -197,6 +199,28 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
   const sessionRef = useRef<{ key: string; at: number } | null>(null);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === stageRef.current);
+    };
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = async () => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        await stage.requestFullscreen();
+      }
+    } catch {
+      // Fullscreen may be blocked by the browser or embedding context.
+    }
+  };
 
   // Load image on file change. Reopening or switching photos clears history.
   useEffect(() => {
@@ -551,7 +575,7 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
               type="button"
               onClick={resetAdjustments}
               title="Reset adjustments"
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors border bg-neutral-800 text-neutral-300 border-neutral-700 hover:bg-neutral-750"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors bg-transparent text-neutral-300 hover:text-neutral-100"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>Reset</span>
@@ -608,7 +632,10 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
         <div className="flex flex-1 overflow-hidden">
           
           {/* Canvas Viewport Area */}
-          <div className="flex-1 flex flex-col items-center justify-center p-4 bg-neutral-950/60 relative overflow-hidden select-none">
+          <div
+            ref={stageRef}
+            className="flex-1 flex flex-col items-center justify-center p-4 bg-neutral-950/60 relative overflow-hidden select-none"
+          >
             {photoNav && <PhotoNavArrows nav={photoNav} />}
 
             {/* Canvas Container with dynamic zoom */}
@@ -623,57 +650,66 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
             </div>
 
             {/* Bottom Viewport Bar (Zoom & Geometry Quick Actions) */}
-            <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-4 px-6 py-3 bg-neutral-900/90 border border-neutral-800 rounded-full backdrop-blur-md text-sm text-neutral-300 shadow-xl">
-              <div className="flex items-center gap-1.5 pr-4 border-r border-neutral-800">
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-2.5 py-1 bg-neutral-900/90 border border-neutral-800 rounded-full backdrop-blur-md text-xs text-neutral-300 shadow-xl">
+              <div className="flex items-center gap-0 pr-1.5 border-r border-neutral-800">
                 <button
                   onClick={() => console.log('Crop mode')}
-                  className="p-2 hover:text-white rounded-lg"
+                  className="p-0.5 hover:text-white rounded-md"
                   title="Crop"
                 >
-                  <Crop className="w-5 h-5" />
+                  <Crop className="w-4.5 h-4.5" />
                 </button>
                 <button
                   onClick={() => updateAdj('rotation', (adjustmentsRef.current.rotation + 90) % 360)}
-                  className="p-2 hover:text-white rounded-lg"
+                  className="p-0.5 hover:text-white rounded-md"
                   title="Rotate CW 90°"
                 >
-                  <RotateCw className="w-5 h-5" />
+                  <RotateCw className="w-4.5 h-4.5" />
                 </button>
                 <button
                   onClick={() => updateAdj('flipH', !adjustmentsRef.current.flipH)}
-                  className={`p-2 rounded-lg ${adjustments.flipH ? 'text-cyan-400' : 'hover:text-white'}`}
+                  className={`p-0.5 rounded-md ${adjustments.flipH ? 'text-cyan-400' : 'hover:text-white'}`}
                   title="Flip Horizontal"
                 >
-                  <FlipHorizontal className="w-5 h-5" />
+                  <FlipHorizontal className="w-4.5 h-4.5" />
                 </button>
                 <button
                   onClick={() => updateAdj('flipV', !adjustmentsRef.current.flipV)}
-                  className={`p-2 rounded-lg ${adjustments.flipV ? 'text-cyan-400' : 'hover:text-white'}`}
+                  className={`p-0.5 rounded-md ${adjustments.flipV ? 'text-cyan-400' : 'hover:text-white'}`}
                   title="Flip Vertical"
                 >
-                  <FlipVertical className="w-5 h-5" />
+                  <FlipVertical className="w-4.5 h-4.5" />
                 </button>
               </div>
 
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-0.5">
                 <button
                   onClick={() => setZoomLevel(Math.max(25, zoomLevel - 25))}
-                  className="p-2 hover:text-white rounded-lg"
+                  className="p-0.5 hover:text-white rounded-md"
                 >
-                  <ZoomOut className="w-5 h-5" />
+                  <ZoomOut className="w-4.5 h-4.5" />
                 </button>
-                <span className="w-14 text-center font-mono text-neutral-300 text-sm">{zoomLevel}%</span>
+                <span className="w-9 text-center font-mono text-neutral-300 text-[11px]">{zoomLevel}%</span>
                 <button
                   onClick={() => setZoomLevel(Math.min(300, zoomLevel + 25))}
-                  className="p-2 hover:text-white rounded-lg"
+                  className="p-0.5 hover:text-white rounded-md"
                 >
-                  <ZoomIn className="w-5 h-5" />
+                  <ZoomIn className="w-4.5 h-4.5" />
                 </button>
                 <button
                   onClick={() => setZoomLevel(100)}
-                  className="text-sm font-medium text-cyan-400 hover:underline ml-1 px-1"
+                  className="text-[11px] font-medium text-cyan-400 hover:underline px-0.5"
                 >
                   Fit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void toggleFullscreen()}
+                  className="p-0.5 hover:text-white rounded-md"
+                  title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                  aria-label={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                >
+                  {isFullscreen ? <Minimize2 className="w-4.5 h-4.5" /> : <Maximize2 className="w-4.5 h-4.5" />}
                 </button>
               </div>
             </div>
@@ -937,7 +973,7 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
                 <button
                   type="button"
                   onClick={handleExportDownload}
-                  className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-neutral-200 bg-neutral-800 border border-neutral-700 hover:bg-neutral-700 rounded-lg transition-colors"
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-neutral-950 bg-cyan-400 hover:bg-cyan-300 rounded-lg transition-colors shadow-lg shadow-cyan-500/20"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>Export</span>

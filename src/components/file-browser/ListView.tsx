@@ -1,17 +1,30 @@
 import React from 'react';
-import { Image as ImageIcon, Video, FileText, Lock, Share2, Edit3, Scissors, CheckSquare, Square } from 'lucide-react';
-import { FileItem, CloudAccount, CloudProviderId } from '../../types';
+import { Share2, Edit3, Scissors, CheckSquare, Square } from 'lucide-react';
+import { FileItem, FolderItem, CloudAccount, CloudProviderId } from '../../types';
 import { isEditableDocument } from '../../utils/documentKind';
 import { FileThumbnail } from './FileThumbnail';
+import { FolderTile } from './FolderTile';
 import { SelectionAccent, SELECTION_CLASSES } from '../../utils/selectionAccent';
 import { formatBytes, formatDate } from '../../utils/format';
+
+const LOCAL_ROOTS = [
+  '/desktop', '/documents', '/photos', '/videos', '/music', '/downloads', '/applications', '/trash',
+];
+
+function isOnLocalSystem(file: FileItem): boolean {
+  if (file.accountId === 'all') return true;
+  const path = (file.folderPath || '').replace(/\\/g, '/').toLowerCase().replace(/\/+$/, '') || '/';
+  return LOCAL_ROOTS.some(root => path === root || path.startsWith(`${root}/`));
+}
 
 export interface ListViewProps {
   accent: SelectionAccent;
   files: FileItem[];
+  folders?: FolderItem[];
   selectedFileId: string | null;
   selectedIds: Set<string>;
   onSelectFile: (file: FileItem) => void;
+  onOpenFolder?: (folderId: string) => void;
   onEditPhoto: (file: FileItem) => void;
   onOpenDocument: (file: FileItem) => void;
   onOpenVideo: (file: FileItem) => void;
@@ -23,7 +36,10 @@ export interface ListViewProps {
   getAccount: (accountId: CloudProviderId) => CloudAccount | undefined;
 }
 
-export const ListView: React.FC<ListViewProps> = ({ accent, files, selectedFileId, selectedIds, onSelectFile, onEditPhoto, onOpenDocument, onOpenVideo, onShareFile, onOpenQuickLook, onFileContextMenu, toggleSelectOne, toggleSelectAll, getAccount }) => (
+export const ListView: React.FC<ListViewProps> = ({
+  accent, files, folders = [], selectedFileId, selectedIds,
+  onSelectFile, onOpenFolder, onEditPhoto, onOpenDocument, onOpenVideo, onShareFile, onOpenQuickLook, onFileContextMenu, toggleSelectOne, toggleSelectAll, getAccount,
+}) => (
     <div className="rounded-xl overflow-hidden border border-white/8 bg-black/20">
       <table className="w-full text-left text-xs text-neutral-300">
         <thead className="bg-white/5 border-b border-white/8 text-[11px] font-semibold text-neutral-400 uppercase tracking-wider">
@@ -46,10 +62,34 @@ export const ListView: React.FC<ListViewProps> = ({ accent, files, selectedFileI
           </tr>
         </thead>
         <tbody className="divide-y divide-white/5 font-normal">
+          {onOpenFolder && folders.map(folder => (
+            <tr
+              key={folder.id}
+              onClick={() => onOpenFolder(folder.id)}
+              onDoubleClick={() => onOpenFolder(folder.id)}
+              className="cursor-pointer transition-colors hover:bg-white/5"
+            >
+              <td className="p-3" />
+              <td className="p-3" colSpan={1}>
+                <FolderTile folder={folder} compact onOpen={onOpenFolder} />
+              </td>
+              <td className="p-3 text-neutral-500">—</td>
+              <td className="p-3 text-neutral-500">—</td>
+              <td className="p-3 text-neutral-400 font-mono text-[11px]">FOLDER</td>
+              <td className="p-3">
+                <span className="flex items-center gap-1.5 text-neutral-300">
+                  <span className="w-1.5 h-1.5 rounded-full bg-gradient-to-tr from-sky-400 to-cyan-500" />
+                  <span>Local Files</span>
+                </span>
+              </td>
+              <td className="p-3" />
+            </tr>
+          ))}
           {files.map(file => {
             const isSelected = selectedIds.has(file.id);
             const isCurrent = selectedFileId === file.id;
             const acc = getAccount(file.accountId);
+            const onLocal = isOnLocalSystem(file);
 
             return (
               <tr
@@ -81,7 +121,7 @@ export const ListView: React.FC<ListViewProps> = ({ accent, files, selectedFileI
                 </td>
                 <td className="p-3">
                   <div className="flex items-center gap-2.5">
-                    <FileThumbnail file={file} compact className="w-10 h-7 rounded border border-white/10 bg-black/40 shrink-0" iconClassName="w-3.5 h-3.5" />
+                    <FileThumbnail file={file} compact className="w-10 h-7 rounded border border-white/10 bg-black/40 shrink-0" iconClassName="w-3.5 h-3.5" onContextMenu={event => onFileContextMenu(file, event)} />
                     <span className="truncate max-w-xs">{file.name}</span>
                   </div>
                 </td>
@@ -90,8 +130,10 @@ export const ListView: React.FC<ListViewProps> = ({ accent, files, selectedFileI
                 <td className="p-3 text-neutral-400 font-mono text-[11px]">{file.mimeType.split('/')[1]?.toUpperCase() || file.category}</td>
                 <td className="p-3">
                   <span className="flex items-center gap-1.5 text-neutral-300">
-                    <span className={`w-1.5 h-1.5 rounded-full bg-gradient-to-tr ${acc?.avatarColor || 'from-sky-400 to-cyan-500'}`} />
-                    <span>{acc?.name}</span>
+                    <span className={`w-1.5 h-1.5 rounded-full bg-gradient-to-tr ${
+                      onLocal ? 'from-sky-400 to-cyan-500' : (acc?.avatarColor || 'from-sky-400 to-cyan-500')
+                    }`} />
+                    <span>{onLocal ? 'Local Files' : (acc?.name ?? '—')}</span>
                   </span>
                 </td>
                 <td className="p-3 text-right">

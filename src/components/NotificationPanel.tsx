@@ -333,7 +333,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
           <span>Encrypted P2P Protocol Daemon Active</span>
         </div>
-        <span>AetherCloud v2.6</span>
+        <span>Cloudbreak Files</span>
       </div>
     </div>
   );

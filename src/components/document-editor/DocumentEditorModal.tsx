@@ -1,13 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  AlignCenter, AlignLeft, AlignRight, AlignVerticalSpaceAround, Baseline, Bold, ChevronDown, ChevronUp,
+  AlignCenter, AlignLeft, AlignRight, AlignVerticalSpaceAround, Bold, ChevronDown, ChevronUp,
   Download, FileText, Highlighter, ImagePlus, Italic, Link, List, ListOrdered, Minus,
   PanelLeft, Plus, Printer, Redo2, Save, Search, Table2,
   Underline, Undo2, X, ZoomIn, ZoomOut,
 } from 'lucide-react';
 import { FileItem } from '../../types';
 import {
-  countWords, fileExtension, formatBadgeClasses, htmlWithoutFindMarks, initialDocumentBody, isPlainTextDocument,
+  countWords, editorHtmlFromFile, fileExtension, formatBadgeClasses, htmlWithoutFindMarks, isPlainTextDocument,
 } from '../../utils/documentKind';
 import {
   DEFAULT_DOC_FONT, ensureGoogleFontLoaded, fontStackFor, normalizeFontFamily,
@@ -118,13 +118,13 @@ function highlightMatches(root: HTMLElement, query: string, matchCase: boolean):
 export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
   file, isOpen, onClose, onSave, embedded = false,
 }) => {
-  const plain = isPlainTextDocument(file);
-  const starting = initialDocumentBody(file);
+  /** File still downloads as text when the extension is a plain-text type. */
+  const plainFormat = isPlainTextDocument(file);
+  const starting = editorHtmlFromFile(file);
   const baselineRef = useRef(starting);
   const versionRef = useRef(file.version);
   const initialHtmlRef = useRef(starting);
   const richRef = useRef<HTMLDivElement>(null);
-  const plainRef = useRef<HTMLTextAreaElement>(null);
   const findRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const insertMenuRef = useRef<HTMLDivElement>(null);
@@ -132,12 +132,11 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
   const savedRangeRef = useRef<Range | null>(null);
   const marksRef = useRef<HTMLElement[]>([]);
 
-  const [text, setText] = useState(starting);
   const [dirty, setDirty] = useState(false);
   const [zoom, setZoom] = useState(100);
   const [pageCurrent, setPageCurrent] = useState(1);
   const [pageTotal, setPageTotal] = useState(1);
-  const [sidebarOpen, setSidebarOpen] = useState(!plain);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [outline, setOutline] = useState<Array<{ index: number; level: number; text: string }>>([]);
   const [findOpen, setFindOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -157,7 +156,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
   const [active, setActive] = useState({ bold: false, italic: false, underline: false });
 
   const updatePageInfo = () => {
-    const pageEl = plain ? plainRef.current : richRef.current;
+    const pageEl = richRef.current;
     const scrollEl = scrollRef.current;
     if (!pageEl || !scrollEl) return;
 
@@ -166,19 +165,14 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
     const scale = pageRect.height > 0 ? pageEl.scrollHeight / pageRect.height : 1;
 
     let offsetY: number | null = null;
-    if (!plain) {
-      const selection = document.getSelection();
-      if (selection && selection.rangeCount > 0 && pageEl.contains(selection.anchorNode)) {
-        const range = selection.getRangeAt(0).cloneRange();
-        range.collapse(true);
-        const rect = range.getBoundingClientRect();
-        if (rect.height || rect.width || rect.top) {
-          offsetY = (rect.top - pageRect.top) * scale;
-        }
+    const selection = document.getSelection();
+    if (selection && selection.rangeCount > 0 && pageEl.contains(selection.anchorNode)) {
+      const range = selection.getRangeAt(0).cloneRange();
+      range.collapse(true);
+      const rect = range.getBoundingClientRect();
+      if (rect.height || rect.width || rect.top) {
+        offsetY = (rect.top - pageRect.top) * scale;
       }
-    } else if (plainRef.current && document.activeElement === plainRef.current) {
-      // Approximate caret page from scroll + textarea ratio.
-      offsetY = plainRef.current.scrollTop;
     }
 
     if (offsetY == null) {
@@ -193,10 +187,10 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
   };
 
   useEffect(() => {
-    if (plain || !richRef.current) return;
+    if (!richRef.current) return;
     setOutline(readOutline(richRef.current));
     richRef.current.focus();
-  }, [file.id, plain]);
+  }, [file.id]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -211,7 +205,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
       document.removeEventListener('selectionchange', onScrollOrSelect);
       window.removeEventListener('resize', onScrollOrSelect);
     };
-  }, [isOpen, plain, zoom, file.id]);
+  }, [isOpen, zoom, file.id]);
 
   useEffect(() => {
     if (!findOpen) return;
@@ -236,7 +230,6 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
   }, [insertOpen]);
 
   useEffect(() => {
-    if (plain) return;
     const sync = () => {
       try {
         setActive({
@@ -257,24 +250,9 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
     };
     document.addEventListener('selectionchange', sync);
     return () => document.removeEventListener('selectionchange', sync);
-  }, [plain]);
+  }, []);
 
   if (!isOpen) return null;
-
-  const plainMatches = (source: string, needle: string, caseSensitive: boolean) => {
-    if (!needle) return [] as number[];
-    const hay = caseSensitive ? source : source.toLowerCase();
-    const look = caseSensitive ? needle : needle.toLowerCase();
-    const found: number[] = [];
-    let from = 0;
-    while (from <= hay.length) {
-      const at = hay.indexOf(look, from);
-      if (at < 0) break;
-      found.push(at);
-      from = at + look.length;
-    }
-    return found;
-  };
 
   const clearRichMarks = () => {
     const root = richRef.current;
@@ -300,21 +278,10 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
   const runFind = (nextQuery: string, nextIndex = 0, caseSensitive = matchCase) => {
     const needle = nextQuery.trim();
     if (!needle) {
-      if (!plain) clearRichMarks();
+      clearRichMarks();
       setMatchCount(0);
       setMatchIndex(0);
       setFindMiss(false);
-      return;
-    }
-    if (plain && plainRef.current) {
-      const hits = plainMatches(plainRef.current?.value ?? text, needle, caseSensitive);
-      setMatchCount(hits.length);
-      setFindMiss(hits.length === 0);
-      if (!hits.length) return;
-      const index = (nextIndex + hits.length) % hits.length;
-      setMatchIndex(index);
-      plainRef.current.focus();
-      plainRef.current.setSelectionRange(hits[index], hits[index] + needle.length);
       return;
     }
     const root = richRef.current;
@@ -341,7 +308,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
     setMatchCount(0);
     setMatchIndex(0);
     setFindMiss(false);
-    if (!plain) clearRichMarks();
+    clearRichMarks();
   };
 
   const findField = (
@@ -357,7 +324,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
         onClick={() => {
           if (findOpen) {
             clearFind();
-            (plain ? plainRef.current : richRef.current)?.focus();
+            richRef.current?.focus();
             return;
           }
           setFindOpen(true);
@@ -382,7 +349,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
                 event.preventDefault();
                 event.stopPropagation();
                 clearFind();
-                (plain ? plainRef.current : richRef.current)?.focus();
+                richRef.current?.focus();
               }
             }}
             placeholder="Find…"
@@ -408,10 +375,9 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
     </form>
   );
 
-  const currentBody = () => {
-    if (plain) return text;
-    return richRef.current ? htmlWithoutFindMarks(richRef.current) : starting;
-  };
+  const currentBody = () => (
+    richRef.current ? htmlWithoutFindMarks(richRef.current) : starting
+  );
 
   const refreshRichState = () => {
     const root = richRef.current;
@@ -422,14 +388,9 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
   };
 
   const editHistory = (command: 'undo' | 'redo') => {
-    (plain ? plainRef.current : richRef.current)?.focus();
+    richRef.current?.focus();
     document.execCommand(command);
-    if (plain && plainRef.current) {
-      setText(plainRef.current.value);
-      setDirty(plainRef.current.value !== baselineRef.current);
-    } else {
-      refreshRichState();
-    }
+    refreshRichState();
   };
 
   const format = (command: string, value?: string) => {
@@ -562,7 +523,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
   };
 
   const printDocument = () => {
-    const body = plain ? `<pre>${escapeHtml(currentBody())}</pre>` : currentBody();
+    const body = currentBody();
     const frame = document.createElement('iframe');
     frame.setAttribute('title', 'Print document');
     frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
@@ -575,7 +536,6 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
     doc.open();
     doc.write(`<!doctype html><html><head><title>${escapeHtml(file.name)}</title><style>
       body{margin:0.75in;color:#15141a;font:16px Georgia,"Iowan Old Style",Palatino,serif}
-      pre{font:14px ui-monospace,monospace;white-space:pre-wrap}
       h1{font-size:28px}h2{font-size:20px}a{color:#c45c26};body{font-family:Newsreader,Georgia,serif}
     </style></head><body>${body}</body></html>`);
     doc.close();
@@ -585,11 +545,15 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
   };
 
   const download = () => {
-    const body = currentBody();
-    const extension = plain ? (fileExtension(file.name) || 'txt') : 'html';
+    const html = currentBody();
+    const extension = plainFormat ? (fileExtension(file.name) || 'txt') : (fileExtension(file.name) || 'html');
     const base = file.name.replace(/\.[^.]+$/, '');
-    const blob = new Blob([plain ? body : `<!doctype html><meta charset="utf-8"><title>${escapeHtml(base)}</title><body>${body}</body>`], {
-      type: plain ? 'text/plain' : 'text/html',
+    const plainText = richRef.current?.innerText.replace(/\u00a0/g, ' ') ?? '';
+    const payload = plainFormat
+      ? plainText
+      : `<!doctype html><meta charset="utf-8"><title>${escapeHtml(base)}</title><body>${html}</body>`;
+    const blob = new Blob([payload], {
+      type: plainFormat ? 'text/plain;charset=utf-8' : 'text/html;charset=utf-8',
     });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
@@ -634,11 +598,12 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
     refreshRichState();
   };
 
-  const words = countWords(plain ? text : richRef.current?.textContent ?? '');
-  const characters = (plain ? text : richRef.current?.textContent ?? '').length;
+  const words = countWords(richRef.current?.textContent ?? '');
+  const characters = (richRef.current?.textContent ?? '').length;
   const zoomIndex = ZOOMS.indexOf(zoom);
-  const formatExt = fileExtension(file.name) || (plain ? 'txt' : 'doc');
+  const formatExt = fileExtension(file.name) || (plainFormat ? 'txt' : 'doc');
   const formatBadgeTone = formatBadgeClasses(formatExt);
+  const codeLike = ['json', 'csv', 'log', 'xml', 'yaml', 'yml', 'js', 'ts', 'tsx', 'css', 'py', 'rs', 'go', 'sql', 'svg'].includes(formatExt);
 
   return (
     <div
@@ -664,7 +629,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
           <div className="min-w-0">
             <div className="text-xs font-semibold text-neutral-100 truncate max-w-[240px]">{file.name}</div>
             <div className="text-[10px] text-neutral-500 font-mono truncate">
-              {plain ? 'Plain text' : 'Rich text'} · Rust editor
+              Rich text · Rust editor
             </div>
           </div>
         </div>
@@ -709,12 +674,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
         </button>
       </div>
 
-      {plain ? (
-        <div className="h-10 shrink-0 flex items-center gap-0.5 px-3 border-b border-white/8 bg-neutral-900/70">
-          {findField}
-        </div>
-      ) : (
-        <div className="h-10 shrink-0 flex items-center gap-0.5 px-3 border-b border-white/8 bg-neutral-900/70 overflow-x-auto">
+      <div className="h-10 shrink-0 flex items-center gap-0.5 px-3 border-b border-white/8 bg-neutral-900/70 overflow-x-auto">
           <button
             type="button"
             onClick={() => setSidebarOpen(open => !open)}
@@ -780,10 +740,10 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
               savedRangeRef.current = selection && selection.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
             }}
           >
-            <Baseline className="w-4 h-4" />
             <span
-              className="absolute bottom-1.5 left-1.5 right-1.5 h-0.5 rounded-full"
+              className="w-4 h-4 rounded-full border-2 border-white shadow-sm"
               style={{ backgroundColor: fontColor }}
+              aria-hidden
             />
             <input
               type="color"
@@ -941,11 +901,10 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
               ))}
             </select>
           </div>
-        </div>
-      )}
+      </div>
 
       <div className="flex-1 min-h-0 flex">
-        {!plain && sidebarOpen && (
+        {sidebarOpen && (
           <aside className="w-56 shrink-0 overflow-y-auto border-r border-white/8 bg-neutral-950/60 p-3">
             <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-orange-300/70 mb-2">Outline</div>
             {outline.length === 0 && (
@@ -972,35 +931,18 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
 
         <div ref={scrollRef} className="flex-1 overflow-auto py-8 px-6">
           <div className="mx-auto" style={{ zoom: zoom / 100 }}>
-            {plain ? (
-              <textarea
-                ref={plainRef}
-                defaultValue={starting}
-                spellCheck={!['json', 'csv', 'log', 'xml', 'yaml', 'yml'].includes(fileExtension(file.name))}
-                onInput={event => {
-                  const value = event.currentTarget.value;
-                  setText(value);
-                  setDirty(value !== baselineRef.current);
-                  updatePageInfo();
-                }}
-                onScroll={updatePageInfo}
-                aria-label={file.name}
-                className="block w-[816px] min-h-[1056px] bg-[var(--doc-paper)] text-[var(--doc-ink)] rounded-sm shadow-[0_24px_80px_-24px_rgba(0,0,0,0.75),0_0_0_1px_rgba(255,255,255,0.06)] p-16 font-mono text-[14.5px] leading-relaxed resize-none outline-none"
-              />
-            ) : (
-              <div
-                ref={richRef}
-                contentEditable
-                suppressContentEditableWarning
-                dangerouslySetInnerHTML={{ __html: initialHtmlRef.current }}
-                role="textbox"
-                aria-multiline="true"
-                aria-label={file.name}
-                spellCheck
-                onInput={refreshRichState}
-                className="doc-page w-[816px] min-h-[1056px] bg-[var(--doc-paper)] text-[var(--doc-ink)] rounded-sm shadow-[0_24px_80px_-24px_rgba(0,0,0,0.75),0_0_0_1px_rgba(255,255,255,0.06)] px-[72px] py-16 outline-none"
-              />
-            )}
+            <div
+              ref={richRef}
+              contentEditable
+              suppressContentEditableWarning
+              dangerouslySetInnerHTML={{ __html: initialHtmlRef.current }}
+              role="textbox"
+              aria-multiline="true"
+              aria-label={file.name}
+              spellCheck={!codeLike}
+              onInput={refreshRichState}
+              className={`doc-page w-[816px] min-h-[1056px] bg-[var(--doc-paper)] text-[var(--doc-ink)] rounded-sm shadow-[0_24px_80px_-24px_rgba(0,0,0,0.75),0_0_0_1px_rgba(255,255,255,0.06)] px-[72px] py-16 outline-none ${codeLike ? 'font-mono text-[14.5px]' : ''}`}
+            />
           </div>
         </div>
       </div>

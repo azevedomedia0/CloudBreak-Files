@@ -1,5 +1,5 @@
 import React from 'react';
-import { CloudAccount, CloudProviderId, FileItem, FolderItem, SharedLibrary } from '../types';
+import { CloudAccount, CloudProviderId, FileItem, FolderItem, RemovableDevice, SharedLibrary } from '../types';
 import { QuickLookModal } from './QuickLookModal';
 import { PhotoNav } from './PhotoNavArrows';
 import { PhotoEditorModal } from './PhotoEditorModal';
@@ -7,9 +7,13 @@ import { VideoPlayerModal } from './VideoPlayerModal';
 import { ShareLibraryModal } from './ShareLibraryModal';
 import { VaultSecurityModal } from './VaultSecurityModal';
 import { ProfileSettingsModal, UserProfile } from './ProfileSettingsModal';
-import { AddAccountModal } from './AddAccountModal';
-import { CloudProviderIntegrationModal } from './CloudProviderIntegrationModal';
-import { NewFolderModal, NewSharedLibraryModal, AddFavoriteModal, ConnectServerModal, JoinIncomingLibraryModal } from './SidebarModals';
+import type { AppPreferences } from '../utils/appPreferences';
+import { AddAccountModal, MountedCloudResult } from './AddAccountModal';
+import { CloudProviderIntegrationModal, CloudSyncPayload } from './CloudProviderIntegrationModal';
+import {
+  NewFolderModal, NewSharedLibraryModal, AddFavoriteModal, ConnectServerModal, JoinIncomingLibraryModal,
+  CreateP2pLibraryForm, JoinP2pLibraryForm,
+} from './SidebarModals';
 
 export interface AppModalsProps {
   selectedFile: FileItem | null;
@@ -43,11 +47,18 @@ export interface AppModalsProps {
   setIsProfileSettingsOpen: (open: boolean) => void;
   userProfile: UserProfile;
   setUserProfile: (profile: UserProfile) => void;
+  appPreferences: AppPreferences;
+  setAppPreferences: (prefs: AppPreferences) => void;
+  peerId?: string | null;
+  swarmListening?: boolean;
+  p2pLibraryCount?: number;
   showToast: (msg: string) => void;
   isAddAccountOpen: boolean;
   setIsAddAccountOpen: (open: boolean) => void;
   setAccounts: React.Dispatch<React.SetStateAction<CloudAccount[]>>;
   setSelectedAccountId: (id: CloudProviderId) => void;
+  onMountCloudAccount: (result: MountedCloudResult) => void;
+  onSyncCloudLibrary: (payload: CloudSyncPayload) => void;
   integratingAccount: CloudAccount | null;
   setIntegratingAccount: (account: CloudAccount | null) => void;
   isNewFolderOpen: boolean;
@@ -55,13 +66,18 @@ export interface AppModalsProps {
   handleCreateFolder: (name: string, category: string) => void;
   isNewLibraryOpen: boolean;
   setIsNewLibraryOpen: (open: boolean) => void;
-  handleCreateLibrary: (name: string, description: string, memberEmail: string, role: 'viewer' | 'editor' | 'admin') => void;
+  handleCreateLibrary: (form: CreateP2pLibraryForm) => void | Promise<void>;
   isJoinIncomingOpen: boolean;
   setIsJoinIncomingOpen: (open: boolean) => void;
-  handleJoinIncomingLibrary: (name: string, inviteUrlOrCode: string, ownerName: string) => void;
+  handleJoinIncomingLibrary: (form: JoinP2pLibraryForm) => void | Promise<void>;
   isAddFavoriteOpen: boolean;
   setIsAddFavoriteOpen: (open: boolean) => void;
-  handleAddFavorite: (name: string) => void;
+  networkServers: Array<{ name: string; desc: string; online: boolean }>;
+  removableDevices: RemovableDevice[];
+  favoritedSourceIds: ReadonlySet<string>;
+  onBrowseFavoriteFolder: () => Promise<boolean>;
+  onAddFavoriteNetwork: (serverName: string) => void;
+  onAddFavoriteDevice: (deviceId: string) => void;
   isConnectServerOpen: boolean;
   setIsConnectServerOpen: (open: boolean) => void;
   handleAddNetworkServer: (name: string, address: string, protocol: string) => void;
@@ -101,11 +117,18 @@ export const AppModals: React.FC<AppModalsProps> = ({
   setIsProfileSettingsOpen,
   userProfile,
   setUserProfile,
+  appPreferences,
+  setAppPreferences,
+  peerId = null,
+  swarmListening = false,
+  p2pLibraryCount = 0,
   showToast,
   isAddAccountOpen,
   setIsAddAccountOpen,
   setAccounts,
   setSelectedAccountId,
+  onMountCloudAccount,
+  onSyncCloudLibrary,
   integratingAccount,
   setIntegratingAccount,
   isNewFolderOpen,
@@ -119,7 +142,12 @@ export const AppModals: React.FC<AppModalsProps> = ({
   handleJoinIncomingLibrary,
   isAddFavoriteOpen,
   setIsAddFavoriteOpen,
-  handleAddFavorite,
+  networkServers,
+  removableDevices,
+  favoritedSourceIds,
+  onBrowseFavoriteFolder,
+  onAddFavoriteNetwork,
+  onAddFavoriteDevice,
   isConnectServerOpen,
   setIsConnectServerOpen,
   handleAddNetworkServer,
@@ -202,23 +230,23 @@ export const AppModals: React.FC<AppModalsProps> = ({
     userProfile={userProfile}
     onUpdateProfile={updated => {
       setUserProfile(updated);
-      showToast(`Profile updated: ${updated.name}`);
     }}
+    preferences={appPreferences}
+    onUpdatePreferences={setAppPreferences}
     accounts={accounts}
     isVaultUnlocked={isVaultUnlocked}
     onToggleVaultLock={handleToggleVaultLock}
     onShowToast={showToast}
+    peerId={peerId}
+    swarmListening={swarmListening}
+    p2pLibraryCount={p2pLibraryCount}
   />
 
   {/* Modal 5: Connect / Mount New Cloud Account */}
   <AddAccountModal
     isOpen={isAddAccountOpen}
     onClose={() => setIsAddAccountOpen(false)}
-    onAddAccount={newAcc => {
-      setAccounts(prev => [...prev, newAcc]);
-      setSelectedAccountId(newAcc.id);
-      showToast(`Mounted ${newAcc.name}`);
-    }}
+    onAddAccount={onMountCloudAccount}
   />
 
   {/* Modal 5.1: Cloud Provider Integration & Settings */}
@@ -231,6 +259,7 @@ export const AppModals: React.FC<AppModalsProps> = ({
         setAccounts(prev => prev.map(a => a.id === updated.id ? updated : a));
         setIntegratingAccount(null);
       }}
+      onSyncLibrary={onSyncCloudLibrary}
       onShowToast={showToast}
       onDisconnect={accountId => {
         handleDisconnectAccount(accountId);
@@ -261,7 +290,12 @@ export const AppModals: React.FC<AppModalsProps> = ({
   <AddFavoriteModal
     isOpen={isAddFavoriteOpen}
     onClose={() => setIsAddFavoriteOpen(false)}
-    onAddFavorite={handleAddFavorite}
+    networkServers={networkServers}
+    removableDevices={removableDevices}
+    favoritedSourceIds={favoritedSourceIds}
+    onBrowseFolder={onBrowseFavoriteFolder}
+    onAddNetwork={onAddFavoriteNetwork}
+    onAddDevice={onAddFavoriteDevice}
   />
 
   <ConnectServerModal

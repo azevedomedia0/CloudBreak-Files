@@ -4,6 +4,7 @@ import { FileItem } from '../../types';
 import { fileExtension } from '../../utils/documentKind';
 import { formatBytes, formatDate } from '../../utils/format';
 import { FileThumbnail } from './FileThumbnail';
+import { emitFileContextMenu } from '../../utils/fileContextMenuBus';
 
 function fileKind(file: FileItem): string {
   const ext = fileExtension(file.name).toUpperCase();
@@ -52,7 +53,13 @@ export const FileGetInfo: React.FC<{
         </div>
         <div className="p-4">
           <div className="flex items-center gap-3 mb-4">
-            <FileThumbnail file={file} compact className="w-14 h-12 rounded-lg border border-white/10 bg-black/40 shrink-0" iconClassName="w-6 h-6" />
+            <FileThumbnail
+              file={file}
+              compact
+              className="w-14 h-12 rounded-lg border border-white/10 bg-black/40 shrink-0"
+              iconClassName="w-6 h-6"
+              onContextMenu={event => emitFileContextMenu(file, event.clientX, event.clientY)}
+            />
             <div className="min-w-0">
               <p className="text-sm font-semibold break-words">{file.name}</p>
               <p className="text-[11px] text-neutral-400 mt-0.5">{fileKind(file)}</p>

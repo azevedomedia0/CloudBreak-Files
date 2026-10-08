@@ -1,11 +1,12 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  ChevronLeft, ChevronRight, LayoutGrid, List, Columns, 
-  GalleryVertical, Eye, Share2, Search, Upload, Plus, 
-  ShieldCheck, Layers, Image as ImageIcon, Video, FileText, 
-  Lock, SlidersHorizontal, HardDrive, PanelLeft, Bell
+  ChevronLeft, ChevronRight, LayoutGrid, List, Columns,
+  GalleryVertical, Search, HardDrive, PanelLeft, PanelRight, Bell,
+  ArrowUpDown, ArrowUpAZ, ArrowDownAZ, Check, ListFilter,
+  FileText, Image as ImageIcon, Video, Music, Lock, Star,
 } from 'lucide-react';
-import { FileCategory, CloudAccount, AppNotification } from '../types';
+import { CloudAccount, AppNotification, FileCategory } from '../types';
+import { DateFilter, FileSortDirection, FileSortKey } from '../utils/filterFiles';
 import { NotificationPanel } from './NotificationPanel';
 
 export type MacViewMode = 'icons' | 'list' | 'columns' | 'gallery';
@@ -17,6 +18,14 @@ interface MacFinderToolbarProps {
   onSearchChange: (q: string) => void;
   selectedCategory: FileCategory;
   onCategoryChange: (cat: FileCategory) => void;
+  starredOnly: boolean;
+  onStarredOnlyChange: (value: boolean) => void;
+  dateFilter: DateFilter;
+  onDateFilterChange: (value: DateFilter) => void;
+  sortKey: FileSortKey;
+  onSortKeyChange: (key: FileSortKey) => void;
+  sortDirection: FileSortDirection;
+  onSortDirectionChange: (dir: FileSortDirection) => void;
   onQuickLook: () => void;
   hasSelectedFile: boolean;
   onShare: () => void;
@@ -26,7 +35,8 @@ interface MacFinderToolbarProps {
   activeAccount: CloudAccount | undefined;
   isSidebarCollapsed?: boolean;
   onToggleSidebar?: () => void;
-  // Notifications props
+  isInspectorOpen?: boolean;
+  onToggleInspector?: () => void;
   isNotificationOpen?: boolean;
   onToggleNotifications?: () => void;
   onCloseNotifications?: () => void;
@@ -38,6 +48,29 @@ interface MacFinderToolbarProps {
   onSelectLibrary?: (libraryId: string) => void;
 }
 
+const SORT_OPTIONS: { id: FileSortKey; label: string }[] = [
+  { id: 'name', label: 'Name' },
+  { id: 'date', label: 'Date modified' },
+  { id: 'size', label: 'Size' },
+  { id: 'kind', label: 'Kind' },
+];
+
+const KIND_OPTIONS: { id: FileCategory; label: string; icon: React.ElementType }[] = [
+  { id: 'all', label: 'Any', icon: ListFilter },
+  { id: 'document', label: 'Documents', icon: FileText },
+  { id: 'photo', label: 'Images', icon: ImageIcon },
+  { id: 'video', label: 'Movies', icon: Video },
+  { id: 'audio', label: 'Music', icon: Music },
+  { id: 'archive', label: 'Encrypted', icon: Lock },
+];
+
+const DATE_OPTIONS: { id: DateFilter; label: string }[] = [
+  { id: 'any', label: 'Any time' },
+  { id: 'today', label: 'Today' },
+  { id: '7d', label: 'Past 7 days' },
+  { id: '30d', label: 'Past 30 days' },
+];
+
 export const MacFinderToolbar: React.FC<MacFinderToolbarProps> = ({
   viewMode,
   onViewModeChange,
@@ -45,15 +78,19 @@ export const MacFinderToolbar: React.FC<MacFinderToolbarProps> = ({
   onSearchChange,
   selectedCategory,
   onCategoryChange,
-  onQuickLook,
-  hasSelectedFile,
-  onShare,
-  onUploadFiles,
-  onOpenAddAccount,
+  starredOnly,
+  onStarredOnlyChange,
+  dateFilter,
+  onDateFilterChange,
+  sortKey,
+  onSortKeyChange,
+  sortDirection,
+  onSortDirectionChange,
   activePathTitle,
-  activeAccount,
   isSidebarCollapsed = false,
   onToggleSidebar,
+  isInspectorOpen = true,
+  onToggleInspector,
   isNotificationOpen = false,
   onToggleNotifications,
   onCloseNotifications,
@@ -64,35 +101,64 @@ export const MacFinderToolbar: React.FC<MacFinderToolbarProps> = ({
   onClearNotification,
   onSelectLibrary,
 }) => {
-  const categories: { id: FileCategory; label: string; icon: any }[] = [
-    { id: 'document', label: 'Files', icon: FileText },
-    { id: 'photo', label: 'Photos', icon: ImageIcon },
-    { id: 'video', label: 'Videos', icon: Video },
-    { id: 'archive', label: 'Vault', icon: Lock },
-  ];
-
+  const [sortOpen, setSortOpen] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const sortRef = useRef<HTMLDivElement>(null);
+  const filterRef = useRef<HTMLDivElement>(null);
   const unreadCount = notifications.filter(n => !n.read).length;
+  const sortIsCustom = sortKey !== 'name' || sortDirection !== 'asc';
+  const filtersActive = selectedCategory !== 'all' || starredOnly || dateFilter !== 'any';
+  const activeFilterCount =
+    (selectedCategory !== 'all' ? 1 : 0)
+    + (starredOnly ? 1 : 0)
+    + (dateFilter !== 'any' ? 1 : 0);
+
+  useEffect(() => {
+    if (!sortOpen && !filterOpen) return;
+    const onPointer = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (sortOpen && sortRef.current && !sortRef.current.contains(target)) setSortOpen(false);
+      if (filterOpen && filterRef.current && !filterRef.current.contains(target)) setFilterOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setSortOpen(false);
+        setFilterOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [sortOpen, filterOpen]);
+
+  const clearFilters = () => {
+    onCategoryChange('all');
+    onStarredOnlyChange(false);
+    onDateFilterChange('any');
+  };
 
   return (
     <div className="h-10 px-3 flex items-center justify-between gap-2 sm:gap-3 macos-toolbar-glass select-none shrink-0 z-30">
-      
+
       {/* Left Section: Traffic Lights & Navigation */}
-      <div className="flex items-center gap-2.5 sm:gap-3">
-        {/* macOS Traffic Lights */}
+      <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
         <div className="flex items-center gap-1.5 group/lights shrink-0">
-          <button 
+          <button
             className="w-3.5 h-3.5 rounded-full bg-[#FF5F56] border border-[#E0443E] hover:opacity-85 transition-opacity flex items-center justify-center text-[9px] font-bold text-[#4A0002]"
             title="Close Window"
           >
             <span className="opacity-0 group-hover/lights:opacity-100">×</span>
           </button>
-          <button 
+          <button
             className="w-3.5 h-3.5 rounded-full bg-[#FFBD2E] border border-[#DEA123] hover:opacity-85 transition-opacity flex items-center justify-center text-[9px] font-bold text-[#563C00]"
             title="Minimize Window"
           >
             <span className="opacity-0 group-hover/lights:opacity-100">−</span>
           </button>
-          <button 
+          <button
             className="w-3.5 h-3.5 rounded-full bg-[#27C93F] border border-[#1AAB29] hover:opacity-85 transition-opacity flex items-center justify-center text-[8px] font-bold text-[#0A4714]"
             title="Full Screen Window"
           >
@@ -100,7 +166,6 @@ export const MacFinderToolbar: React.FC<MacFinderToolbarProps> = ({
           </button>
         </div>
 
-        {/* History Nav Chevrons */}
         <div className="flex items-center gap-0.5 text-neutral-300">
           <button className="p-1 rounded-md hover:bg-white/10 hover:text-white transition-colors" title="Back">
             <ChevronLeft className="w-5 h-5" />
@@ -110,7 +175,6 @@ export const MacFinderToolbar: React.FC<MacFinderToolbarProps> = ({
           </button>
         </div>
 
-        {/* macOS Sidebar Toggle */}
         {onToggleSidebar && (
           <button
             onClick={onToggleSidebar}
@@ -119,28 +183,25 @@ export const MacFinderToolbar: React.FC<MacFinderToolbarProps> = ({
                 ? 'text-sky-300 hover:bg-white/10'
                 : 'text-neutral-200 hover:text-white hover:bg-white/10'
             }`}
-            title={isSidebarCollapsed ? "Show Sidebar (⌘+Ctrl+S)" : "Hide Sidebar (⌘+Ctrl+S)"}
+            title={isSidebarCollapsed ? 'Show Sidebar (⌘+Ctrl+S)' : 'Hide Sidebar (⌘+Ctrl+S)'}
           >
             <PanelLeft className="w-[18px] h-[18px]" />
           </button>
         )}
 
-        {/* Path Label in Titlebar */}
         <div className="flex items-center gap-2 font-semibold text-neutral-100 truncate max-w-[210px] md:max-w-sm">
           <HardDrive className="w-[18px] h-[18px] text-sky-400 shrink-0" />
           <span className="truncate text-sm sm:text-[14px] font-semibold tracking-tight text-white">{activePathTitle}</span>
         </div>
       </div>
 
-      {/* Center Section: macOS Segmented 4-Way View Switcher */}
-      <div className="flex items-center gap-2.5">
-        <div className="flex p-0.5 rounded-lg macos-segmented-pill">
+      {/* Center: view modes + notifications / search / sort */}
+      <div className="flex-1 flex items-center justify-center gap-2.5 min-w-0 px-2">
+        <div className="flex p-0.5 rounded-lg macos-segmented-pill shrink-0">
           <button
             onClick={() => onViewModeChange('icons')}
             className={`p-1.5 rounded-md transition-all ${
-              viewMode === 'icons'
-                ? 'bg-white/15 text-white shadow-xs'
-                : 'text-neutral-300 hover:text-neutral-100'
+              viewMode === 'icons' ? 'bg-white/15 text-white shadow-xs' : 'text-neutral-300 hover:text-neutral-100'
             }`}
             title="Icons View (⊞ 1)"
           >
@@ -149,9 +210,7 @@ export const MacFinderToolbar: React.FC<MacFinderToolbarProps> = ({
           <button
             onClick={() => onViewModeChange('list')}
             className={`p-1.5 rounded-md transition-all ${
-              viewMode === 'list'
-                ? 'bg-white/15 text-white shadow-xs'
-                : 'text-neutral-300 hover:text-neutral-100'
+              viewMode === 'list' ? 'bg-white/15 text-white shadow-xs' : 'text-neutral-300 hover:text-neutral-100'
             }`}
             title="List View (☰ 2)"
           >
@@ -160,9 +219,7 @@ export const MacFinderToolbar: React.FC<MacFinderToolbarProps> = ({
           <button
             onClick={() => onViewModeChange('columns')}
             className={`p-1.5 rounded-md transition-all ${
-              viewMode === 'columns'
-                ? 'bg-white/15 text-white shadow-xs'
-                : 'text-neutral-300 hover:text-neutral-100'
+              viewMode === 'columns' ? 'bg-white/15 text-white shadow-xs' : 'text-neutral-300 hover:text-neutral-100'
             }`}
             title="Miller Columns View (☷ 3)"
           >
@@ -171,9 +228,7 @@ export const MacFinderToolbar: React.FC<MacFinderToolbarProps> = ({
           <button
             onClick={() => onViewModeChange('gallery')}
             className={`p-1.5 rounded-md transition-all ${
-              viewMode === 'gallery'
-                ? 'bg-white/15 text-white shadow-xs'
-                : 'text-neutral-300 hover:text-neutral-100'
+              viewMode === 'gallery' ? 'bg-white/15 text-white shadow-xs' : 'text-neutral-300 hover:text-neutral-100'
             }`}
             title="Gallery View (▯ 4)"
           >
@@ -181,74 +236,271 @@ export const MacFinderToolbar: React.FC<MacFinderToolbarProps> = ({
           </button>
         </div>
 
-        {/* Category Filter Pills */}
-        <div className="hidden lg:flex items-center gap-1 p-0.5 rounded-lg macos-segmented-pill">
-          {categories.map(c => {
-            const isSel = selectedCategory === c.id;
-            return (
-              <button
-                key={c.id}
-                onClick={() => onCategoryChange(isSel ? 'all' : c.id)}
-                className={`px-3.5 py-1 rounded-md text-[13px] font-semibold transition-colors ${
-                  isSel ? 'bg-white/20 text-white shadow-xs' : 'text-neutral-300 hover:text-neutral-100'
-                }`}
-              >
-                {c.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              onClick={onToggleNotifications}
+              className={`notif-toggle-btn p-1.5 rounded-lg transition-all relative flex items-center justify-center cursor-pointer ${
+                isNotificationOpen
+                  ? 'text-sky-300 hover:bg-white/10'
+                  : unreadCount > 0
+                    ? 'text-white hover:bg-white/10'
+                    : 'text-neutral-300 hover:text-white hover:bg-white/10'
+              }`}
+              title="Notifications & P2P Invites"
+              aria-label="Notifications"
+            >
+              <Bell className="w-[18px] h-[18px]" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 flex h-4 min-w-4 px-1 items-center justify-center rounded-full bg-sky-500 text-[9px] font-bold text-white font-mono shadow-sm shadow-sky-500/50">
+                  {unreadCount}
+                </span>
+              )}
+            </button>
 
-      {/* Right Section: Notification Button & Search Bar */}
-      <div className="flex items-center gap-2">
-        {/* Notification Icon Button to the left of search */}
-        <div className="relative">
+            <NotificationPanel
+              isOpen={isNotificationOpen}
+              onClose={onCloseNotifications || (() => {})}
+              notifications={notifications}
+              onAcceptLibrary={onAcceptLibrary || (() => {})}
+              onDeclineLibrary={onDeclineLibrary || (() => {})}
+              onMarkAllAsRead={onMarkAllAsRead || (() => {})}
+              onClearNotification={onClearNotification || (() => {})}
+              onSelectLibrary={onSelectLibrary}
+            />
+          </div>
+
+          <div ref={filterRef} className="relative w-36 sm:w-56 md:w-64 min-w-0">
+            <Search className="w-4 h-4 text-neutral-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none z-[1]" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => onSearchChange(e.target.value)}
+              placeholder="Search"
+              className="w-full bg-black/40 border border-white/10 rounded-lg pl-8.5 pr-9 py-1 text-sm font-medium text-neutral-100 placeholder-neutral-400 focus:outline-none focus:border-cyan-400/50 focus:bg-black/60 transition-all font-sans"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                setFilterOpen(open => !open);
+                setSortOpen(false);
+              }}
+              className={`absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded-md transition-all flex items-center justify-center ${
+                filterOpen || filtersActive
+                  ? 'text-white bg-white/10'
+                  : 'text-neutral-400 hover:text-white hover:bg-white/10'
+              }`}
+              title="Filter items"
+              aria-label="Filter items"
+              aria-haspopup="dialog"
+              aria-expanded={filterOpen}
+            >
+              <ListFilter className="w-3.5 h-3.5" />
+              {filtersActive && (
+                <span className="absolute -top-1 -right-1 flex h-3.5 min-w-3.5 px-0.5 items-center justify-center rounded-full bg-cyan-500 text-[8px] font-bold text-neutral-950 font-mono leading-none">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+
+            {filterOpen && (
+              <div
+                role="dialog"
+                aria-label="Filter items"
+                className="absolute right-0 top-[calc(100%+6px)] z-50 w-64 rounded-xl border border-white/12 bg-neutral-950/95 shadow-2xl shadow-black/50 backdrop-blur-xl overflow-hidden"
+              >
+                <div className="flex items-center justify-between px-3 py-2 border-b border-white/8">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-neutral-400">Filter</span>
+                  {filtersActive && (
+                    <button
+                      type="button"
+                      onClick={clearFilters}
+                      className="text-[11px] font-medium text-cyan-300 hover:text-cyan-200"
+                    >
+                      Clear all
+                    </button>
+                  )}
+                </div>
+
+                <div className="px-2 py-2 border-b border-white/8">
+                  <div className="px-1.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-neutral-500">Kind</div>
+                  <div className="space-y-0.5">
+                    {KIND_OPTIONS.map(option => {
+                      const Icon = option.icon;
+                      const selected = selectedCategory === option.id;
+                      return (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => onCategoryChange(option.id)}
+                          className={`w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-left text-xs transition-colors ${
+                            selected ? 'bg-white/12 text-white' : 'text-neutral-300 hover:bg-white/6 hover:text-neutral-100'
+                          }`}
+                        >
+                          <Icon className="w-3.5 h-3.5 shrink-0 text-neutral-400" />
+                          <span className="flex-1 font-medium">{option.label}</span>
+                          {selected && <Check className="w-3.5 h-3.5 text-cyan-300" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="px-2 py-2 border-b border-white/8">
+                  <div className="px-1.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-neutral-500">Last opened</div>
+                  <div className="space-y-0.5">
+                    {DATE_OPTIONS.map(option => {
+                      const selected = dateFilter === option.id;
+                      return (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => onDateFilterChange(option.id)}
+                          className={`w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-left text-xs transition-colors ${
+                            selected ? 'bg-white/12 text-white' : 'text-neutral-300 hover:bg-white/6 hover:text-neutral-100'
+                          }`}
+                        >
+                          <span className="flex-1 font-medium">{option.label}</span>
+                          {selected && <Check className="w-3.5 h-3.5 text-cyan-300" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="px-2 py-2">
+                  <div className="px-1.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-neutral-500">Show</div>
+                  <button
+                    type="button"
+                    onClick={() => onStarredOnlyChange(!starredOnly)}
+                    className={`w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-left text-xs transition-colors ${
+                      starredOnly ? 'bg-white/12 text-white' : 'text-neutral-300 hover:bg-white/6 hover:text-neutral-100'
+                    }`}
+                  >
+                    <Star className={`w-3.5 h-3.5 shrink-0 ${starredOnly ? 'fill-amber-300 text-amber-300' : 'text-neutral-400'}`} />
+                    <span className="flex-1 font-medium">Starred only</span>
+                    {starredOnly && <Check className="w-3.5 h-3.5 text-cyan-300" />}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div ref={sortRef} className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                setSortOpen(open => !open);
+                setFilterOpen(false);
+              }}
+              className={`p-1.5 rounded-lg transition-all relative flex items-center justify-center ${
+                sortOpen || sortIsCustom
+                  ? 'bg-white/15 text-white'
+                  : 'text-neutral-300 hover:text-white hover:bg-white/10'
+              }`}
+              title="Sort items"
+              aria-label="Sort items"
+              aria-haspopup="dialog"
+              aria-expanded={sortOpen}
+            >
+              <ArrowUpDown className="w-[18px] h-[18px]" />
+              {sortIsCustom && (
+                <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-cyan-400" />
+              )}
+            </button>
+
+            {sortOpen && (
+              <div
+                role="dialog"
+                aria-label="Sort items"
+                className="absolute right-0 top-[calc(100%+6px)] z-50 w-56 rounded-xl border border-white/12 bg-neutral-950/95 shadow-2xl shadow-black/50 backdrop-blur-xl overflow-hidden"
+              >
+                <div className="flex items-center justify-between px-3 py-2 border-b border-white/8">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-neutral-400">Sort by</span>
+                  {sortIsCustom && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onSortKeyChange('name');
+                        onSortDirectionChange('asc');
+                      }}
+                      className="text-[11px] font-medium text-cyan-300 hover:text-cyan-200"
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
+
+                <div className="px-2 py-2 border-b border-white/8">
+                  <div className="space-y-0.5">
+                    {SORT_OPTIONS.map(option => {
+                      const selected = sortKey === option.id;
+                      return (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => onSortKeyChange(option.id)}
+                          className={`w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-left text-xs transition-colors ${
+                            selected ? 'bg-white/12 text-white' : 'text-neutral-300 hover:bg-white/6 hover:text-neutral-100'
+                          }`}
+                        >
+                          <span className="flex-1 font-medium">{option.label}</span>
+                          {selected && <Check className="w-3.5 h-3.5 text-cyan-300" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="px-2 py-2">
+                  <div className="px-1.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-neutral-500">Order</div>
+                  <div className="space-y-0.5">
+                    <button
+                      type="button"
+                      onClick={() => onSortDirectionChange('asc')}
+                      className={`w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-left text-xs transition-colors ${
+                        sortDirection === 'asc' ? 'bg-white/12 text-white' : 'text-neutral-300 hover:bg-white/6 hover:text-neutral-100'
+                      }`}
+                    >
+                      <ArrowUpAZ className="w-3.5 h-3.5 shrink-0 text-neutral-400" />
+                      <span className="flex-1 font-medium">Ascending</span>
+                      {sortDirection === 'asc' && <Check className="w-3.5 h-3.5 text-cyan-300" />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onSortDirectionChange('desc')}
+                      className={`w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-left text-xs transition-colors ${
+                        sortDirection === 'desc' ? 'bg-white/12 text-white' : 'text-neutral-300 hover:bg-white/6 hover:text-neutral-100'
+                      }`}
+                    >
+                      <ArrowDownAZ className="w-3.5 h-3.5 shrink-0 text-neutral-400" />
+                      <span className="flex-1 font-medium">Descending</span>
+                      {sortDirection === 'desc' && <Check className="w-3.5 h-3.5 text-cyan-300" />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {onToggleInspector && (
           <button
             type="button"
-            onClick={onToggleNotifications}
-            className={`notif-toggle-btn p-1.5 rounded-lg transition-all relative flex items-center justify-center cursor-pointer ${
-              isNotificationOpen
-                ? 'text-sky-300 hover:bg-white/10'
-                : unreadCount > 0
-                ? 'text-white hover:bg-white/10'
-                : 'text-neutral-300 hover:text-white hover:bg-white/10'
+            onClick={onToggleInspector}
+            className={`ml-auto shrink-0 p-1.5 rounded-lg transition-all ${
+              isInspectorOpen
+                ? 'text-neutral-200 hover:text-white hover:bg-white/10'
+                : 'text-sky-300 hover:bg-white/10'
             }`}
-            title="Notifications & P2P Invites"
-            aria-label="Notifications"
+            title={isInspectorOpen ? 'Hide File Inspector' : 'Show File Inspector'}
+            aria-label={isInspectorOpen ? 'Hide File Inspector' : 'Show File Inspector'}
+            aria-pressed={isInspectorOpen}
           >
-            <Bell className="w-[18px] h-[18px]" />
-            {unreadCount > 0 && (
-              <span className="absolute -top-1 -right-1 flex h-4 min-w-4 px-1 items-center justify-center rounded-full bg-sky-500 text-[9px] font-bold text-white font-mono shadow-sm shadow-sky-500/50">
-                {unreadCount}
-              </span>
-            )}
+            <PanelRight className="w-[18px] h-[18px]" />
           </button>
-
-          {/* Floating Notification Panel */}
-          <NotificationPanel
-            isOpen={isNotificationOpen}
-            onClose={onCloseNotifications || (() => {})}
-            notifications={notifications}
-            onAcceptLibrary={onAcceptLibrary || (() => {})}
-            onDeclineLibrary={onDeclineLibrary || (() => {})}
-            onMarkAllAsRead={onMarkAllAsRead || (() => {})}
-            onClearNotification={onClearNotification || (() => {})}
-            onSelectLibrary={onSelectLibrary}
-          />
-        </div>
-
-        {/* Search Capsule */}
-        <div className="relative w-36 sm:w-56 md:w-64">
-          <Search className="w-4 h-4 text-neutral-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={e => onSearchChange(e.target.value)}
-            placeholder="Search"
-            className="w-full bg-black/40 border border-white/10 rounded-lg pl-8.5 pr-3 py-1 text-sm font-medium text-neutral-100 placeholder-neutral-400 focus:outline-none focus:border-cyan-400/50 focus:bg-black/60 transition-all font-sans"
-          />
-        </div>
+        )}
       </div>
 
     </div>
