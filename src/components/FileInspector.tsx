@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   X, Image as ImageIcon, Video, FileText, Lock, 
-  Unlock, ShieldCheck, Download, Trash2, Edit3, Scissors, 
+  Unlock, Download, Trash2, Edit3, Scissors, 
   Share2, Info, HardDrive, Sparkles, Key,
   ChevronDown, ChevronUp, ChevronRight, Minimize2, Maximize2,
   PanelRightClose, PanelRight, Play, Pause, RotateCcw, Volume2, VolumeX
@@ -9,6 +9,7 @@ import {
 import { FileItem, CloudAccount } from '../types';
 import { isEditableDocument } from '../utils/documentKind';
 import { formatBytes, formatDate, formatTimecode } from '../utils/format';
+import { DocumentPreview } from './document-editor/DocumentPreview';
 
 import { PhotoNav, PhotoNavArrows } from './PhotoNavArrows';
 
@@ -298,18 +299,9 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
               )}
 
               {file.category !== 'photo' && file.category !== 'video' && (
-                <div className="w-full h-full flex flex-col items-center justify-center text-neutral-500 gap-2">
-                  <FileText className="w-10 h-10 text-sky-400" />
-                  <span className="text-xs font-mono text-neutral-400">Binary Document</span>
-                </div>
+                <DocumentPreview file={file} />
               )}
 
-              {file.encryption.isEncrypted && (
-                <div className="absolute top-2 right-2 flex items-center gap-1 text-[10px] text-cyan-300 bg-black/80 border border-cyan-500/40 px-2 py-0.5 rounded-md font-mono">
-                  <ShieldCheck className="w-3 h-3 text-cyan-400" />
-                  <span>AES-256</span>
-                </div>
-              )}
             </div>
           )}
         </div>

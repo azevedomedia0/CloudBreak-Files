@@ -43,6 +43,94 @@ function adjustmentsEqual(a: PhotoAdjustments, b: PhotoAdjustments): boolean {
   return (Object.keys(a) as (keyof PhotoAdjustments)[]).every(key => a[key] === b[key]);
 }
 
+type ExportFormatId = 'jpeg' | 'png' | 'png-alpha' | 'webp' | 'webp-lossless' | 'bmp';
+
+const EXPORT_FORMATS: {
+  id: ExportFormatId;
+  label: string;
+  mime: string;
+  ext: string;
+  hasQuality: boolean;
+  /** Flatten onto white so formats without alpha stay clean. */
+  flatten: boolean;
+}[] = [
+  { id: 'jpeg', label: 'JPEG (Photo)', mime: 'image/jpeg', ext: 'jpg', hasQuality: true, flatten: true },
+  { id: 'png', label: 'PNG (Lossless)', mime: 'image/png', ext: 'png', hasQuality: false, flatten: true },
+  { id: 'png-alpha', label: 'Transparent PNG', mime: 'image/png', ext: 'png', hasQuality: false, flatten: false },
+  { id: 'webp', label: 'WebP (NextGen)', mime: 'image/webp', ext: 'webp', hasQuality: true, flatten: true },
+  { id: 'webp-lossless', label: 'WebP (Lossless)', mime: 'image/webp', ext: 'webp', hasQuality: false, flatten: false },
+  { id: 'bmp', label: 'BMP (Bitmap)', mime: 'image/bmp', ext: 'bmp', hasQuality: false, flatten: true },
+];
+
+function canvasToBmpDataUrl(canvas: HTMLCanvasElement): string {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return canvas.toDataURL('image/png');
+  const { width, height } = canvas;
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const rowSize = Math.ceil((width * 3) / 4) * 4;
+  const pixelBytes = rowSize * height;
+  const headerSize = 54;
+  const buffer = new ArrayBuffer(headerSize + pixelBytes);
+  const view = new DataView(buffer);
+  const bytes = new Uint8Array(buffer);
+
+  // BITMAPFILEHEADER
+  view.setUint16(0, 0x4d42, true); // 'BM'
+  view.setUint32(2, headerSize + pixelBytes, true);
+  view.setUint32(10, headerSize, true);
+  // BITMAPINFOHEADER
+  view.setUint32(14, 40, true);
+  view.setInt32(18, width, true);
+  view.setInt32(22, height, true);
+  view.setUint16(26, 1, true);
+  view.setUint16(28, 24, true);
+  view.setUint32(34, pixelBytes, true);
+
+  // Pixels bottom-up, BGR
+  for (let y = 0; y < height; y++) {
+    const srcRow = (height - 1 - y) * width * 4;
+    const dstRow = headerSize + y * rowSize;
+    for (let x = 0; x < width; x++) {
+      const si = srcRow + x * 4;
+      const di = dstRow + x * 3;
+      bytes[di] = imageData.data[si + 2];
+      bytes[di + 1] = imageData.data[si + 1];
+      bytes[di + 2] = imageData.data[si];
+    }
+  }
+
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return `data:image/bmp;base64,${btoa(binary)}`;
+}
+
+function canvasToExportDataUrl(
+  source: HTMLCanvasElement,
+  format: (typeof EXPORT_FORMATS)[number],
+  quality: number,
+): string {
+  let canvas: HTMLCanvasElement = source;
+  if (format.flatten) {
+    const flat = document.createElement('canvas');
+    flat.width = source.width;
+    flat.height = source.height;
+    const ctx = flat.getContext('2d');
+    if (ctx) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, flat.width, flat.height);
+      ctx.drawImage(source, 0, 0);
+      canvas = flat;
+    }
+  }
+
+  if (format.id === 'bmp') return canvasToBmpDataUrl(canvas);
+
+  const qualityArg = format.hasQuality ? quality : format.id === 'webp-lossless' ? 1 : undefined;
+  return qualityArg === undefined
+    ? canvas.toDataURL(format.mime)
+    : canvas.toDataURL(format.mime, qualityArg);
+}
+
 const PRESETS: { id: string; label: string; desc: string; values: Partial<PhotoAdjustments> }[] = [
   {
     id: 'natural',
@@ -93,8 +181,9 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
   const [activeTab, setActiveTab] = useState<'adjust' | 'presets' | 'geometry'>('adjust');
   const [activePreset, setActivePreset] = useState<string>('natural');
   const [zoomLevel, setZoomLevel] = useState<number>(100);
-  const [exportFormat, setExportFormat] = useState<'image/jpeg' | 'image/png' | 'image/webp'>('image/jpeg');
+  const [exportFormat, setExportFormat] = useState<ExportFormatId>('jpeg');
   const [exportQuality, setExportQuality] = useState<number>(0.92);
+  const selectedExportFormat = EXPORT_FORMATS.find(f => f.id === exportFormat) ?? EXPORT_FORMATS[0];
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
@@ -404,7 +493,7 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
     setStatusMessage('Rendering high-fidelity raster...');
 
     setTimeout(() => {
-      const dataUrl = canvas.toDataURL(exportFormat, exportQuality);
+      const dataUrl = canvasToExportDataUrl(canvas, selectedExportFormat, exportQuality);
       const updatedFile: FileItem = {
         ...file,
         version: file.version + 1,
@@ -428,9 +517,8 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
     const canvas = canvasRef.current;
     if (!canvas) return;
     const link = document.createElement('a');
-    const ext = exportFormat === 'image/jpeg' ? 'jpg' : exportFormat === 'image/png' ? 'png' : 'webp';
-    link.download = `${file.name.replace(/\.[^/.]+$/, '')}_graded_v${file.version + 1}.${ext}`;
-    link.href = canvas.toDataURL(exportFormat, exportQuality);
+    link.download = `${file.name.replace(/\.[^/.]+$/, '')}_graded_v${file.version + 1}.${selectedExportFormat.ext}`;
+    link.href = canvasToExportDataUrl(canvas, selectedExportFormat, exportQuality);
     link.click();
   };
 
@@ -474,20 +562,20 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
               onClick={undo}
               disabled={!canUndo}
               title="Undo (Ctrl+Z)"
-              className="flex items-center gap-1 px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-200 bg-neutral-800/50 border border-neutral-700/60 rounded-lg hover:bg-neutral-800 disabled:opacity-40 disabled:pointer-events-none"
+              aria-label="Undo"
+              className="flex items-center justify-center p-1.5 text-neutral-400 hover:text-neutral-200 bg-neutral-800/50 border border-neutral-700/60 rounded-lg hover:bg-neutral-800 disabled:opacity-40 disabled:pointer-events-none"
             >
               <Undo2 className="w-3.5 h-3.5" />
-              <span>Undo</span>
             </button>
             <button
               type="button"
               onClick={redo}
               disabled={!canRedo}
               title="Redo (Ctrl+Shift+Z)"
-              className="flex items-center gap-1 px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-200 bg-neutral-800/50 border border-neutral-700/60 rounded-lg hover:bg-neutral-800 disabled:opacity-40 disabled:pointer-events-none"
+              aria-label="Redo"
+              className="flex items-center justify-center p-1.5 text-neutral-400 hover:text-neutral-200 bg-neutral-800/50 border border-neutral-700/60 rounded-lg hover:bg-neutral-800 disabled:opacity-40 disabled:pointer-events-none"
             >
               <Redo2 className="w-3.5 h-3.5" />
-              <span>Redo</span>
             </button>
 
             <button
@@ -535,55 +623,55 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
             </div>
 
             {/* Bottom Viewport Bar (Zoom & Geometry Quick Actions) */}
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-3 px-4 py-2 bg-neutral-900/90 border border-neutral-800 rounded-full backdrop-blur-md text-xs text-neutral-300 shadow-xl">
-              <div className="flex items-center gap-1 pr-3 border-r border-neutral-800">
+            <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-4 px-6 py-3 bg-neutral-900/90 border border-neutral-800 rounded-full backdrop-blur-md text-sm text-neutral-300 shadow-xl">
+              <div className="flex items-center gap-1.5 pr-4 border-r border-neutral-800">
                 <button
                   onClick={() => console.log('Crop mode')}
-                  className="p-1 hover:text-white rounded"
+                  className="p-2 hover:text-white rounded-lg"
                   title="Crop"
                 >
-                  <Crop className="w-4 h-4" />
+                  <Crop className="w-5 h-5" />
                 </button>
                 <button
                   onClick={() => updateAdj('rotation', (adjustmentsRef.current.rotation + 90) % 360)}
-                  className="p-1 hover:text-white rounded"
+                  className="p-2 hover:text-white rounded-lg"
                   title="Rotate CW 90°"
                 >
-                  <RotateCw className="w-4 h-4" />
+                  <RotateCw className="w-5 h-5" />
                 </button>
                 <button
                   onClick={() => updateAdj('flipH', !adjustmentsRef.current.flipH)}
-                  className={`p-1 rounded ${adjustments.flipH ? 'text-cyan-400' : 'hover:text-white'}`}
+                  className={`p-2 rounded-lg ${adjustments.flipH ? 'text-cyan-400' : 'hover:text-white'}`}
                   title="Flip Horizontal"
                 >
-                  <FlipHorizontal className="w-4 h-4" />
+                  <FlipHorizontal className="w-5 h-5" />
                 </button>
                 <button
                   onClick={() => updateAdj('flipV', !adjustmentsRef.current.flipV)}
-                  className={`p-1 rounded ${adjustments.flipV ? 'text-cyan-400' : 'hover:text-white'}`}
+                  className={`p-2 rounded-lg ${adjustments.flipV ? 'text-cyan-400' : 'hover:text-white'}`}
                   title="Flip Vertical"
                 >
-                  <FlipVertical className="w-4 h-4" />
+                  <FlipVertical className="w-5 h-5" />
                 </button>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5">
                 <button
                   onClick={() => setZoomLevel(Math.max(25, zoomLevel - 25))}
-                  className="p-1 hover:text-white rounded"
+                  className="p-2 hover:text-white rounded-lg"
                 >
-                  <ZoomOut className="w-4 h-4" />
+                  <ZoomOut className="w-5 h-5" />
                 </button>
-                <span className="w-12 text-center font-mono text-neutral-400">{zoomLevel}%</span>
+                <span className="w-14 text-center font-mono text-neutral-300 text-sm">{zoomLevel}%</span>
                 <button
                   onClick={() => setZoomLevel(Math.min(300, zoomLevel + 25))}
-                  className="p-1 hover:text-white rounded"
+                  className="p-2 hover:text-white rounded-lg"
                 >
-                  <ZoomIn className="w-4 h-4" />
+                  <ZoomIn className="w-5 h-5" />
                 </button>
                 <button
                   onClick={() => setZoomLevel(100)}
-                  className="text-[11px] text-cyan-400 hover:underline ml-1"
+                  className="text-sm font-medium text-cyan-400 hover:underline ml-1 px-1"
                 >
                   Fit
                 </button>
@@ -600,11 +688,11 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
                 <span className="font-medium uppercase tracking-wider text-[10px]">Real-Time RGB Spectrum</span>
                 <span className="text-[10px] text-neutral-500 font-mono">sRGB / Display P3</span>
               </div>
-              <div className="h-16 w-full bg-neutral-950 rounded border border-neutral-800/80 overflow-hidden relative">
+              <div className="h-28 w-full bg-neutral-950 rounded border border-neutral-800/80 overflow-hidden relative">
                 <canvas
                   ref={histogramCanvasRef}
                   width={280}
-                  height={64}
+                  height={112}
                   className="w-full h-full object-cover"
                 />
               </div>
@@ -793,15 +881,12 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
                   <label className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wider block mb-2">
                     Export Codec & Format
                   </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { id: 'image/jpeg', label: 'JPEG (Photo)' },
-                      { id: 'image/png', label: 'PNG (Lossless)' },
-                      { id: 'image/webp', label: 'WebP (NextGen)' },
-                    ].map(fmt => (
+                  <div className="grid grid-cols-2 gap-2">
+                    {EXPORT_FORMATS.map(fmt => (
                       <button
                         key={fmt.id}
-                        onClick={() => setExportFormat(fmt.id as any)}
+                        type="button"
+                        onClick={() => setExportFormat(fmt.id)}
                         className={`py-2 px-2 text-xs rounded-lg border text-center transition-colors ${
                           exportFormat === fmt.id
                             ? 'bg-cyan-500/15 border-cyan-500/50 text-cyan-300 font-medium'
@@ -814,7 +899,7 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
                   </div>
                 </div>
 
-                {exportFormat !== 'image/png' && (
+                {selectedExportFormat.hasQuality && (
                   <div>
                     <div className="flex justify-between text-xs text-neutral-300 mb-1">
                       <span>Compression Quality</span>
@@ -852,7 +937,7 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
                 <button
                   type="button"
                   onClick={handleExportDownload}
-                  className="mt-auto flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-neutral-200 bg-neutral-800 border border-neutral-700 hover:bg-neutral-700 rounded-lg transition-colors"
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-neutral-200 bg-neutral-800 border border-neutral-700 hover:bg-neutral-700 rounded-lg transition-colors"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>Export</span>

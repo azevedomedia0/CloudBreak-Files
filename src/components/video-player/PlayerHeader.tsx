@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Scissors, RefreshCw, ShieldCheck, Film } from 'lucide-react';
+import { X, Scissors, RefreshCw, ShieldCheck, Film, Play } from 'lucide-react';
 import { FileItem } from '../../types';
 import { formatTimecode } from '../../utils/format';
 
@@ -39,13 +39,14 @@ export const PlayerHeader: React.FC<PlayerHeaderProps> = ({ file, duration, acti
         <div className="flex p-0.5 bg-neutral-800 rounded-lg border border-neutral-700/60 text-xs">
           <button
             onClick={() => setActiveTab('player')}
-            className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition-colors ${
               activeTab === 'player'
                 ? 'bg-neutral-700 text-white shadow-sm'
                 : 'text-neutral-400 hover:text-neutral-200'
             }`}
           >
-            Video Player
+            <Play className="w-3.5 h-3.5 fill-current" />
+            <span>Player</span>
           </button>
           <button
             onClick={() => setActiveTab('trim')}

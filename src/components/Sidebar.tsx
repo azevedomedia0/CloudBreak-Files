@@ -115,7 +115,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const totalServerCount = networkServers.length;
   const p2pSharedCount = sharedLibraries.length;
 
-  const visibleFolders = folders;
+  const visibleFolders = folders.filter(f => f.accountId === 'all');
 
   const getFolderIcon = (name: string, isSelected: boolean) => {
     const iconClass = `w-4 h-4 shrink-0 ${isSelected ? 'text-sky-400' : 'text-sky-400/80'}`;

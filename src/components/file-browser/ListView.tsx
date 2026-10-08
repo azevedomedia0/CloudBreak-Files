@@ -1,5 +1,5 @@
 import React from 'react';
-import { Image as ImageIcon, Video, FileText, Lock, ShieldCheck, Share2, Edit3, Scissors, CheckSquare, Square } from 'lucide-react';
+import { Image as ImageIcon, Video, FileText, Lock, Share2, Edit3, Scissors, CheckSquare, Square } from 'lucide-react';
 import { FileItem, CloudAccount, CloudProviderId } from '../../types';
 import { isEditableDocument } from '../../utils/documentKind';
 import { FileThumbnail } from './FileThumbnail';
@@ -42,7 +42,6 @@ export const ListView: React.FC<ListViewProps> = ({ accent, files, selectedFileI
             <th className="p-3">Size</th>
             <th className="p-3">Kind</th>
             <th className="p-3">Cloud Storage</th>
-            <th className="p-3">Security</th>
             <th className="p-3 text-right">Actions</th>
           </tr>
         </thead>
@@ -94,15 +93,6 @@ export const ListView: React.FC<ListViewProps> = ({ accent, files, selectedFileI
                     <span className={`w-1.5 h-1.5 rounded-full bg-gradient-to-tr ${acc?.avatarColor || 'from-sky-400 to-cyan-500'}`} />
                     <span>{acc?.name}</span>
                   </span>
-                </td>
-                <td className="p-3">
-                  {file.encryption.isEncrypted ? (
-                    <span className="inline-flex items-center gap-1 text-[10px] text-cyan-300 bg-cyan-950/60 border border-cyan-800/60 px-1.5 py-0.5 rounded font-mono">
-                      <ShieldCheck className="w-3 h-3 text-cyan-400" /> AES-256
-                    </span>
-                  ) : (
-                    <span className="text-[11px] text-neutral-400">TLS 1.3</span>
-                  )}
                 </td>
                 <td className="p-3 text-right">
                   <div className="flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
