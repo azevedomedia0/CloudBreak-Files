@@ -222,3 +222,87 @@ pub fn terminal_kill(state: State<'_, TerminalState>, id: String) -> Result<(), 
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc;
+    use std::time::{Duration, Instant};
+
+    /// Smoke-test the same portable-pty + login-shell path the Tauri commands use.
+    #[test]
+    fn zsh_pty_runs_echo() {
+        let shell = default_shell();
+        assert!(
+            shell.contains("zsh") || shell.contains("bash") || shell.contains("sh"),
+            "unexpected SHELL={shell}"
+        );
+
+        let pty_system = native_pty_system();
+        let pair = pty_system
+            .openpty(PtySize {
+                rows: 24,
+                cols: 80,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .expect("openpty");
+
+        let mut cmd = CommandBuilder::new(&shell);
+        if !cfg!(target_os = "windows") {
+            cmd.arg("-l");
+        }
+        cmd.cwd(default_cwd(None));
+        cmd.env("TERM", "xterm-256color");
+
+        let mut child = pair.slave.spawn_command(cmd).expect("spawn shell");
+        let mut reader = pair.master.try_clone_reader().expect("reader");
+        let mut writer = pair.master.take_writer().expect("writer");
+
+        let (tx, rx) = mpsc::channel::<String>();
+        std::thread::spawn(move || {
+            let mut buf = [0u8; 4096];
+            loop {
+                match reader.read(&mut buf) {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        if tx
+                            .send(String::from_utf8_lossy(&buf[..n]).into_owned())
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+        });
+
+        // Let the login shell settle, then print a unique marker.
+        std::thread::sleep(Duration::from_millis(500));
+        let marker = "CLOUDBREAK_PTY_OK_7f3a";
+        write!(writer, "printf '%s\\n' {marker}\r").unwrap();
+        writer.flush().unwrap();
+
+        let mut collected = String::new();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while Instant::now() < deadline {
+            match rx.recv_timeout(Duration::from_millis(200)) {
+                Ok(chunk) => collected.push_str(&chunk),
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+            }
+            if collected.contains(marker) {
+                break;
+            }
+        }
+
+        let _ = child.clone_killer().kill();
+        let _ = child.wait();
+
+        assert!(
+            collected.contains(marker),
+            "PTY output never contained {marker}. Got:\n{collected}"
+        );
+    }
+}
