@@ -16,6 +16,7 @@ import { accentForSelection } from '../utils/selectionAccent';
 import { isZipArchive } from '../utils/unzipArchive';
 import { FILE_CONTEXT_MENU_EVENT, FileContextMenuDetail } from '../utils/fileContextMenuBus';
 import type { SwarmStatus } from '../services/p2pBridge';
+import { AudioPlayerBar } from './AudioPlayerBar';
 
 interface FileBrowserProps {
   files: FileItem[];
@@ -28,10 +29,14 @@ interface FileBrowserProps {
   selectedSourceId?: string | null;
   selectedFileId: string | null;
   viewMode: MacViewMode;
+  playingAudioFile?: FileItem | null;
+  audioPlaylist?: FileItem[];
   onSelectFile: (file: FileItem) => void;
   onEditPhoto: (file: FileItem) => void;
   onOpenDocument: (file: FileItem) => void;
   onOpenVideo: (file: FileItem) => void;
+  onOpenAudio: (file: FileItem) => void;
+  onCloseAudio?: () => void;
   onShareFile: (file: FileItem) => void;
   onToggleEncrypt: (file: FileItem) => void;
   onDeleteFile: (fileId: string) => void;
@@ -60,10 +65,14 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   selectedSourceId = null,
   selectedFileId,
   viewMode,
+  playingAudioFile = null,
+  audioPlaylist = [],
   onSelectFile,
   onEditPhoto,
   onOpenDocument,
   onOpenVideo,
+  onOpenAudio,
+  onCloseAudio,
   onShareFile,
   onToggleEncrypt,
   onDeleteFile,
@@ -149,6 +158,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     selectFile(file);
     if (file.category === 'photo') onEditPhoto(file);
     else if (file.category === 'video') onOpenVideo(file);
+    else if (file.category === 'audio') onOpenAudio(file);
     else if (isEditableDocument(file)) onOpenDocument(file);
     else if (file.name.toLowerCase().endsWith('.zip') || file.mimeType === 'application/zip') onUnzipFile(file);
     else onOpenQuickLook();
@@ -215,6 +225,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
             onEditPhoto={onEditPhoto}
             onOpenDocument={onOpenDocument}
             onOpenVideo={onOpenVideo}
+            onOpenAudio={onOpenAudio}
             onOpenQuickLook={onOpenQuickLook}
             onFileContextMenu={openContextMenu}
             toggleSelectOne={toggleSelectOne}
@@ -232,6 +243,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
             onEditPhoto={onEditPhoto}
             onOpenDocument={onOpenDocument}
             onOpenVideo={onOpenVideo}
+            onOpenAudio={onOpenAudio}
             onShareFile={onShareFile}
             onOpenQuickLook={onOpenQuickLook}
             onFileContextMenu={openContextMenu}
@@ -371,13 +383,13 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         ) : (
           <>
             {viewMode === 'icons' && (files.length > 0 || browseSubfolders.length > 0) && (
-              <IconsView accent={accent} files={files} folders={browseSubfolders} selectedFileId={selectedFileId} selectedIds={selectedIds} iconScale={iconScale} onSelectFile={selectFile} onOpenFolder={onSelectFolder} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenQuickLook={onOpenQuickLook} onFileContextMenu={openContextMenu} toggleSelectOne={toggleSelectOne} />
+              <IconsView accent={accent} files={files} folders={browseSubfolders} selectedFileId={selectedFileId} selectedIds={selectedIds} iconScale={iconScale} onSelectFile={selectFile} onOpenFolder={onSelectFolder} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenAudio={onOpenAudio} onOpenQuickLook={onOpenQuickLook} onFileContextMenu={openContextMenu} toggleSelectOne={toggleSelectOne} />
             )}
             {viewMode === 'list' && (files.length > 0 || browseSubfolders.length > 0) && (
-              <ListView accent={accent} files={files} folders={browseSubfolders} selectedFileId={selectedFileId} selectedIds={selectedIds} onSelectFile={selectFile} onOpenFolder={onSelectFolder} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onShareFile={onShareFile} onOpenQuickLook={onOpenQuickLook} onFileContextMenu={openContextMenu} toggleSelectOne={toggleSelectOne} toggleSelectAll={toggleSelectAll} getAccount={getAccount} />
+              <ListView accent={accent} files={files} folders={browseSubfolders} selectedFileId={selectedFileId} selectedIds={selectedIds} onSelectFile={selectFile} onOpenFolder={onSelectFolder} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenAudio={onOpenAudio} onShareFile={onShareFile} onOpenQuickLook={onOpenQuickLook} onFileContextMenu={openContextMenu} toggleSelectOne={toggleSelectOne} toggleSelectAll={toggleSelectAll} getAccount={getAccount} />
             )}
             {viewMode === 'columns' && (
-              <ColumnsView accent={accent} files={files} selectedFolder={selectedFolder} selectedFileId={selectedFileId} folders={folders.filter(f => f.accountId === 'all' ? !f.parentId : true)} totalSize={totalSize} onSelectFile={selectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenQuickLook={onOpenQuickLook} onFileContextMenu={openContextMenu} onSelectFolder={onSelectFolder} />
+              <ColumnsView accent={accent} files={files} selectedFolder={selectedFolder} selectedFileId={selectedFileId} folders={folders.filter(f => f.accountId === 'all' ? !f.parentId : true)} totalSize={totalSize} onSelectFile={selectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenAudio={onOpenAudio} onOpenQuickLook={onOpenQuickLook} onFileContextMenu={openContextMenu} onSelectFolder={onSelectFolder} />
             )}
             {viewMode === 'gallery' && selectedFile && (
               <GalleryView accent={accent} files={files} selectedFile={selectedFile} onSelectFile={selectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onFileContextMenu={openContextMenu} />
@@ -386,6 +398,18 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         )}
 
       </div>
+
+      {playingAudioFile && (
+        <AudioPlayerBar
+          file={playingAudioFile}
+          playlist={audioPlaylist.length > 0 ? audioPlaylist : [playingAudioFile]}
+          onSelectTrack={track => {
+            selectFile(track);
+            onOpenAudio(track);
+          }}
+          onClose={() => onCloseAudio?.()}
+        />
+      )}
 
       {/* Bottom macOS Path Bar & Status Bar */}
       <div className="h-7 px-4 macos-toolbar-glass flex items-center justify-between text-[11px] text-neutral-400 border-t border-white/8 select-none z-20 shrink-0">

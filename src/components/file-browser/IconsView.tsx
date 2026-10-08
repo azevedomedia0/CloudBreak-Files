@@ -1,5 +1,5 @@
 import React from 'react';
-import { Edit3, Scissors, Play, CheckSquare, Square } from 'lucide-react';
+import { Edit3, Scissors, Play, CheckSquare, Square, Music2 } from 'lucide-react';
 import { FileItem, FolderItem } from '../../types';
 import { isEditableDocument } from '../../utils/documentKind';
 import { FileThumbnail } from './FileThumbnail';
@@ -20,6 +20,7 @@ export interface IconsViewProps {
   onEditPhoto: (file: FileItem) => void;
   onOpenDocument: (file: FileItem) => void;
   onOpenVideo: (file: FileItem) => void;
+  onOpenAudio: (file: FileItem) => void;
   onOpenQuickLook: () => void;
   onFileContextMenu: (file: FileItem, event: React.MouseEvent) => void;
   toggleSelectOne: (id: string, e: React.MouseEvent) => void;
@@ -27,7 +28,7 @@ export interface IconsViewProps {
 
 export const IconsView: React.FC<IconsViewProps> = ({
   accent, files, folders = [], selectedFileId, selectedIds, iconScale,
-  onSelectFile, onOpenFolder, onEditPhoto, onOpenDocument, onOpenVideo, onOpenQuickLook, onFileContextMenu, toggleSelectOne,
+  onSelectFile, onOpenFolder, onEditPhoto, onOpenDocument, onOpenVideo, onOpenAudio, onOpenQuickLook, onFileContextMenu, toggleSelectOne,
 }) => (
     <div 
       className="grid gap-4"
@@ -52,6 +53,7 @@ export const IconsView: React.FC<IconsViewProps> = ({
             onDoubleClick={() => {
               if (file.category === 'photo') onEditPhoto(file);
               else if (file.category === 'video') onOpenVideo(file);
+              else if (file.category === 'audio') onOpenAudio(file);
               else if (isEditableDocument(file)) onOpenDocument(file);
               else onOpenQuickLook();
             }}
@@ -77,10 +79,12 @@ export const IconsView: React.FC<IconsViewProps> = ({
                 {isSelected ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
               </button>
 
-              {/* Video Duration */}
-              {file.videoMeta && (
+              {/* Duration badge */}
+              {file.videoMeta && (file.category === 'video' || file.category === 'audio') && (
                 <div className="absolute bottom-2 left-2 flex items-center gap-1 text-[10px] font-mono text-white bg-black/80 px-1.5 py-0.5 rounded backdrop-blur-sm">
-                  <Play className="w-2.5 h-2.5 fill-current" />
+                  {file.category === 'audio'
+                    ? <Music2 className="w-2.5 h-2.5" />
+                    : <Play className="w-2.5 h-2.5 fill-current" />}
                   <span>{formatTimecode(file.videoMeta.durationSeconds)}</span>
                 </div>
               )}
@@ -121,6 +125,18 @@ export const IconsView: React.FC<IconsViewProps> = ({
                     title="Open Cinema Suite"
                   >
                     <Scissors className="w-3 h-3" />
+                  </button>
+                )}
+                {file.category === 'audio' && (
+                  <button
+                    onClick={e => {
+                      e.stopPropagation();
+                      onOpenAudio(file);
+                    }}
+                    className="p-1 rounded-md bg-violet-400 hover:bg-violet-300 text-neutral-950 shadow-md font-bold"
+                    title="Play audio"
+                  >
+                    <Play className="w-3 h-3 fill-current" />
                   </button>
                 )}
               </div>

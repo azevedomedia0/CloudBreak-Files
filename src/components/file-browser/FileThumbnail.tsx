@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Image as ImageIcon, Video, FileText, Archive } from 'lucide-react';
+import { Image as ImageIcon, Video, FileText, Archive, Music2 } from 'lucide-react';
 import { FileItem } from '../../types';
 import { DocumentPreview } from '../document-editor/DocumentPreview';
 import { isEditableDocument } from '../../utils/documentKind';
@@ -65,6 +65,7 @@ const DocumentPage: React.FC<{ name: string; compact: boolean }> = ({ name, comp
 const FALLBACK_ICONS = {
   photo: ImageIcon,
   video: Video,
+  audio: Music2,
   document: FileText,
   archive: Archive,
 } as const;
@@ -131,7 +132,9 @@ export const FileThumbnail: React.FC<FileThumbnailProps> = ({
     const Icon = FALLBACK_ICONS[file.category as keyof typeof FALLBACK_ICONS] ?? FileText;
     content = (
       <div className="w-full h-full flex items-center justify-center text-neutral-500">
-        <Icon className={`${iconClassName} ${file.category === 'video' ? 'text-amber-400' : ''}`} />
+        <Icon className={`${iconClassName} ${
+          file.category === 'video' ? 'text-amber-400' : file.category === 'audio' ? 'text-violet-400' : ''
+        }`} />
       </div>
     );
   }
