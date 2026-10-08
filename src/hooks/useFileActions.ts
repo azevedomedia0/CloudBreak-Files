@@ -7,7 +7,15 @@ import {
   isPlainTextDocument,
   TEXT_UPLOAD_MAX_BYTES,
 } from '../utils/documentKind';
+import {
+  clearEncryption,
+  decryptFileItem,
+  encryptFileItem,
+  encryptUploadBytes,
+  hasEncryptedPayload,
+} from '../utils/fileEncryption';
 import { isZipArchive, unzipArchiveToFileItems } from '../utils/unzipArchive';
+import { rustBridge } from '../services/rustBridge';
 
 interface Options {
   setFiles: React.Dispatch<React.SetStateAction<FileItem[]>>;
@@ -17,6 +25,8 @@ interface Options {
   selectedFolder: FolderItem | null;
   showToast: (msg: string) => void;
   confirmBeforeDelete?: boolean;
+  /** When true, new uploads are encrypted with the vault session key. */
+  isVaultUnlocked?: boolean;
 }
 
 function nextCopyName(name: string, taken: Set<string>): string {
@@ -40,6 +50,7 @@ export function useFileActions({
   selectedFolder,
   showToast,
   confirmBeforeDelete = true,
+  isVaultUnlocked = false,
 }: Options) {
   const [isDraggingOver, setIsDraggingOver] = useState<boolean>(false);
   const [clipboardFileIds, setClipboardFileIds] = useState<string[]>([]);
@@ -62,30 +73,52 @@ export function useFileActions({
     showToast(`Added ${newFile.name} to storage bucket`);
   };
 
-  // Encrypt Toggle
-  const handleToggleEncrypt = (targetFile: FileItem) => {
-    const nextEncrypted = !targetFile.encryption.isEncrypted;
-    setFiles(prev =>
-      prev.map(f => {
-        if (f.id !== targetFile.id) return f;
-        return {
-          ...f,
-          encryption: {
-            ...f.encryption,
-            isEncrypted: nextEncrypted,
-            algorithm: nextEncrypted ? 'AES-256-GCM' : 'None (TLS 1.3)',
-            keyFingerprint: nextEncrypted ? 'Pending (demo flag)' : 'Unencrypted Transit',
-            zeroKnowledgeVerified: false,
-          },
-        };
-      })
-    );
+  // Encrypt / decrypt with the vault session key (held in Rust, not JS).
+  const handleToggleEncrypt = async (targetFile: FileItem) => {
+    if (targetFile.encryption.isEncrypted) {
+      if (!hasEncryptedPayload(targetFile.encryption)) {
+        setFiles(prev =>
+          prev.map(f => {
+            if (f.id !== targetFile.id) return f;
+            return {
+              ...f,
+              encryption: clearEncryption(f.encryption.checksumSha256 || ''),
+            };
+          })
+        );
+        showToast(`Cleared encryption flag on ${targetFile.name} (no ciphertext on this file)`);
+        return;
+      }
 
-    showToast(
-      nextEncrypted
-        ? `Marked ${targetFile.name} as encrypted (demo flag, file bytes are not encrypted yet)`
-        : `Cleared the encrypted flag on ${targetFile.name}`
-    );
+      try {
+        const unlocked = await rustBridge.isVaultUnlocked();
+        if (!unlocked) {
+          showToast('Unlock the vault to decrypt this file');
+          return;
+        }
+        showToast(`Decrypting ${targetFile.name}…`);
+        const decrypted = await decryptFileItem(targetFile);
+        setFiles(prev => prev.map(f => (f.id === targetFile.id ? decrypted : f)));
+        showToast(`Decrypted ${targetFile.name}`);
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : String(err));
+      }
+      return;
+    }
+
+    try {
+      const unlocked = await rustBridge.isVaultUnlocked();
+      if (!unlocked) {
+        showToast('Unlock the vault to encrypt files');
+        return;
+      }
+      showToast(`Encrypting ${targetFile.name}…`);
+      const encrypted = await encryptFileItem(targetFile);
+      setFiles(prev => prev.map(f => (f.id === targetFile.id ? encrypted : f)));
+      showToast(`Encrypted ${targetFile.name} with AES-256-GCM`);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err));
+    }
   };
 
   // File Deletion
@@ -307,10 +340,13 @@ export function useFileActions({
     return computeSha256(await file.arrayBuffer());
   };
 
-  // Upload Files
+  // Upload Files — encrypt with the vault session key when the vault is unlocked.
   const handleUploadFiles = async (fileList: FileList) => {
     const targetAccountId: CloudProviderId = selectedAccountId === 'all' ? 's3' : selectedAccountId;
     const newItems: FileItem[] = [];
+    const unlocked = isVaultUnlocked || (await rustBridge.isVaultUnlocked());
+    let encryptedCount = 0;
+    let plainCount = 0;
 
     for (let i = 0; i < fileList.length; i++) {
       const file = fileList[i];
@@ -318,7 +354,6 @@ export function useFileActions({
       const category = classifyUploadCategory(file.name, mimeType);
       const isVideo = category === 'video';
       const isImage = category === 'photo';
-      const blobUrl = URL.createObjectURL(file);
 
       const probe = { name: file.name, mimeType, category };
       let documentBody: string | undefined;
@@ -341,28 +376,54 @@ export function useFileActions({
               : category === 'archive' ? 'Archive'
                 : 'Doc';
 
+      const checksum = await sha256OfFile(file);
+      let url = URL.createObjectURL(file);
+      let sizeBytes = file.size;
+      let thumbnailUrl: string | undefined = isImage ? url : undefined;
+      let encryption = clearEncryption(checksum);
+
+      if (unlocked) {
+        try {
+          if (file.size > rustBridge.getMaxSessionBytes()) {
+            showToast(`${file.name} is too large to encrypt (>${rustBridge.getMaxSessionBytes() / (1024 * 1024)} MB); added as plaintext preview`);
+            plainCount += 1;
+          } else {
+            const bytes = new Uint8Array(await file.arrayBuffer());
+            const sealed = await encryptUploadBytes(bytes, mimeType);
+            URL.revokeObjectURL(url);
+            url = sealed.url;
+            sizeBytes = sealed.sizeBytes;
+            thumbnailUrl = undefined;
+            encryption = sealed.encryption;
+            encryptedCount += 1;
+          }
+        } catch (err) {
+          showToast(
+            err instanceof Error
+              ? `${file.name}: ${err.message}`
+              : `Could not encrypt ${file.name}`
+          );
+          plainCount += 1;
+        }
+      } else {
+        plainCount += 1;
+      }
+
       const newItem: FileItem = {
         id: `file-upl-${Date.now()}-${i}`,
         name: file.name,
         accountId: targetAccountId,
         folderPath: selectedFolder ? `/${selectedFolder.name}` : '/Uploads',
-        sizeBytes: file.size,
+        sizeBytes,
         category,
         mimeType,
         updatedAt: new Date().toISOString(),
-        url: blobUrl,
-        thumbnailUrl: isImage ? blobUrl : undefined,
+        url,
+        thumbnailUrl,
         version: 1,
         tags: ['New Upload', tag],
-        documentBody,
-        // Uploads are local previews only. Nothing is encrypted or sent anywhere yet.
-        encryption: {
-          isEncrypted: false,
-          algorithm: 'None (local preview)',
-          keyFingerprint: 'Not encrypted',
-          checksumSha256: await sha256OfFile(file),
-          zeroKnowledgeVerified: false,
-        },
+        documentBody: encryption.isEncrypted ? undefined : documentBody,
+        encryption,
         videoMeta: isVideo
           ? {
               durationSeconds: 15,
@@ -387,7 +448,16 @@ export function useFileActions({
 
     setFiles(prev => [...newItems, ...prev]);
     setSelectedFileId(newItems[0]?.id || null);
-    showToast(`Added ${newItems.length} file(s) as a local preview (not encrypted or uploaded yet)`);
+
+    if (encryptedCount > 0 && plainCount === 0) {
+      showToast(`Encrypted and added ${encryptedCount} file(s) with AES-256-GCM`);
+    } else if (encryptedCount > 0) {
+      showToast(`Added ${newItems.length} file(s): ${encryptedCount} encrypted, ${plainCount} plaintext preview`);
+    } else if (unlocked) {
+      showToast(`Added ${newItems.length} file(s) as a local preview`);
+    } else {
+      showToast(`Added ${newItems.length} file(s) as a local preview (unlock the vault to encrypt uploads)`);
+    }
   };
 
   const handleUnzipFile = async (archive: FileItem) => {

@@ -47,6 +47,12 @@ export interface EncryptionInfo {
   checksumSha256: string;
   encryptedAt?: string;
   zeroKnowledgeVerified: boolean;
+  /** AES-GCM nonce (hex) when bytes were encrypted with the vault session key. */
+  nonce?: string;
+  /** Per-file salt (hex); unused for session-key derivation, kept for format parity. */
+  salt?: string;
+  /** MIME type of the plaintext before encryption (restored on decrypt). */
+  originalMimeType?: string;
 }
 
 export interface FileItem {

@@ -1,0 +1,28 @@
+{
+  "nonceHex": "a0a1a2a3a4a5a6a7a8a9aaab",
+  "passphrase": "correct horse battery",
+  "passphraseEncrypt": {
+    "ciphertext": "dbe1c827dfefc32317c1d363276af9d3c622e9b2606a21c2fbd92fbbe707b849435d",
+    "keyFingerprint": "af:94:f3:ec:b5:1e:bf:b7",
+    "nonce": "a0a1a2a3a4a5a6a7a8a9aaab",
+    "salt": "0102030405060708090a0b0c0d0e0f10",
+    "sha256Checksum": "fe69437a9e50f972ffe47421cf56bfe90286e47f3d2ec9e0454056c68ee10f94"
+  },
+  "pbkdf2Iterations": 600000,
+  "plaintext": "cross-crypto hello",
+  "plaintextHex": "63726f73732d63727970746f2068656c6c6f",
+  "saltHex": "0102030405060708090a0b0c0d0e0f10",
+  "sessionEncrypt": {
+    "ciphertext": "ec054c43e37d9f00f58ef7fcaa23003e27929cc7ff4ffb786f85c3da992cf06bdf16",
+    "keyFingerprint": "5e:93:a4:06:9d:0d:25:a3",
+    "nonce": "a0a1a2a3a4a5a6a7a8a9aaab",
+    "salt": "0102030405060708090a0b0c0d0e0f10",
+    "sha256Checksum": "fe69437a9e50f972ffe47421cf56bfe90286e47f3d2ec9e0454056c68ee10f94"
+  },
+  "sessionKeyFingerprint": "5e:93:a4:06:9d:0d:25:a3",
+  "verifier": {
+    "hash": "ac34237c190761c02adaa152aa0f77d05026ec57c02a422f0cd02aefed3f28ac",
+    "iterations": 600000,
+    "salt": "0102030405060708090a0b0c0d0e0f10"
+  }
+}

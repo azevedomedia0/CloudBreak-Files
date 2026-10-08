@@ -8,7 +8,7 @@ export const DropOverlay: React.FC = () => (
     </div>
     <h2 className="text-xl font-bold text-white mb-1">Drop to Upload into Cloud Bucket</h2>
     <p className="text-xs text-neutral-300 max-w-sm">
-      Files are added as a local preview with a SHA-256 checksum. Encryption and cloud upload are not wired up yet.
+      Files get a SHA-256 checksum. With the vault unlocked, uploads are encrypted with AES-256-GCM using the session key.
     </p>
   </div>
 );

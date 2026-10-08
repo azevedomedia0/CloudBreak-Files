@@ -3,7 +3,7 @@ import {
   X, User, Settings, ShieldCheck, HardDrive, Bell,
   Sliders, Lock, Unlock, Radio, Copy, Check, Info,
   Eye, EyeOff, Trash2, Gauge, PanelRight,
-  Cpu, Fingerprint, RefreshCw, Globe, Palette, Moon, Sun,
+  Cpu, Fingerprint, RefreshCw, Globe, Moon, Sun,
 } from 'lucide-react';
 import { CloudAccount } from '../types';
 import { formatBytes } from '../utils/format';
@@ -40,7 +40,7 @@ interface ProfileSettingsModalProps {
   p2pLibraryCount?: number;
 }
 
-type SettingsTab = 'profile' | 'appearance' | 'preferences' | 'notifications' | 'security' | 'storage' | 'network';
+type SettingsTab = 'profile' | 'preferences' | 'notifications' | 'security' | 'storage' | 'network';
 
 const TAB_ACTIVE = 'bg-sky-500/20 text-sky-200 border border-sky-400/30 shadow-xs';
 const TAB_IDLE = 'text-neutral-400 hover:text-neutral-200 hover:bg-white/5';
@@ -183,7 +183,6 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
 
   const tabs: Array<{ id: SettingsTab; label: string; icon: React.ReactNode }> = [
     { id: 'profile', label: 'Profile', icon: <User className="w-3.5 h-3.5" /> },
-    { id: 'appearance', label: 'Appearance', icon: <Palette className="w-3.5 h-3.5" /> },
     { id: 'preferences', label: 'General', icon: <Sliders className="w-3.5 h-3.5" /> },
     { id: 'notifications', label: 'Alerts', icon: <Bell className="w-3.5 h-3.5" /> },
     { id: 'security', label: 'Security', icon: <ShieldCheck className="w-3.5 h-3.5" /> },
@@ -295,7 +294,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
             </div>
           )}
 
-          {activeTab === 'appearance' && (
+          {activeTab === 'preferences' && (
             <div className="space-y-4">
               <div>
                 <h4 className="text-xs font-semibold text-white mb-1">Theme</h4>
@@ -353,16 +352,13 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                     );
                   })}
                 </div>
+                <p className="text-[11px] text-neutral-500 flex items-start gap-1.5 mt-3">
+                  <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  Light mode uses medium gray surfaces with darker accent colors for contrast.
+                </p>
               </div>
-              <p className="text-[11px] text-neutral-500 flex items-start gap-1.5">
-                <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                Light mode uses medium gray surfaces with darker accent colors for contrast.
-              </p>
-            </div>
-          )}
 
-          {activeTab === 'preferences' && (
-            <div className="space-y-3">
+              <div className="space-y-3 pt-1 border-t border-white/5">
               <PrefRow title="Default view mode" description="File browser layout used when the app launches">
                 <select
                   value={prefs.defaultView}
@@ -409,6 +405,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                   <RefreshCw className="w-3 h-3" />
                   Reset general defaults
                 </button>
+              </div>
               </div>
             </div>
           )}

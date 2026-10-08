@@ -134,13 +134,23 @@ export const NewFolderModal: React.FC<NewFolderModalProps> = ({
 export interface CreateP2pLibraryForm {
   name: string;
   description: string;
+  /** Primary recipient (first in the list) — used for invite/crypto wrap. */
   memberEmail: string;
+  /** All specified P2P recipients to seed to. */
+  memberEmails: string[];
   role: 'viewer' | 'editor' | 'admin';
   bandwidthCap: string;
   invitePassphrase: string;
   /** Days until invite expires; 0 = never. */
   expiresInDays: number;
   allowDownloads: boolean;
+}
+
+function parseRecipientTokens(raw: string): string[] {
+  return raw
+    .split(/[,;\n]+/)
+    .map(s => s.trim())
+    .filter(Boolean);
 }
 
 interface NewSharedLibraryModalProps {
@@ -156,7 +166,8 @@ export const NewSharedLibraryModal: React.FC<NewSharedLibraryModalProps> = ({
 }) => {
   const [libName, setLibName] = useState('');
   const [description, setDescription] = useState('');
-  const [memberEmail, setMemberEmail] = useState('');
+  const [recipientDraft, setRecipientDraft] = useState('');
+  const [recipients, setRecipients] = useState<string[]>([]);
   const [role, setRole] = useState<'viewer' | 'editor' | 'admin'>('editor');
   const [bandwidthCap, setBandwidthCap] = useState('100');
   const [expiresInDays, setExpiresInDays] = useState(30);
@@ -168,16 +179,45 @@ export const NewSharedLibraryModal: React.FC<NewSharedLibraryModalProps> = ({
 
   if (!isOpen) return null;
 
+  const addRecipients = (raw: string) => {
+    const next = parseRecipientTokens(raw);
+    if (!next.length) return;
+    setRecipients(prev => {
+      const seen = new Set(prev.map(e => e.toLowerCase()));
+      const merged = [...prev];
+      for (const token of next) {
+        const key = token.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        merged.push(token);
+      }
+      return merged;
+    });
+    setRecipientDraft('');
+  };
+
+  const removeRecipient = (email: string) => {
+    setRecipients(prev => prev.filter(e => e !== email));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!libName.trim()) return;
+    const pending = parseRecipientTokens(recipientDraft);
+    const allRecipients = [...recipients];
+    for (const token of pending) {
+      if (!allRecipients.some(e => e.toLowerCase() === token.toLowerCase())) {
+        allRecipients.push(token);
+      }
+    }
     setBusy(true);
     setError(null);
     try {
       await onCreateLibrary({
         name: libName.trim(),
         description: description.trim() || 'Media library seeding to specified P2P users',
-        memberEmail: memberEmail.trim(),
+        memberEmail: allRecipients[0] || '',
+        memberEmails: allRecipients,
         role,
         bandwidthCap: bandwidthCap.startsWith('unlimited')
           ? bandwidthCap
@@ -188,7 +228,8 @@ export const NewSharedLibraryModal: React.FC<NewSharedLibraryModalProps> = ({
       });
       setLibName('');
       setDescription('');
-      setMemberEmail('');
+      setRecipientDraft('');
+      setRecipients([]);
       setExpiresInDays(30);
       setAllowDownloads(true);
       setInvitePassphrase('');
@@ -260,17 +301,53 @@ export const NewSharedLibraryModal: React.FC<NewSharedLibraryModalProps> = ({
 
           <div>
             <label className="block text-xs font-medium text-neutral-300 mb-1.5">
-              Specify P2P Peer User to Seed To (Email or Peer Node ID)
+              Specified P2P Recipients ({recipients.length})
             </label>
-            <input
-              type="text"
-              value={memberEmail}
-              onChange={e => setMemberEmail(e.target.value)}
-              placeholder="peer@example.org or node-peer-sfo-19"
-              className="w-full px-3.5 py-2 rounded-xl bg-black/40 border border-white/15 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400/50 transition-all font-sans"
-            />
-            <p className="text-[10px] text-neutral-400 mt-1">
-              Only the P2P users you explicitly specify will receive cryptographic chunk access.
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={recipientDraft}
+                onChange={e => setRecipientDraft(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' || e.key === ',') {
+                    e.preventDefault();
+                    addRecipients(recipientDraft);
+                  }
+                }}
+                placeholder="peer@example.org — Enter to add, or paste several separated by commas"
+                className="min-w-0 flex-1 px-3.5 py-2 rounded-xl bg-black/40 border border-white/15 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400/50 transition-all font-sans"
+              />
+              <button
+                type="button"
+                onClick={() => addRecipients(recipientDraft)}
+                disabled={!recipientDraft.trim()}
+                className="shrink-0 h-[34px] px-3 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 border border-purple-400/30 text-purple-200 text-xs font-medium disabled:opacity-40 transition-colors"
+              >
+                Add
+              </button>
+            </div>
+            {recipients.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {recipients.map(email => (
+                  <span
+                    key={email}
+                    className="inline-flex items-center gap-1 max-w-full px-2 py-0.5 rounded-lg bg-purple-500/15 border border-purple-400/30 text-[11px] text-purple-100 font-mono"
+                  >
+                    <span className="truncate">{email}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeRecipient(email)}
+                      className="p-0.5 rounded hover:bg-white/10 text-purple-200/80 hover:text-white shrink-0"
+                      aria-label={`Remove ${email}`}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <p className="text-[10px] text-neutral-400 mt-1.5">
+              Add one or more users. Only these peers get cryptographic chunk access.
             </p>
           </div>
 

@@ -16,34 +16,42 @@ export function buildOutgoingLibrary(opts: {
   name: string;
   description: string;
   memberEmail: string;
+  memberEmails?: string[];
   role: 'viewer' | 'editor' | 'admin';
   accountId: CloudProviderId;
 }): SharedLibrary {
-  const { name, description, memberEmail, role, accountId } = opts;
+  const { name, description, role, accountId } = opts;
+  const recipientList = (opts.memberEmails?.length
+    ? opts.memberEmails
+    : opts.memberEmail
+      ? [opts.memberEmail]
+      : []
+  ).map(e => e.trim()).filter(Boolean);
   const members: SharedMember[] = [youAsMember('admin', 'Seeder Host')];
   const seedingPeers: NonNullable<SharedLibrary['seedingPeers']> = [];
+  const stamp = Date.now();
 
-  if (memberEmail) {
-    const peerName = memberEmail.split('@')[0];
+  recipientList.forEach((memberEmail, i) => {
+    const peerName = memberEmail.includes('@') ? memberEmail.split('@')[0] : memberEmail;
     members.push({
-      id: `m-${Date.now()}`,
+      id: `m-${stamp}-${i}`,
       name: peerName,
       email: memberEmail,
       role,
       status: 'pending',
     });
     seedingPeers.push({
-      id: `p-${Date.now()}`,
+      id: `p-${stamp}-${i}`,
       name: peerName,
       email: memberEmail,
       peerNodeId: `node-${slug(peerName)}-mesh`,
       status: 'seeding' as const,
-      transferSpeed: '24.5 MB/s',
-      progressPercent: 12,
+      transferSpeed: i === 0 ? '24.5 MB/s' : undefined,
+      progressPercent: i === 0 ? 12 : undefined,
       role,
       publicKey: `0x${Math.random().toString(16).substring(2, 10)}`,
     });
-  }
+  });
 
   return {
     id: `lib-${Date.now()}`,

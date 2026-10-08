@@ -223,6 +223,16 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                 emitFileContextMenu(file, event.clientX, event.clientY);
               }}
             >
+              {file.encryption.isEncrypted ? (
+                <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-cyan-950/40 text-cyan-200">
+                  <Lock className="w-8 h-8 text-cyan-400" />
+                  <p className="text-xs font-medium">Encrypted with AES-256-GCM</p>
+                  <p className="text-[10px] font-mono text-cyan-400/80 px-4 text-center truncate max-w-full">
+                    {file.encryption.keyFingerprint}
+                  </p>
+                </div>
+              ) : (
+              <>
               {file.category === 'photo' && (
                 <img
                   src={file.url}
@@ -339,6 +349,8 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
               {file.category !== 'photo' && file.category !== 'video' && (
                 <DocumentPreview file={file} />
               )}
+              </>
+              )}
 
             </div>
           )}
@@ -370,6 +382,21 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                 <span className="text-neutral-300 font-medium">{account?.name || 'Cloud Bucket'}</span>
                 <span className="text-neutral-600">·</span>
                 <span className="font-mono text-[11px] text-neutral-400">{file.folderPath}</span>
+              </div>
+
+              <div className="flex items-center gap-2 text-[11px] pt-0.5">
+                {file.encryption.isEncrypted ? (
+                  <>
+                    <Lock className="w-3 h-3 text-cyan-400 shrink-0" />
+                    <span className="text-cyan-300 font-medium">{file.encryption.algorithm}</span>
+                    <span className="font-mono text-neutral-500 truncate">{file.encryption.keyFingerprint}</span>
+                  </>
+                ) : (
+                  <>
+                    <Unlock className="w-3 h-3 text-neutral-500 shrink-0" />
+                    <span className="text-neutral-400">Not encrypted</span>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -456,6 +483,21 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                 aria-label="Share Library"
               >
                 <Share2 className="w-4 h-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onToggleEncrypt(file)}
+                className={`col-span-4 h-9 rounded-lg flex items-center justify-center gap-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer border ${
+                  file.encryption.isEncrypted
+                    ? 'bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-400/30 text-emerald-300'
+                    : 'bg-cyan-500/15 hover:bg-cyan-500/25 border-cyan-400/30 text-cyan-300'
+                }`}
+                title={file.encryption.isEncrypted ? 'Decrypt with vault session key' : 'Encrypt with vault session key'}
+                aria-label={file.encryption.isEncrypted ? 'Decrypt' : 'Encrypt'}
+              >
+                {file.encryption.isEncrypted ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
+                <span>{file.encryption.isEncrypted ? 'Decrypt with Vault' : 'Encrypt with Vault'}</span>
               </button>
             </div>
           )}

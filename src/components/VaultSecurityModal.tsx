@@ -108,7 +108,7 @@ export const VaultSecurityModal: React.FC<VaultSecurityModalProps> = ({
             </div>
             
             <p className="text-xs text-neutral-400">
-              When locked, media previews in the sovereign vault require your private passphrase for decryption. The first unlock after launch sets the passphrase (8 or more characters). Keep it safe. It cannot be recovered.
+              When locked, media previews in the sovereign vault require your private passphrase for decryption. The first unlock sets the passphrase (8 or more characters); later unlocks — including after a page reload — must match it. Keep it safe. It cannot be recovered.
             </p>
 
             {!isVaultUnlocked && (
