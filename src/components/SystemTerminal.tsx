@@ -307,7 +307,7 @@ export const SystemTerminal: React.FC<SystemTerminalProps> = ({ width = 320, con
       onDragOver={onDragOver}
       onDrop={onDrop}
     >
-      <div className="h-10 px-2 flex items-center gap-1.5 border-b border-white/10 bg-neutral-950/80 shrink-0 select-none">
+      <div className="terminal-panel-header h-10 px-2 flex items-center gap-1.5 border-b border-white/10 bg-neutral-950/80 shrink-0 select-none">
         <TerminalIcon className="w-3.5 h-3.5 text-lime-400 shrink-0 ml-1" />
         <span className="text-[11px] font-semibold text-neutral-200 tracking-tight shrink-0">Terminal</span>
 

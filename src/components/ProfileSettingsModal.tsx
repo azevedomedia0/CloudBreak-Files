@@ -314,7 +314,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                       id: 'light' as AppTheme,
                       label: 'Light',
                       icon: <Sun className="w-4 h-4" />,
-                      swatches: ['#f5f5f5', '#e5e5e5', '#d4d4d4', '#a3a3a3'],
+                      swatches: ['#d2d2d8', '#c8c8ce', '#b0b0b6', '#8e8e94'],
                     },
                   ]).map(option => {
                     const selected = prefs.theme === option.id;
@@ -356,7 +356,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
               </div>
               <p className="text-[11px] text-neutral-500 flex items-start gap-1.5">
                 <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                Light mode uses soft gray surfaces. Accent colors (sky, emerald, purple) stay the same in both themes.
+                Light mode uses medium gray surfaces with darker accent colors for contrast.
               </p>
             </div>
           )}

@@ -250,83 +250,136 @@ html.reduce-motion *::after {
   scroll-behavior: auto !important;
 }
 
-/* —— Light appearance (shades of light gray; dark remains default) —— */
+/* —— Light appearance (~3 shades darker medium grays; dark remains default) —— */
 html[data-theme="light"] {
-  --color-neutral-700: #a8a8ae;
-  --color-neutral-750: #b8b8be;
-  --color-neutral-800: #cfcfd4;
-  --color-neutral-850: #d9d9de;
-  --color-neutral-900: #e4e4e8;
-  --color-neutral-950: #ececef;
-  --color-neutral-600: #8a8a90;
-  --color-neutral-500: #6e6e76;
-  --color-neutral-400: #5a5a62;
-  --color-neutral-300: #3f3f46;
-  --color-neutral-200: #2a2a30;
-  --color-neutral-100: #1c1c20;
-  --color-neutral-50: #121214;
+  --color-neutral-700: #8e8e94;
+  --color-neutral-750: #9c9ca2;
+  --color-neutral-800: #b0b0b6;
+  --color-neutral-850: #bcbcc2;
+  --color-neutral-900: #c8c8ce;
+  --color-neutral-950: #d2d2d8;
+  --color-neutral-600: #74747a;
+  --color-neutral-500: #5a5a62;
+  --color-neutral-400: #484850;
+  --color-neutral-300: #323238;
+  --color-neutral-200: #222228;
+  --color-neutral-100: #161618;
+  --color-neutral-50: #0e0e10;
+
+  /* Accent families — shifted darker for contrast on gray surfaces */
+  --color-sky-300: #0284c7;
+  --color-sky-400: #0369a1;
+  --color-sky-500: #075985;
+  --color-sky-600: #0c4a6e;
+  --color-cyan-300: #0891b2;
+  --color-cyan-400: #0e7490;
+  --color-cyan-500: #155e75;
+  --color-emerald-300: #059669;
+  --color-emerald-400: #047857;
+  --color-emerald-500: #065f46;
+  --color-emerald-600: #064e3b;
+  --color-green-300: #16a34a;
+  --color-green-400: #15803d;
+  --color-green-500: #166534;
+  --color-purple-300: #9333ea;
+  --color-purple-400: #7e22ce;
+  --color-purple-500: #6b21a8;
+  --color-violet-300: #7c3aed;
+  --color-violet-400: #6d28d9;
+  --color-violet-500: #5b21b6;
+  --color-indigo-300: #4f46e5;
+  --color-indigo-400: #4338ca;
+  --color-indigo-500: #3730a3;
+  --color-pink-300: #db2777;
+  --color-pink-400: #be185d;
+  --color-pink-500: #9d174d;
+  --color-lime-200: #3f6212;
+  --color-lime-300: #65a30d;
+  --color-lime-400: #4d7c0f;
+  --color-lime-500: #3f6212;
+  --color-lime-600: #365314;
+  --color-orange-300: #ea580c;
+  --color-orange-400: #c2410c;
+  --color-orange-500: #9a3412;
+  --color-amber-300: #d97706;
+  --color-amber-400: #b45309;
+  --color-amber-500: #92400e;
+  --color-red-300: #dc2626;
+  --color-red-400: #b91c1c;
+  --color-red-500: #991b1b;
 }
 
 html[data-theme="light"] body {
-  color: #2a2a30;
-  background-color: #e8e8ec;
+  color: #222228;
+  background-color: #c8c8ce;
 }
 
 html[data-theme="light"] ::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.18);
+  background: rgba(0, 0, 0, 0.22);
 }
 html[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.3);
+  background: rgba(0, 0, 0, 0.34);
 }
 
 html[data-theme="light"] .macos-window {
-  background: rgba(244, 244, 246, 0.88);
-  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(210, 210, 216, 0.9);
+  border-color: rgba(0, 0, 0, 0.1);
   box-shadow:
-    0 25px 70px -15px rgba(0, 0, 0, 0.18),
-    0 0 0 1px rgba(0, 0, 0, 0.04),
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.9);
+    0 25px 70px -15px rgba(0, 0, 0, 0.22),
+    0 0 0 1px rgba(0, 0, 0, 0.06),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.55);
 }
 
 html[data-theme="light"] .macos-sidebar-glass {
-  background: rgba(236, 236, 240, 0.85);
-  border-right-color: rgba(0, 0, 0, 0.08);
-  box-shadow: inset -1px 0 0 0 rgba(255, 255, 255, 0.5);
+  background: rgba(200, 200, 208, 0.88);
+  border-right-color: rgba(0, 0, 0, 0.1);
+  box-shadow: inset -1px 0 0 0 rgba(255, 255, 255, 0.35);
 }
 
 html[data-theme="light"] .macos-toolbar-glass {
-  background: rgba(242, 242, 245, 0.9);
-  border-bottom-color: rgba(0, 0, 0, 0.08);
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.95);
+  background: rgba(206, 206, 214, 0.92);
+  border-bottom-color: rgba(0, 0, 0, 0.1);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.5);
+}
+
+/* Terminal side panel header: 4 neutral steps darker than 950 in light mode (950→750) */
+html[data-theme="light"] .terminal-panel-header {
+  background-color: rgb(156 156 162 / 0.92);
+}
+
+html[data-theme="light"] .notification-panel {
+  box-shadow:
+    0 20px 48px -14px rgba(0, 0, 0, 0.2),
+    0 0 0 1px rgba(0, 0, 0, 0.08);
 }
 
 html[data-theme="light"] .macos-glass-card {
-  background: rgba(255, 255, 255, 0.55);
-  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(232, 232, 238, 0.62);
+  border-color: rgba(0, 0, 0, 0.1);
   box-shadow:
-    0 8px 24px -6px rgba(0, 0, 0, 0.12),
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.9);
+    0 8px 24px -6px rgba(0, 0, 0, 0.16),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.55);
 }
 
 html[data-theme="light"] .macos-glass-card:hover {
-  background: rgba(255, 255, 255, 0.75);
-  border-color: rgba(0, 0, 0, 0.12);
+  background: rgba(238, 238, 244, 0.78);
+  border-color: rgba(0, 0, 0, 0.14);
 }
 
 html[data-theme="light"] .macos-segmented-pill {
-  background: rgba(0, 0, 0, 0.06);
-  border-color: rgba(0, 0, 0, 0.08);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
+  background: rgba(0, 0, 0, 0.08);
+  border-color: rgba(0, 0, 0, 0.1);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08);
 }
 
 html[data-theme="light"] .gallery-scrubber {
-  scrollbar-color: rgba(0, 0, 0, 0.28) rgba(0, 0, 0, 0.06);
+  scrollbar-color: rgba(0, 0, 0, 0.32) rgba(0, 0, 0, 0.08);
 }
 html[data-theme="light"] .gallery-scrubber::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.06);
+  background: rgba(0, 0, 0, 0.08);
 }
 html[data-theme="light"] .gallery-scrubber::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.25);
+  background: rgba(0, 0, 0, 0.3);
 }
 
 /* Remap common dark-only utilities used across the UI */
@@ -356,30 +409,61 @@ html[data-theme="light"] .bg-black\/40,
 html[data-theme="light"] .bg-black\/30,
 html[data-theme="light"] .bg-black\/25,
 html[data-theme="light"] .bg-black\/20 {
-  background-color: rgba(255, 255, 255, 0.72);
+  background-color: rgba(220, 220, 226, 0.82);
 }
 html[data-theme="light"] .border-white\/5,
 html[data-theme="light"] .border-white\/8,
 html[data-theme="light"] .border-white\/10,
 html[data-theme="light"] .border-white\/12,
 html[data-theme="light"] .border-white\/15 {
-  border-color: rgba(0, 0, 0, 0.1);
+  border-color: rgba(0, 0, 0, 0.14);
 }
 html[data-theme="light"] .hover\:bg-white\/5:hover,
 html[data-theme="light"] .hover\:bg-white\/6:hover,
 html[data-theme="light"] .hover\:bg-white\/10:hover,
 html[data-theme="light"] .hover\:bg-white\/12:hover,
 html[data-theme="light"] .hover\:bg-white\/15:hover {
-  background-color: rgba(0, 0, 0, 0.05);
+  background-color: rgba(0, 0, 0, 0.07);
 }
 html[data-theme="light"] .bg-white\/5,
 html[data-theme="light"] .bg-white\/\[0\.04\],
 html[data-theme="light"] .bg-white\/10,
 html[data-theme="light"] .bg-white\/12,
 html[data-theme="light"] .bg-white\/15 {
-  background-color: rgba(0, 0, 0, 0.04);
+  background-color: rgba(0, 0, 0, 0.06);
 }
 html[data-theme="light"] .placeholder-neutral-500::placeholder,
 html[data-theme="light"] .placeholder-neutral-400::placeholder {
-  color: #8a8a90;
+  color: #74747a;
+}
+
+/* Stronger tinted surfaces so selection / badges stay visible */
+html[data-theme="light"] [class*="ring-sky-"],
+html[data-theme="light"] [class*="ring-purple-"],
+html[data-theme="light"] [class*="ring-emerald-"],
+html[data-theme="light"] [class*="ring-orange-"],
+html[data-theme="light"] [class*="ring-pink-"],
+html[data-theme="light"] [class*="ring-lime-"],
+html[data-theme="light"] [class*="ring-cyan-"] {
+  --tw-ring-opacity: 0.55;
+}
+
+html[data-theme="light"] [class*="border-sky-"],
+html[data-theme="light"] [class*="border-purple-"],
+html[data-theme="light"] [class*="border-emerald-"],
+html[data-theme="light"] [class*="border-orange-"],
+html[data-theme="light"] [class*="border-pink-"],
+html[data-theme="light"] [class*="border-lime-"],
+html[data-theme="light"] [class*="border-cyan-"] {
+  --tw-border-opacity: 0.45;
+}
+
+html[data-theme="light"] [class*="bg-sky-500/"],
+html[data-theme="light"] [class*="bg-purple-500/"],
+html[data-theme="light"] [class*="bg-emerald-500/"],
+html[data-theme="light"] [class*="bg-orange-500/"],
+html[data-theme="light"] [class*="bg-pink-500/"],
+html[data-theme="light"] [class*="bg-lime-500/"],
+html[data-theme="light"] [class*="bg-cyan-500/"] {
+  --tw-bg-opacity: 0.22;
 }
