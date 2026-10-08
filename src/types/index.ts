@@ -128,6 +128,10 @@ export interface SharedLibrary {
   seedingPeers?: P2PPeer[];
   seedingStatus?: 'active' | 'paused';
   seedingBandwidthCap?: string;
+  /** Invite / access expiration ISO date; omit or empty if never. */
+  expiresAt?: string;
+  /** When false, recipients may stream but not download originals. */
+  allowDownloads?: boolean;
 }
 
 export interface SharedMember {

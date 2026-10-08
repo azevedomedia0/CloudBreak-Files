@@ -5,7 +5,7 @@ import {
   Share2, Info, HardDrive, Sparkles, Key,
   ChevronDown, ChevronUp, ChevronRight, Minimize2, Maximize2,
   PanelRightClose, PanelRight, Play, Pause, RotateCcw, Volume2, VolumeX,
-  Copy, ClipboardPaste, Pencil, FolderInput, FileArchive,
+  Copy, ClipboardPaste, Pencil, FolderInput, FileArchive, FolderPlus,
 } from 'lucide-react';
 import { FileItem, CloudAccount, FolderItem } from '../types';
 import { isEditableDocument } from '../utils/documentKind';
@@ -33,6 +33,7 @@ interface FileInspectorProps {
   onRenameFile?: (fileId: string, name: string) => void;
   onMoveFile?: (fileId: string, folder: FolderItem) => void;
   onCompressFile?: (file: FileItem) => void;
+  onNewFolder?: () => void;
   canPaste?: boolean;
   width?: number;
   photoNav?: PhotoNav | null;
@@ -55,6 +56,7 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
   onRenameFile,
   onMoveFile,
   onCompressFile,
+  onNewFolder,
   canPaste = false,
   width = 320,
   photoNav,
@@ -431,18 +433,6 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                 </button>
               )}
 
-              {/* Button 3: Share Library */}
-              <button
-                type="button"
-                onClick={() => onShare(file)}
-                className="h-9 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 hover:border-sky-400/30 text-neutral-300 hover:text-sky-300 flex items-center justify-center transition-all shadow-xs cursor-pointer"
-                title="Share Library / Asset"
-                aria-label="Share Library"
-              >
-                <Share2 className="w-4 h-4" />
-              </button>
-
-              {/* Button 4: Download */}
               <button
                 type="button"
                 onClick={handleDownload}
@@ -451,6 +441,16 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                 aria-label="Download"
               >
                 <Download className="w-4 h-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onShare(file)}
+                className="h-9 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 hover:border-sky-400/30 text-neutral-300 hover:text-sky-300 flex items-center justify-center transition-all shadow-xs cursor-pointer"
+                title="Share Library / Asset"
+                aria-label="Share Library"
+              >
+                <Share2 className="w-4 h-4" />
               </button>
             </div>
           )}
@@ -461,7 +461,17 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
           <div className="flex items-center justify-between text-[10px] font-semibold tracking-wider uppercase text-neutral-400 select-none">
             <span>Organize</span>
           </div>
-          <div className="grid grid-cols-5 gap-2">
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={() => onNewFolder?.()}
+              disabled={!onNewFolder}
+              className="h-9 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 hover:border-cyan-400/30 text-neutral-200 hover:text-cyan-200 flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              title="New Folder"
+              aria-label="New Folder"
+            >
+              <FolderPlus className="w-4 h-4" />
+            </button>
             <button
               type="button"
               onClick={() => onCopyFile?.(file)}
@@ -511,7 +521,7 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                 <FolderInput className="w-4 h-4" />
               </button>
               {movePickerOpen && onMoveFile && (
-                <div className="absolute right-0 left-auto top-[calc(100%+4px)] z-40 w-44 max-h-48 overflow-y-auto rounded-xl border border-white/12 bg-neutral-950/95 shadow-xl backdrop-blur-xl py-1">
+                <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-40 max-h-48 overflow-y-auto rounded-xl border border-white/12 bg-neutral-950/95 shadow-xl backdrop-blur-xl py-1">
                   {folders.map(folder => (
                     <button
                       key={folder.id}

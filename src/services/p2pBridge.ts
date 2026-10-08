@@ -32,6 +32,8 @@ export interface P2pLibraryRecord {
   seedingStatus?: string | null;
   bandwidthCap?: string | null;
   privateMode?: boolean;
+  expiresAt?: string | null;
+  allowDownloads?: boolean;
 }
 
 export interface CreateLibraryFileInput {
@@ -48,6 +50,9 @@ export interface CreateLibraryInput {
   recipientX25519Hex?: string;
   invitePassphrase?: string;
   bandwidthCap?: string;
+  /** Days until invite expires; 0 = never. */
+  expiresInDays?: number;
+  allowDownloads?: boolean;
   files: CreateLibraryFileInput[];
 }
 
@@ -189,6 +194,11 @@ async function browserCreateLibrary(input: CreateLibraryInput): Promise<CreateLi
     lastInvite: invite,
     seedingStatus: 'active',
     bandwidthCap: input.bandwidthCap,
+    expiresAt:
+      input.expiresInDays && input.expiresInDays > 0
+        ? new Date(Date.now() + input.expiresInDays * 86400000).toISOString()
+        : null,
+    allowDownloads: input.allowDownloads !== false,
   };
   browserLibs.set(libraryId, { ...record, invite, files: fileMap });
   return { libraryId, rootCid, invite, fileIds, record };
@@ -428,6 +438,8 @@ export function recordToSharedLibrary(rec: P2pLibraryRecord): import('../types')
     p2pEncryptionCipher: 'AES-256-GCM E2EE',
     senderPeerNodeId: rec.ownerPeerId,
     seedingBandwidthCap: rec.bandwidthCap ?? undefined,
+    expiresAt: rec.expiresAt ?? undefined,
+    allowDownloads: rec.allowDownloads ?? true,
     incomingStatus: rec.direction === 'incoming' ? 'synced' : undefined,
   };
 }

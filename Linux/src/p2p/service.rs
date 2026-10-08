@@ -1,4 +1,5 @@
-//! Tauri commands for P2P library sharing.
+//! P2P service API for the Linux / COSMIC build (no Tauri).
+//! Ported from `src-tauri/src/p2p/commands.rs`.
 
 use crate::p2p::chunk_store::{library_dir, ChunkStore};
 use crate::p2p::identity::{identity_path, PeerIdentity};
@@ -9,12 +10,11 @@ use crate::p2p::keys::{
 use crate::p2p::library_store::{LibraryIndex, LibraryRecord};
 use crate::p2p::manifest::{LibraryManifest, ManifestFileEntry};
 use crate::p2p::swarm::{SwarmHandle, SwarmStatus};
+use crate::paths;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
-use tauri::{AppHandle, Manager, State};
-use crate::tray;
 
 pub struct P2pState {
     pub identity: Mutex<Option<PeerIdentity>>,
@@ -32,15 +32,20 @@ impl Default for P2pState {
     }
 }
 
-fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    app.path()
-        .app_data_dir()
-        .map_err(|e| format!("app data dir: {e}"))
+impl P2pState {
+    pub fn new() -> Self {
+        Self::default()
+    }
 }
 
-fn ensure_identity(app: &AppHandle, state: &P2pState, display_name: &str) -> Result<PeerIdentity, String> {
-    let data = app_data_dir(app)?;
+fn app_data_dir(state: &P2pState) -> Result<PathBuf, String> {
+    let data = paths::app_data_dir();
     *state.app_data.lock() = Some(data.clone());
+    Ok(data)
+}
+
+fn ensure_identity(state: &P2pState, display_name: &str) -> Result<PeerIdentity, String> {
+    let data = app_data_dir(state)?;
     {
         let guard = state.identity.lock();
         if let Some(id) = guard.as_ref() {
@@ -53,7 +58,7 @@ fn ensure_identity(app: &AppHandle, state: &P2pState, display_name: &str) -> Res
     Ok(id)
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IdentityInfo {
     pub peer_id: String,
@@ -62,14 +67,12 @@ pub struct IdentityInfo {
     pub display_name: String,
 }
 
-#[tauri::command]
 pub fn p2p_get_identity(
-    app: AppHandle,
-    state: State<'_, P2pState>,
+    state: &P2pState,
     display_name: Option<String>,
 ) -> Result<IdentityInfo, String> {
     let name = display_name.unwrap_or_else(|| "Cloudbreak User".into());
-    let id = ensure_identity(&app, &state, &name)?;
+    let id = ensure_identity(state, &name)?;
     Ok(IdentityInfo {
         peer_id: id.peer_id.clone(),
         public_key_hex: id.public_key_hex.clone(),
@@ -113,17 +116,14 @@ pub struct CreateLibraryResult {
     pub record: LibraryRecord,
 }
 
-#[tauri::command]
 pub async fn p2p_create_library(
-    app: AppHandle,
-    state: State<'_, P2pState>,
-    req: CreateLibraryRequest,
+    state: &P2pState, req: CreateLibraryRequest,
 ) -> Result<CreateLibraryResult, String> {
-    let identity = ensure_identity(&app, &state, "Cloudbreak User")?;
-    let data = app_data_dir(&app)?;
+    let identity = ensure_identity(state, "Cloudbreak User")?;
+    let data = app_data_dir(state)?;
 
     // Ensure swarm is running so invite carries listen addrs
-    let swarm = ensure_swarm(&app, &state).await?;
+    let swarm = ensure_swarm(state).await?;
     let listen_addrs = swarm.listen_addrs();
 
     let library_id = format!("lib-{}", uuid::Uuid::new_v4());
@@ -250,7 +250,6 @@ pub async fn p2p_create_library(
 
     // Private mode: seed locally only — peers must dial via the invite, never DHT announce.
     swarm.seed_library(blob.root_cid.clone(), library_id.clone());
-    tray::refresh_tray_status(&app);
 
     Ok(CreateLibraryResult {
         library_id,
@@ -275,14 +274,11 @@ pub struct AcceptInviteResult {
     pub fetched_chunks: usize,
 }
 
-#[tauri::command]
 pub async fn p2p_accept_invite(
-    app: AppHandle,
-    state: State<'_, P2pState>,
-    req: AcceptInviteRequest,
+    state: &P2pState, req: AcceptInviteRequest,
 ) -> Result<AcceptInviteResult, String> {
-    let identity = ensure_identity(&app, &state, "Cloudbreak User")?;
-    let data = app_data_dir(&app)?;
+    let identity = ensure_identity(state, "Cloudbreak User")?;
+    let data = app_data_dir(state)?;
     let invite = LibraryInvite::decode(&req.invite).map_err(|e| e.to_string())?;
 
     let root_key = if let Some(pass) = req.invite_passphrase.as_ref().filter(|s| !s.is_empty()) {
@@ -295,7 +291,7 @@ pub async fn p2p_accept_invite(
             .map_err(|e| format!("need invite passphrase: {e}"))?
     };
 
-    let swarm = ensure_swarm(&app, &state).await?;
+    let swarm = ensure_swarm(state).await?;
     // Private mode: dial only multiaddrs embedded in the signed invite.
     swarm.dial_invite(invite.root_cid.clone(), invite.seeder_addrs.clone());
 
@@ -399,14 +395,11 @@ pub async fn p2p_accept_invite(
     })
 }
 
-#[tauri::command]
 pub fn p2p_export_invite(
-    app: AppHandle,
-    state: State<'_, P2pState>,
-    library_id: String,
+    state: &P2pState, library_id: String,
 ) -> Result<String, String> {
-    let data = app_data_dir(&app)?;
-    let _ = ensure_identity(&app, &state, "Cloudbreak User")?;
+    let data = app_data_dir(state)?;
+    let _ = ensure_identity(state, "Cloudbreak User")?;
     let index = LibraryIndex::load(&data).map_err(|e| e.to_string())?;
     let rec = index
         .get(&library_id)
@@ -416,39 +409,29 @@ pub fn p2p_export_invite(
         .ok_or_else(|| "no invite for this library".to_string())
 }
 
-#[tauri::command]
-pub fn p2p_list_libraries(app: AppHandle) -> Result<Vec<LibraryRecord>, String> {
-    let data = app_data_dir(&app)?;
+pub fn p2p_list_libraries(state: &P2pState) -> Result<Vec<LibraryRecord>, String> {
+    let data = app_data_dir(state)?;
     let index = LibraryIndex::load(&data).map_err(|e| e.to_string())?;
     Ok(index.libraries)
 }
 
-#[tauri::command]
 pub async fn p2p_start_seeding(
-    app: AppHandle,
-    state: State<'_, P2pState>,
-    library_id: String,
+    state: &P2pState, library_id: String,
 ) -> Result<SwarmStatus, String> {
-    let data = app_data_dir(&app)?;
+    let data = app_data_dir(state)?;
     let index = LibraryIndex::load(&data).map_err(|e| e.to_string())?;
     let rec = index
         .get(&library_id)
         .ok_or_else(|| "library not found".to_string())?
         .clone();
-    let swarm = ensure_swarm(&app, &state).await?;
+    let swarm = ensure_swarm(state).await?;
     // Private mode: listen + seed only; peers find us via invite seederAddrs.
     swarm.seed_library(rec.root_cid.clone(), library_id);
-    tray::refresh_tray_status(&app);
     Ok(swarm.status())
 }
 
-#[tauri::command]
-pub async fn p2p_swarm_status(
-    app: AppHandle,
-    state: State<'_, P2pState>,
-) -> Result<SwarmStatus, String> {
-    let swarm = ensure_swarm(&app, &state).await?;
-    tray::refresh_tray_status(&app);
+pub async fn p2p_swarm_status(state: &P2pState) -> Result<SwarmStatus, String> {
+    let swarm = ensure_swarm(state).await?;
     Ok(swarm.status())
 }
 
@@ -462,15 +445,12 @@ pub struct DecryptedFileResult {
     pub size_bytes: u64,
 }
 
-#[tauri::command]
 pub fn p2p_read_file(
-    app: AppHandle,
-    state: State<'_, P2pState>,
-    library_id: String,
+    state: &P2pState, library_id: String,
     file_id: String,
 ) -> Result<DecryptedFileResult, String> {
-    let identity = ensure_identity(&app, &state, "Cloudbreak User")?;
-    let data = app_data_dir(&app)?;
+    let identity = ensure_identity(state, "Cloudbreak User")?;
+    let data = app_data_dir(state)?;
     let index = LibraryIndex::load(&data).map_err(|e| e.to_string())?;
     let rec = index
         .get(&library_id)
@@ -512,16 +492,13 @@ pub struct StreamChunkResult {
     pub total_chunks: u32,
 }
 
-#[tauri::command]
 pub fn p2p_stream_chunk(
-    app: AppHandle,
-    state: State<'_, P2pState>,
-    library_id: String,
+    state: &P2pState, library_id: String,
     file_id: String,
     chunk_index: u32,
 ) -> Result<StreamChunkResult, String> {
-    let identity = ensure_identity(&app, &state, "Cloudbreak User")?;
-    let data = app_data_dir(&app)?;
+    let identity = ensure_identity(state, "Cloudbreak User")?;
+    let data = app_data_dir(state)?;
     let index = LibraryIndex::load(&data).map_err(|e| e.to_string())?;
     let rec = index
         .get(&library_id)
@@ -553,28 +530,25 @@ pub fn p2p_stream_chunk(
     })
 }
 
-#[tauri::command]
 pub fn p2p_fetch_manifest(
-    app: AppHandle,
-    state: State<'_, P2pState>,
-    library_id: String,
+    state: &P2pState, library_id: String,
 ) -> Result<LibraryManifest, String> {
-    let _ = ensure_identity(&app, &state, "Cloudbreak User")?;
-    let data = app_data_dir(&app)?;
+    let _ = ensure_identity(state, "Cloudbreak User")?;
+    let data = app_data_dir(state)?;
     let dir = library_dir(&data, &library_id);
     let (manifest, _) = LibraryManifest::load_local(&dir).map_err(|e| e.to_string())?;
     Ok(manifest)
 }
 
-async fn ensure_swarm(app: &AppHandle, state: &P2pState) -> Result<Arc<SwarmHandle>, String> {
+async fn ensure_swarm(state: &P2pState) -> Result<Arc<SwarmHandle>, String> {
     {
         let guard = state.swarm.lock();
         if let Some(s) = guard.as_ref() {
             return Ok(s.clone());
         }
     }
-    let identity = ensure_identity(app, state, "Cloudbreak User")?;
-    let data = app_data_dir(app)?;
+    let identity = ensure_identity(state, "Cloudbreak User")?;
+    let data = app_data_dir(state)?;
     let handle = SwarmHandle::start(identity, data, None).await?;
     let arc = Arc::new(handle);
     *state.swarm.lock() = Some(arc.clone());

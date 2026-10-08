@@ -65,7 +65,7 @@ export const ProfileFooter: React.FC<ProfileFooterProps> = ({ onOpenVaultSecurit
         {/* User Details & Subtitle */}
         <div className="truncate min-w-0">
           <div className="font-semibold text-neutral-100 text-[11px] leading-tight truncate group-hover:text-white transition-colors">
-            {userProfile?.name || 'Steven Azevedo'}
+            {userProfile?.name || 'User'}
           </div>
           <div className="text-[9px] text-neutral-400 truncate flex items-center gap-1 group-hover:text-sky-300 transition-colors">
             <span>Profile & App Settings</span>
