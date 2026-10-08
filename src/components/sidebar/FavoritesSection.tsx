@@ -74,7 +74,7 @@ export const FavoritesSection: React.FC<FavoritesSectionProps> = ({
         >
           <div className="flex items-center gap-2">
             <Star className="w-4 h-4 text-amber-400 shrink-0" />
-            <span>Starred Media</span>
+            <span>Starred</span>
           </div>
         </button>
 

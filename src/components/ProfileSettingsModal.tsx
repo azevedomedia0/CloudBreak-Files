@@ -2,14 +2,16 @@ import React, { useEffect, useState } from 'react';
 import {
   X, User, Settings, ShieldCheck, HardDrive, Bell,
   Sliders, Lock, Unlock, Radio, Copy, Check, Info,
-  Eye, EyeOff, Trash2, Gauge, PanelRight, Volume2,
-  Cpu, Fingerprint, RefreshCw, Globe,
+  Eye, EyeOff, Trash2, Gauge, PanelRight,
+  Cpu, Fingerprint, RefreshCw, Globe, Palette, Moon, Sun,
 } from 'lucide-react';
 import { CloudAccount } from '../types';
 import { formatBytes } from '../utils/format';
 import {
   AppPreferences,
+  AppTheme,
   DEFAULT_PREFERENCES,
+  applyTheme,
   loadPreferences,
   savePreferences,
   saveProfile,
@@ -38,7 +40,7 @@ interface ProfileSettingsModalProps {
   p2pLibraryCount?: number;
 }
 
-type SettingsTab = 'profile' | 'preferences' | 'notifications' | 'security' | 'storage' | 'network';
+type SettingsTab = 'profile' | 'appearance' | 'preferences' | 'notifications' | 'security' | 'storage' | 'network';
 
 const TAB_ACTIVE = 'bg-sky-500/20 text-sky-200 border border-sky-400/30 shadow-xs';
 const TAB_IDLE = 'text-neutral-400 hover:text-neutral-200 hover:bg-white/5';
@@ -95,7 +97,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
   isOpen,
   onClose,
   userProfile = {
-    name: 'Steven Azevedo',
+    name: 'User',
     email: 'you@example.com',
     role: 'Vault Administrator',
   },
@@ -133,7 +135,17 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
   if (!isOpen) return null;
 
   const patchPrefs = <K extends keyof AppPreferences>(key: K, value: AppPreferences[K]) => {
-    setPrefs(prev => ({ ...prev, [key]: value }));
+    setPrefs(prev => {
+      const next = { ...prev, [key]: value };
+      if (key === 'theme') applyTheme(value as AppTheme);
+      return next;
+    });
+  };
+
+  const handleDismiss = () => {
+    const saved = preferencesProp ?? loadPreferences();
+    applyTheme(saved.theme);
+    onClose();
   };
 
   const handleSave = (e?: React.FormEvent) => {
@@ -141,6 +153,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     const profile: UserProfile = { name: name.trim() || userProfile.name, email: email.trim(), role: role.trim() };
     saveProfile(profile);
     savePreferences(prefs);
+    applyTheme(prefs.theme);
     onUpdateProfile?.(profile);
     onUpdatePreferences?.(prefs);
     onShowToast?.('Settings saved');
@@ -148,7 +161,8 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
   };
 
   const handleResetPrefs = () => {
-    setPrefs({ ...DEFAULT_PREFERENCES });
+    const next = { ...DEFAULT_PREFERENCES, theme: prefs.theme };
+    setPrefs(next);
     onShowToast?.('Preferences reset to defaults (not saved yet)');
   };
 
@@ -169,6 +183,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
 
   const tabs: Array<{ id: SettingsTab; label: string; icon: React.ReactNode }> = [
     { id: 'profile', label: 'Profile', icon: <User className="w-3.5 h-3.5" /> },
+    { id: 'appearance', label: 'Appearance', icon: <Palette className="w-3.5 h-3.5" /> },
     { id: 'preferences', label: 'General', icon: <Sliders className="w-3.5 h-3.5" /> },
     { id: 'notifications', label: 'Alerts', icon: <Bell className="w-3.5 h-3.5" /> },
     { id: 'security', label: 'Security', icon: <ShieldCheck className="w-3.5 h-3.5" /> },
@@ -190,7 +205,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleDismiss}
             className="p-1 rounded-lg text-neutral-400 hover:text-white hover:bg-white/10 transition-colors"
             title="Close Settings (Esc)"
           >
@@ -280,6 +295,72 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
             </div>
           )}
 
+          {activeTab === 'appearance' && (
+            <div className="space-y-4">
+              <div>
+                <h4 className="text-xs font-semibold text-white mb-1">Theme</h4>
+                <p className="text-[11px] text-neutral-500 mb-3">
+                  Choose light or dark. Changes apply immediately; click Save to keep them.
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  {([
+                    {
+                      id: 'dark' as AppTheme,
+                      label: 'Dark',
+                      icon: <Moon className="w-4 h-4" />,
+                      swatches: ['#0a0a0a', '#171717', '#262626', '#404040'],
+                    },
+                    {
+                      id: 'light' as AppTheme,
+                      label: 'Light',
+                      icon: <Sun className="w-4 h-4" />,
+                      swatches: ['#f5f5f5', '#e5e5e5', '#d4d4d4', '#a3a3a3'],
+                    },
+                  ]).map(option => {
+                    const selected = prefs.theme === option.id;
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => patchPrefs('theme', option.id)}
+                        className={`relative text-left rounded-2xl border p-3.5 transition-all ${
+                          selected
+                            ? 'border-sky-400/70 bg-sky-500/10 ring-1 ring-sky-400/30'
+                            : 'border-white/10 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/20'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <span className={`flex items-center gap-1.5 text-xs font-semibold ${selected ? 'text-sky-300' : 'text-neutral-200'}`}>
+                            {option.icon}
+                            {option.label}
+                          </span>
+                          {selected && (
+                            <span className="w-5 h-5 rounded-full bg-sky-500 flex items-center justify-center">
+                              <Check className="w-3 h-3 text-white" />
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex gap-1.5">
+                          {option.swatches.map(color => (
+                            <span
+                              key={color}
+                              className="flex-1 h-8 rounded-lg border border-black/20"
+                              style={{ backgroundColor: color }}
+                            />
+                          ))}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <p className="text-[11px] text-neutral-500 flex items-start gap-1.5">
+                <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                Light mode uses soft gray surfaces. Accent colors (sky, emerald, purple) stay the same in both themes.
+              </p>
+            </div>
+          )}
+
           {activeTab === 'preferences' && (
             <div className="space-y-3">
               <PrefRow title="Default view mode" description="File browser layout used when the app launches">
@@ -309,10 +390,6 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
 
               <PrefRow title="Show transfer speeds" description="Display MB/s on uploads, downloads, and P2P seeding">
                 <Toggle on={prefs.showTransferSpeeds} onChange={() => patchPrefs('showTransferSpeeds', !prefs.showTransferSpeeds)} />
-              </PrefRow>
-
-              <PrefRow title="Subtle audio feedback" description="Soft clicks on upload, vault lock, and drag actions">
-                <Toggle on={prefs.soundEffects} onChange={() => patchPrefs('soundEffects', !prefs.soundEffects)} />
               </PrefRow>
 
               <PrefRow title="Reduce motion" description="Limit animations and pulsing status indicators">
@@ -593,14 +670,11 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
         </div>
 
         <div className="px-5 py-3.5 border-t border-white/10 bg-neutral-950/80 flex items-center justify-between shrink-0">
-          <span className="text-[10px] text-neutral-500 font-mono flex items-center gap-1.5">
-            <Volume2 className={`w-3 h-3 ${prefs.soundEffects ? 'text-sky-400' : 'text-neutral-600'}`} />
-            Cloudbreak Files v0.1
-          </span>
+          <span className="text-[10px] text-neutral-500 font-mono">Cloudbreak Files v0.1</span>
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleDismiss}
               className="px-3.5 py-1.5 rounded-xl text-xs font-medium text-neutral-300 hover:text-white hover:bg-white/10 transition-colors"
             >
               Cancel

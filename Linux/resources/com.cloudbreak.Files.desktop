@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Cloudbreak Files
+Comment=Multi-cloud storage with E2EE vault and private P2P libraries
+Exec=cloudbreak-files
+Icon=com.cloudbreak.Files
+Terminal=false
+Type=Application
+Categories=Utility;FileManager;Network;
+Keywords=cloud;vault;p2p;files;
+StartupWMClass=com.cloudbreak.Files

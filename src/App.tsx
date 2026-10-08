@@ -33,6 +33,7 @@ import {
 } from './utils/sampleData';
 import {
   AppPreferences,
+  applyTheme,
   loadPreferences,
   loadProfile,
   savePreferences,
@@ -114,6 +115,7 @@ export default function App() {
   const setAppPreferences = (prefs: AppPreferences) => {
     setAppPreferencesState(prefs);
     savePreferences(prefs);
+    applyTheme(prefs.theme);
     setViewMode(prefs.defaultView);
     setIsInspectorOpen(prefs.showInspectorOnLaunch);
   };
@@ -219,7 +221,11 @@ export default function App() {
     }
   };
 
-  // Apply reduce-motion preference to the document root
+  // Apply theme + reduce-motion preferences to the document root
+  useEffect(() => {
+    applyTheme(appPreferences.theme);
+  }, [appPreferences.theme]);
+
   useEffect(() => {
     document.documentElement.classList.toggle('reduce-motion', appPreferences.reduceMotion);
   }, [appPreferences.reduceMotion]);
@@ -335,9 +341,15 @@ export default function App() {
       recipientEmail: form.memberEmail || undefined,
       invitePassphrase: form.invitePassphrase.length >= 8 ? form.invitePassphrase : undefined,
       bandwidthCap: form.bandwidthCap,
+      expiresInDays: form.expiresInDays,
+      allowDownloads: form.allowDownloads,
       files: payloadFiles,
     });
     const newLib = recordToSharedLibrary(result.record);
+    newLib.expiresAt = form.expiresInDays > 0
+      ? new Date(Date.now() + form.expiresInDays * 86400000).toISOString()
+      : undefined;
+    newLib.allowDownloads = form.allowDownloads;
     if (form.memberEmail) {
       newLib.members = [
         ...newLib.members,
@@ -731,7 +743,7 @@ export default function App() {
     : selectedFolder
     ? selectedFolder.name
     : selectedAccountId === 'all'
-    ? 'All Cloud Vaults'
+    ? 'All Files'
     : selectedAccountId === 'vault'
     ? 'Private Vault'
     : activeAccount?.name || 'Cloud Bucket';
@@ -985,6 +997,7 @@ export default function App() {
                     onRenameFile={handleRenameFile}
                     onMoveFile={handleMoveFile}
                     onCompressFile={handleCompressFile}
+                    onNewFolder={() => setIsNewFolderOpen(true)}
                     canPaste={clipboardFileIds.length > 0}
                     width={inspectorWidth}
                   />

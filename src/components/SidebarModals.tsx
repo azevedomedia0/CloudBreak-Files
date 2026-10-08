@@ -1,9 +1,16 @@
 import React, { useState } from 'react';
 import {
   X, Folder, FolderPlus, Server, Star,
-  HardDrive, Radio, Shield, FolderDown,
+  HardDrive, Radio, Shield, FolderDown, RefreshCw,
 } from 'lucide-react';
 import type { RemovableDevice } from '../types';
+
+function generateInvitePassphrase(length = 20): string {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%*-_';
+  const bytes = new Uint8Array(length);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, b => alphabet[b % alphabet.length]).join('');
+}
 
 /* 1. New Folder Modal */
 interface NewFolderModalProps {
@@ -131,6 +138,9 @@ export interface CreateP2pLibraryForm {
   role: 'viewer' | 'editor' | 'admin';
   bandwidthCap: string;
   invitePassphrase: string;
+  /** Days until invite expires; 0 = never. */
+  expiresInDays: number;
+  allowDownloads: boolean;
 }
 
 interface NewSharedLibraryModalProps {
@@ -148,8 +158,11 @@ export const NewSharedLibraryModal: React.FC<NewSharedLibraryModalProps> = ({
   const [description, setDescription] = useState('');
   const [memberEmail, setMemberEmail] = useState('');
   const [role, setRole] = useState<'viewer' | 'editor' | 'admin'>('editor');
-  const [bandwidthCap, setBandwidthCap] = useState<'50' | '100' | 'unlimited'>('100');
+  const [bandwidthCap, setBandwidthCap] = useState('100');
+  const [expiresInDays, setExpiresInDays] = useState(30);
+  const [allowDownloads, setAllowDownloads] = useState(true);
   const [invitePassphrase, setInvitePassphrase] = useState('');
+  const [showPassphrase, setShowPassphrase] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -166,19 +179,31 @@ export const NewSharedLibraryModal: React.FC<NewSharedLibraryModalProps> = ({
         description: description.trim() || 'Media library seeding to specified P2P users',
         memberEmail: memberEmail.trim(),
         role,
-        bandwidthCap: bandwidthCap === 'unlimited' ? 'unlimited' : `${bandwidthCap} MB/s`,
+        bandwidthCap: bandwidthCap.startsWith('unlimited')
+          ? bandwidthCap
+          : `${bandwidthCap} MB/s`,
         invitePassphrase: invitePassphrase.trim(),
+        expiresInDays,
+        allowDownloads,
       });
       setLibName('');
       setDescription('');
       setMemberEmail('');
+      setExpiresInDays(30);
+      setAllowDownloads(true);
       setInvitePassphrase('');
+      setShowPassphrase(false);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }
+  };
+
+  const handleGeneratePassphrase = () => {
+    setInvitePassphrase(generateInvitePassphrase());
+    setShowPassphrase(true);
   };
 
   return (
@@ -271,13 +296,70 @@ export const NewSharedLibraryModal: React.FC<NewSharedLibraryModalProps> = ({
               </label>
               <select
                 value={bandwidthCap}
-                onChange={e => setBandwidthCap(e.target.value as any)}
+                onChange={e => setBandwidthCap(e.target.value)}
                 className="w-full bg-black/40 border border-white/15 text-neutral-200 text-xs rounded-xl px-2.5 py-2 focus:outline-none focus:border-purple-400"
               >
+                <option value="5">5 MB/s Cap</option>
+                <option value="10">10 MB/s Cap</option>
+                <option value="25">25 MB/s Cap</option>
                 <option value="50">50 MB/s Cap</option>
                 <option value="100">100 MB/s Cap</option>
-                <option value="unlimited">Unlimited (10GbE)</option>
+                <option value="250">250 MB/s Cap</option>
+                <option value="500">500 MB/s Cap</option>
+                <option value="1000">1 GB/s Cap</option>
+                <option value="unlimited-1gbe">Unlimited (1GbE)</option>
+                <option value="unlimited-10gbe">Unlimited (10GbE)</option>
               </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-neutral-300 mb-1.5">
+                Expiration
+              </label>
+              <select
+                value={expiresInDays}
+                onChange={e => setExpiresInDays(Number(e.target.value))}
+                className="w-full bg-black/40 border border-white/15 text-neutral-200 text-xs rounded-xl px-2.5 py-2 focus:outline-none focus:border-purple-400"
+              >
+                <option value={1}>1 day</option>
+                <option value={7}>7 days</option>
+                <option value={30}>30 days</option>
+                <option value={90}>90 days</option>
+                <option value={365}>1 year</option>
+                <option value={0}>Never</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-neutral-300 mb-1.5">
+                Allow downloads
+              </label>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={allowDownloads}
+                onClick={() => setAllowDownloads(v => !v)}
+                className={`w-full h-[35px] px-3 rounded-xl border text-xs font-medium flex items-center justify-between transition-colors ${
+                  allowDownloads
+                    ? 'bg-purple-500/15 border-purple-400/30 text-purple-100'
+                    : 'bg-black/40 border-white/15 text-neutral-400'
+                }`}
+              >
+                <span>{allowDownloads ? 'Downloads on' : 'Stream only'}</span>
+                <span
+                  className={`relative w-9 h-5 rounded-full transition-colors ${
+                    allowDownloads ? 'bg-purple-500' : 'bg-neutral-700'
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                      allowDownloads ? 'translate-x-4' : 'translate-x-0'
+                    }`}
+                  />
+                </span>
+              </button>
             </div>
           </div>
 
@@ -285,13 +367,27 @@ export const NewSharedLibraryModal: React.FC<NewSharedLibraryModalProps> = ({
             <label className="block text-xs font-medium text-neutral-300 mb-1.5">
               Invite passphrase (E2EE wrap, min 8 chars)
             </label>
-            <input
-              type="password"
-              value={invitePassphrase}
-              onChange={e => setInvitePassphrase(e.target.value)}
-              placeholder="Shared secret for recipients"
-              className="w-full px-3.5 py-2 rounded-xl bg-black/40 border border-white/15 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400/50 transition-all font-mono"
-            />
+            <div className="flex items-center gap-2">
+              <input
+                type={showPassphrase ? 'text' : 'password'}
+                value={invitePassphrase}
+                onChange={e => {
+                  setInvitePassphrase(e.target.value);
+                  setShowPassphrase(false);
+                }}
+                placeholder="Shared secret for recipients"
+                className="min-w-0 flex-1 px-3.5 py-2 rounded-xl bg-black/40 border border-white/15 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400/50 transition-all font-mono"
+              />
+              <button
+                type="button"
+                onClick={handleGeneratePassphrase}
+                className="shrink-0 h-[34px] px-3 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 border border-purple-400/30 text-purple-200 text-xs font-medium flex items-center gap-1.5 transition-colors"
+                title="Generate a strong passphrase"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Generate</span>
+              </button>
+            </div>
           </div>
 
           <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-400/20 text-[11px] text-purple-200 flex items-center gap-2">

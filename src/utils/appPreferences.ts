@@ -1,11 +1,12 @@
 import type { UserProfile } from '../components/ProfileSettingsModal';
 
 export type AppViewMode = 'icons' | 'list' | 'columns' | 'gallery';
+export type AppTheme = 'dark' | 'light';
 
 export interface AppPreferences {
   defaultView: AppViewMode;
+  theme: AppTheme;
   autoLockMinutes: number;
-  soundEffects: boolean;
   rustEngineEnabled: boolean;
   confirmBeforeDelete: boolean;
   showInspectorOnLaunch: boolean;
@@ -20,8 +21,8 @@ export interface AppPreferences {
 
 export const DEFAULT_PREFERENCES: AppPreferences = {
   defaultView: 'icons',
+  theme: 'dark',
   autoLockMinutes: 15,
-  soundEffects: true,
   rustEngineEnabled: true,
   confirmBeforeDelete: true,
   showInspectorOnLaunch: true,
@@ -34,8 +35,14 @@ export const DEFAULT_PREFERENCES: AppPreferences = {
   startOnline: true,
 };
 
+/** Apply theme to <html> for CSS `[data-theme]` rules. */
+export function applyTheme(theme: AppTheme): void {
+  document.documentElement.setAttribute('data-theme', theme);
+  document.documentElement.style.colorScheme = theme;
+}
+
 export const DEFAULT_PROFILE: UserProfile = {
-  name: 'Steven Azevedo',
+  name: 'User',
   email: 'you@example.com',
   role: 'Vault Administrator',
 };
@@ -56,7 +63,11 @@ function readJson<T>(key: string): unknown {
 export function loadPreferences(): AppPreferences {
   const parsed = readJson(PREFS_KEY);
   if (!parsed || typeof parsed !== 'object') return { ...DEFAULT_PREFERENCES };
-  return { ...DEFAULT_PREFERENCES, ...(parsed as Partial<AppPreferences>) };
+  const merged = { ...DEFAULT_PREFERENCES, ...(parsed as Partial<AppPreferences>) };
+  if (merged.theme !== 'light' && merged.theme !== 'dark') {
+    merged.theme = DEFAULT_PREFERENCES.theme;
+  }
+  return merged;
 }
 
 export function savePreferences(prefs: AppPreferences): void {

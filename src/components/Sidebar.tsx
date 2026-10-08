@@ -68,7 +68,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenProfileSettings,
   onOpenAccountSettings,
   userProfile = {
-    name: 'Steven Azevedo',
+    name: 'User',
     email: 'you@example.com',
     role: 'Sovereign Vault Administrator',
   },

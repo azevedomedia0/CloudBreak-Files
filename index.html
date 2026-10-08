@@ -1,8 +1,17 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      try {
+        var p = JSON.parse(localStorage.getItem('cloudbreak.preferences.v1') || '{}');
+        if (p.theme === 'light' || p.theme === 'dark') {
+          document.documentElement.setAttribute('data-theme', p.theme);
+          document.documentElement.style.colorScheme = p.theme;
+        }
+      } catch (e) {}
+    </script>
     <link rel="icon" type="image/png" href="/icon.png" />
     <title>Cloudbreak Files</title>
     <meta name="description" content="Cloudbreak Files — multi-account cloud storage with client-side E2E encryption, photo editing, video tools, and private P2P library sharing." />
