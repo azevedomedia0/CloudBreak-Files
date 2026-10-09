@@ -51,4 +51,3 @@ Tauri 2 + React 19 + Vite + Tailwind 4 desktop app. It manages many cloud accoun
 
 ## Remaining work
 - The Windows build is only configured in the workflow. It is untested and unsigned.
-- Auto-updates need the `TAURI_SIGNING_PRIVATE_KEY` GitHub secret; `latest.json` is served from public GitHub Releases.
