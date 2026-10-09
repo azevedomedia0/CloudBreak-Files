@@ -1,52 +1,53 @@
 # Cloudbreak Files
 
-Tauri 2 + React 19 + Vite + Tailwind 4 desktop app. It manages many cloud accounts and has a client-side encrypted vault. Most UI data is sample data.
+Tauri 2 + React 19 + Vite + Tailwind 4 desktop app. It manages many cloud accounts, has a client-side encrypted vault, and shares files through private P2P libraries. The app starts empty: there is no sample data.
 
 ## Commands
 - Web dev: `npm install && npm run dev` (port 3000)
 - Type check: `npm run lint`
-- Rust tests: `cd src-tauri && cargo test`
-- Desktop app: `cd src-tauri && cargo tauri dev` (needs `@tauri-apps/cli`, not installed yet)
-
-## Done (review fixes, critical items)
-- `src-tauri/src/crypto.rs`: real AES-256-GCM + PBKDF2. Min passphrase 8 chars. Passphrase verifier (constant-time). 7 unit tests pass.
-- `src-tauri/src/commands.rs`: `encrypt_data` uses `encrypt_bytes`. New `decrypt_data`. Vault unlock checks the passphrase. First unlock after launch sets it. Verifier is in memory only.
-- `src/services/rustBridge.ts`: removed fake `btoa` encryption. Tauri invoke, with a Web Crypto fallback in the same data format.
-- UI: removed pre-filled passphrases. Removed the false "no unencrypted bytes" claim. Unlock buttons send the passphrase (`handleToggleVaultLock` in `App.tsx`).
-- `package.json`: `esbuild` set to `^0.28.0` (it conflicted with Vite 8).
-
-- `cargo check` is clean (no warnings) and `cargo test` passes (7 tests).
-- Tauri bridge uses `@tauri-apps/api/core` (`invoke`, `isTauri`). Added `@tauri-apps/api` and `@tauri-apps/cli` and an `npm run tauri` script.
-- Strict CSP and `devCsp` set in `tauri.conf.json`. Allowed hosts: Google Fonts, Unsplash images, the sample-video bucket.
-- Removed the unused `fs`, `dialog` and `shell` plugins from `Cargo.toml`. Added `src-tauri/capabilities/default.json` (`core:default` only).
-- `package.json`: renamed to `cloudbreak-files`. Removed `@google/genai`, `express`, `dotenv`, `@types/express`. Deleted the empty `bun.lock`.
-- `src-tauri/icons/` and `build.rs` already existed. `.gitignore` now covers `src-tauri/target`, `src-tauri/gen`, `*.zip`.
-- Web side checked in a scratch copy outside OneDrive: `npm install`, `npm run lint` and `npm run build` pass.
-
-- Medium items done:
-  - Vault passphrase check is saved to `vault.json` in the app data folder (`src-tauri/src/vault_store.rs`, atomic write, 0600). A corrupt file is an error, never silently replaced. Not yet run inside the real Tauri app.
-  - PBKDF2 is 600,000 iterations in Rust and TypeScript. The verifier stores its own iteration count. Dev builds compile the crypto crates with `opt-level = 3` so tests stay fast. 12 Rust tests pass.
-  - `src/utils/crypto.ts`: keys are non-extractable and base64 is chunked (3 MB tested). `rustBridge.ts` zeroes raw key bytes after use.
-  - `process_photo_render` and `trim_video_stream` now return a "not implemented" error instead of fake success. Nothing in the UI calls them yet.
-  - Sample data: removed the fake tokens and all real-looking emails (now `you@example.com` and similar). The API key field starts empty.
-  - Uploads and the encrypt buttons no longer claim real encryption. Uploads get a real SHA-256 (files up to 100 MB) and are marked "local preview". The encrypt buttons set a "demo flag" with a toast saying bytes are not encrypted.
-  - AI Studio leftovers removed (README rewritten, `.env.example`, `metadata.json`, HMR comments).
-  - Large files split: `FileBrowser` (195 lines, views in `components/file-browser/`), `Sidebar` (176, sections in `components/sidebar/`), `VideoPlayerModal` (421, `components/video-player/`), `App.tsx` (901 to 455). It now uses `hooks/useResizablePanel.ts`, `useToast.ts`, `useGlobalShortcuts.ts`, `useFileActions.ts`, `utils/libraryBuilders.ts`, `utils/filterFiles.ts`, and the `AppModals`, `DropOverlay` and `Toast` components.
-- Checked in the web preview (scratch copy, not the desktop app), no console errors: all four view modes, library banners, video trim/transcode tabs, the browser crypto path (round trip, wrong passphrase, vault unlock), Cmd+B and Space shortcuts, drag-and-drop upload (real SHA-256, toast, overlay), and the folder and profile modals.
-
-- App icon: the folder icon you supplied. Corners were cut to transparent with a squircle mask. Source is `design/app-icon-1024.png`. To regenerate: `npx tauri icon design/app-icon-1024.png -o /tmp/icons`, then copy `32x32.png`, `128x128.png`, `128x128@2x.png`, `icon.icns`, `icon.ico`, `icon.png` into `src-tauri/icons/`. `public/icon.png` is the web favicon.
-
-## Not verified
-- The app has not been launched with `npm run tauri dev`. The CSP and the on-disk vault file are untested at runtime.
-- The Rust and Web Crypto paths use the same format but were never tested against each other's output.
-- `"transparent": true` on the window may need the `macos-private-api` feature on macOS.
-
-## Remaining work
-- Real encryption for uploads and the encrypt buttons. It needs a session key design (key held in Rust, not a passphrase kept in JS).
-- Browser mode keeps the vault passphrase check in memory only. It resets on reload.
-- `media.rs` / `trim_video_stream` / `process_photo_render` need real implementations.
-- `App.tsx` is 455 lines. The remaining bulk is the toolbar/sidebar/browser layout JSX and the sidebar and notification handlers.
-- Delete `_to_delete/crypto.rs.orig`.
+- Rust tests: `cd src-tauri && cargo test` (30 tests)
+- Crypto interop (Rust and Web Crypto): `npm run test:crypto`
+- Browser vault persistence: `npm run test:vault`
+- Desktop app: `npm run tauri dev`
+- Release build: `npm run tauri build -- --target universal-apple-darwin` (see `docs/notarized-distribution.md`)
 
 ## Notes
 - Do not run `npm install` inside a OneDrive folder if you can avoid it. `node_modules` will sync. Use `CARGO_TARGET_DIR` outside OneDrive for Rust builds.
+- Never write Apple credentials, key IDs, key file paths, tokens or passwords into this file, the docs or commits. Release credentials live in the maintainer's shell or in GitHub Actions secrets.
+
+## What works
+- **Vault crypto** (`src-tauri/src/crypto.rs`, `commands.rs`): AES-256-GCM, PBKDF2 (600,000 iterations), constant-time passphrase verifier. The session key is held in Rust, not JS. In-session encryption is limited to 32 MB per file.
+- **Vault passphrase check** is saved: `vault.json` in the app data folder in the desktop app (`vault_store.rs`), localStorage in the browser (`services/browserVaultStore.ts`). A corrupt file or entry is an error and is never silently replaced.
+- **Encrypt buttons and uploads** encrypt with the vault session key when the vault is unlocked (`utils/fileEncryption.ts`, `hooks/useFileActions.ts`).
+- **Rust and Web Crypto** use the same format. `npm run test:crypto` checks both directions against a fixture.
+- **P2P libraries** (`src-tauri/src/p2p/`): chunked AES-GCM file encryption, encrypted manifests, X25519 key wrapping, invite links. Files are passed through the bridge as base64, so very large files are impractical.
+- **Media** (`src-tauri/src/media.rs`): photo adjustments (image crate) and video trim/convert. Video needs `ffmpeg` on PATH. It is not bundled.
+- **Cloud accounts** (`services/cloud/`): Google Drive, Dropbox, OneDrive, MEGA login, Nextcloud. Saved connections are re-synced at launch (`hooks/useCloudAccounts.ts`). One that cannot be reached shows as offline.
+- **Desktop shell**: signed, hardened-runtime, notarized macOS build. `macOSPrivateApi` is on so the transparent window works. The app icon is `src-tauri/icons/CloudBreak-icon.icon` (Icon Composer). The toolbar leaves room for the native window buttons.
+
+## Layout
+- `src/App.tsx` (about 630 lines) wires state together. Logic lives in hooks: `useFileActions`, `useVault`, `useP2pLibraries`, `useCloudAccounts`, `useNotifications`, `useSidebarSources`, plus `useResizablePanel`, `useToast`, `useGlobalShortcuts`.
+- Big components are split into folders: `components/file-browser/`, `components/sidebar/`, `components/video-player/`, `components/document-editor/`.
+
+## App icon
+`src-tauri/icons/CloudBreak-icon.icon` is compiled by Tauri with `actool` (Xcode 26 or newer) into `Assets.car`. The classic icons (`32x32.png`, `128x128.png`, `128x128@2x.png`, `icon.icns`, `icon.ico`, `icon.png`) are generated from a render of it. To regenerate:
+1. `ictool src-tauri/icons/CloudBreak-icon.icon --export-image --output-file design/app-icon-1024.png --platform macOS --rendition Default --width 1024 --height 1024 --scale 1` (`ictool` is in Xcode's Icon Composer.app)
+2. `npx tauri icon design/app-icon-1024.png -o /tmp/icons`
+3. Copy those six files into `src-tauri/icons/`. `public/icon.png` is the web favicon.
+
+## Not verified
+- Launching with `npm run tauri dev` and unlocking the vault in the real desktop app. `vault.json` has not been written by the desktop app yet, so the CSP and the on-disk file are untested at runtime.
+- A real first launch on a second Mac or fresh user account (Gatekeeper prompt, folder and network permission prompts). A simulated quarantined download on the dev Mac passed.
+- Window dragging: there is no `data-tauri-drag-region`, so the overlay title bar may not drag the window. Fixing it may also need the `core:window:allow-start-dragging` permission.
+- Toolbar spacing next to the native window buttons (a 62px spacer, an estimate).
+- `.github/workflows/release.yml` has never been run.
+
+## Remaining work
+- Bundle `ffmpeg` (or ship a clear first-run message), since a downloaded app will not have it on PATH.
+- Streaming encryption for files over 32 MB, and a non-base64 path for large P2P transfers.
+- Auto-updates (`tauri-plugin-updater`): needs an updater key pair and a hosted manifest.
+- Windows and Linux builds are only configured in the workflow. They are untested and unsigned.
+- Some sidebar actions still create placeholder entries without a real connection, for example "Connect to server" adds an entry that is marked online. Removable devices and "Server Nodes" are not backed by real detection.
+- The P2P create flow fills in invited peers with placeholder status and node IDs until a real peer connects.
+- Provider credentials are saved in plain browser storage (`services/cloud/credentials.ts`). Moving them to the OS keychain from Rust is the safer design.
+- `vite.config.ts` and other files may still need review for warnings after dependency upgrades.
