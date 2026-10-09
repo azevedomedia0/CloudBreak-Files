@@ -78,6 +78,8 @@ export interface FileItem {
   sourceId?: string;
   /** Plain text, or HTML for a rich document, edited in the document editor. */
   documentBody?: string;
+  /** Absolute path on disk, for files added from a local folder in the desktop app. Edits are saved here. */
+  localPath?: string;
 }
 
 export interface FolderItem {

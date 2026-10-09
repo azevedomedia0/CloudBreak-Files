@@ -5,6 +5,7 @@ import {
   classifyUploadCategory,
   isEditableDocument,
   isPlainTextDocument,
+  localFileContents,
   TEXT_UPLOAD_MAX_BYTES,
 } from '../utils/documentKind';
 import {
@@ -16,8 +17,10 @@ import {
 } from '../utils/fileEncryption';
 import { isZipArchive, unzipArchiveToFileItems } from '../utils/unzipArchive';
 import { rustBridge } from '../services/rustBridge';
+import { dataUrlToBytes, localFs } from '../services/localFsBridge';
 
 interface Options {
+  files: FileItem[];
   setFiles: React.Dispatch<React.SetStateAction<FileItem[]>>;
   selectedFileId: string | null;
   setSelectedFileId: (id: string | null) => void;
@@ -27,6 +30,25 @@ interface Options {
   confirmBeforeDelete?: boolean;
   /** When true, new uploads are encrypted with the vault session key. */
   isVaultUnlocked?: boolean;
+}
+
+const IMAGE_EXTENSIONS_BY_MIME: Record<string, string> = {
+  'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/bmp': 'bmp',
+};
+
+function directoryOf(path: string): string {
+  return path.slice(0, path.lastIndexOf('/'));
+}
+
+/** "photo.jpg" -> "photo edited.png", or "photo edited 2.png" if that name is taken. */
+function editedCopyName(original: string, ext: string, taken: Set<string>): string {
+  const dot = original.lastIndexOf('.');
+  const stem = dot > 0 ? original.slice(0, dot) : original;
+  const first = `${stem} edited.${ext}`;
+  if (!taken.has(first)) return first;
+  let n = 2;
+  while (taken.has(`${stem} edited ${n}.${ext}`)) n += 1;
+  return `${stem} edited ${n}.${ext}`;
 }
 
 function nextCopyName(name: string, taken: Set<string>): string {
@@ -43,6 +65,7 @@ function nextCopyName(name: string, taken: Set<string>): string {
 
 /** File list actions: save versions, encrypt flags, delete, upload and drag-and-drop. */
 export function useFileActions({
+  files,
   setFiles,
   selectedFileId,
   setSelectedFileId,
@@ -56,14 +79,64 @@ export function useFileActions({
   const [clipboardFileIds, setClipboardFileIds] = useState<string[]>([]);
 
   // Photo Version Save
-  const handleSavePhotoVersion = (updatedFile: FileItem, dataUrl: string) => {
-    setFiles(prev => prev.map(f => f.id === updatedFile.id ? updatedFile : f));
-    showToast(`Saved version ${updatedFile.version} to cloud storage`);
+  const handleSavePhotoVersion = async (updatedFile: FileItem, dataUrl: string) => {
+    if (!updatedFile.localPath || !localFs.available()) {
+      setFiles(prev => prev.map(f => f.id === updatedFile.id ? updatedFile : f));
+      showToast(`Saved version ${updatedFile.version} (kept in this session)`);
+      return;
+    }
+    // A local photo is never overwritten: the edit is saved as a new file next to it.
+    try {
+      const { bytes, mime } = dataUrlToBytes(dataUrl);
+      const ext = IMAGE_EXTENSIONS_BY_MIME[mime] ?? 'png';
+      const dir = directoryOf(updatedFile.localPath);
+      const taken = new Set(files.filter(f => f.localPath && directoryOf(f.localPath) === dir).map(f => f.name));
+      const name = editedCopyName(updatedFile.name, ext, taken);
+      const info = await localFs.writeBytes(`${dir}/${name}`, bytes);
+      const copy: FileItem = {
+        ...updatedFile,
+        id: `file-local-${info.path}`,
+        name: info.name,
+        localPath: info.path,
+        url: localFs.assetUrl(info.path),
+        thumbnailUrl: localFs.assetUrl(info.path),
+        sizeBytes: info.sizeBytes,
+        mimeType: mime,
+        version: 1,
+        updatedAt: new Date(info.modifiedMs).toISOString(),
+      };
+      setFiles(prev => [copy, ...prev]);
+      setSelectedFileId(copy.id);
+      showToast(`Saved “${info.name}” next to the original`);
+    } catch (err) {
+      showToast(`Could not save the edited photo: ${err instanceof Error ? err.message : String(err)}`);
+    }
   };
 
-  const handleSaveDocument = (updatedFile: FileItem) => {
-    setFiles(prev => prev.map(f => f.id === updatedFile.id ? updatedFile : f));
-    showToast(`Saved ${updatedFile.name}`);
+  const handleSaveDocument = async (updatedFile: FileItem) => {
+    if (!updatedFile.localPath || !localFs.available()) {
+      setFiles(prev => prev.map(f => f.id === updatedFile.id ? updatedFile : f));
+      showToast(`Saved ${updatedFile.name} (kept in this session)`);
+      return;
+    }
+    const contents = localFileContents(updatedFile);
+    if (contents === null) {
+      setFiles(prev => prev.map(f => f.id === updatedFile.id ? updatedFile : f));
+      showToast(`Saved in Cloudbreak only. ${updatedFile.name} can’t be written back to disk yet`);
+      return;
+    }
+    try {
+      const info = await localFs.writeText(updatedFile.localPath, contents);
+      setFiles(prev => prev.map(f => (
+        f.id === updatedFile.id
+          ? { ...updatedFile, sizeBytes: info.sizeBytes, updatedAt: new Date(info.modifiedMs).toISOString() }
+          : f
+      )));
+      showToast(`Saved ${updatedFile.name} to disk`);
+    } catch (err) {
+      setFiles(prev => prev.map(f => f.id === updatedFile.id ? updatedFile : f));
+      showToast(`Could not save ${updatedFile.name} to disk: ${err instanceof Error ? err.message : String(err)}`);
+    }
   };
 
   // Trimmed Video Save
@@ -123,12 +196,16 @@ export function useFileActions({
 
   // File Deletion
   const handleDeleteFile = (fileId: string) => {
-    if (confirmBeforeDelete && !window.confirm('Remove this file from the library?')) return;
+    const isLocal = files.some(f => f.id === fileId && f.localPath);
+    const question = isLocal
+      ? 'Remove this file from Cloudbreak? The file stays on your disk.'
+      : 'Remove this file from the library?';
+    if (confirmBeforeDelete && !window.confirm(question)) return;
     setFiles(prev => prev.filter(f => f.id !== fileId));
     if (selectedFileId === fileId) {
       setSelectedFileId(null);
     }
-    showToast('Asset moved to Trash');
+    showToast(isLocal ? 'Removed from Cloudbreak. The file is still on your disk' : 'Removed from the library');
   };
 
   // Batch Restore — put selected Trash items back into Downloads
@@ -161,9 +238,32 @@ export function useFileActions({
     else showToast(`Restored ${restored} item${restored === 1 ? '' : 's'} to Downloads`);
   };
 
-  const handleRenameFile = (fileId: string, name: string) => {
+  const handleRenameFile = async (fileId: string, name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
+    const target = files.find(f => f.id === fileId);
+    if (target?.localPath && localFs.available()) {
+      try {
+        const info = await localFs.rename(target.localPath, trimmed);
+        setFiles(prev => prev.map(f => (
+          f.id === fileId
+            ? {
+                ...f,
+                name: info.name,
+                localPath: info.path,
+                url: f.url.startsWith('data:') || f.url.startsWith('blob:') ? f.url : localFs.assetUrl(info.path),
+                thumbnailUrl: f.category === 'photo' && f.thumbnailUrl && !f.thumbnailUrl.startsWith('data:') && !f.thumbnailUrl.startsWith('blob:')
+                  ? localFs.assetUrl(info.path)
+                  : f.thumbnailUrl,
+                updatedAt: new Date(info.modifiedMs).toISOString(),
+              }
+            : f
+        )));
+      } catch (err) {
+        showToast(`Could not rename: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      return;
+    }
     setFiles(prev => prev.map(f => (
       f.id === fileId ? { ...f, name: trimmed, updatedAt: new Date().toISOString() } : f
     )));
@@ -331,7 +431,8 @@ export function useFileActions({
     if (selectedFileId && fileIds.includes(selectedFileId)) {
       setSelectedFileId(null);
     }
-    showToast(`Removed ${fileIds.length} assets`);
+    const anyLocal = files.some(f => fileIds.includes(f.id) && f.localPath);
+    showToast(`Removed ${fileIds.length} item${fileIds.length === 1 ? '' : 's'}${anyLocal ? '. Local files stay on your disk' : ''}`);
   };
 
   // SHA-256 of the file. Files over 100 MB are skipped so the whole file is not read into memory.

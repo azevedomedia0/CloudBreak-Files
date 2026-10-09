@@ -227,6 +227,7 @@ export default function App() {
     handleMoveFile, handleCompressFile, clipboardFileIds, handleToggleTag,
     handleBatchRestore, handleBatchDelete, handleUploadFiles, handleUnzipFile, handleDragOver, handleDragLeave, handleDrop,
   } = useFileActions({
+    files,
     setFiles,
     selectedFileId,
     setSelectedFileId,
