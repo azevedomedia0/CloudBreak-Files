@@ -91,9 +91,11 @@ For `.github/workflows/release.yml`:
 | `TAURI_SIGNING_PRIVATE_KEY` | Updater private key file contents (`~/.tauri/cloudbreak-files.key`) |
 | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Optional updater key password (omit if empty) |
 
-Push `v0.1.0` (or run workflow_dispatch), test the draft release installers, then publish the release.
+Push a `v*` tag (or run workflow_dispatch), test the draft release installers, then publish the release.
 
-Auto-updates: see [`docs/auto-updates.md`](./auto-updates.md). CI signs updater artifacts and uploads `latest.json` when the signing secrets are set.
+Updater + Apple signing secrets are on the repo (`TAURI_SIGNING_*`, `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_API_KEY`, `APPLE_API_KEY_P8`). **`APPLE_API_ISSUER` is still required for notarization** (App Store Connect → Users and Access → Integrations → Issuer ID). Without it, CI/local builds sign with Developer ID but skip notarization.
+
+Auto-updates: see [`docs/auto-updates.md`](./auto-updates.md).
 
 ## Other platforms and follow-ups
 

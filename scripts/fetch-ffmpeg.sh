@@ -110,6 +110,23 @@ if [[ -n "$HOST_TRIPLE" && -x "$BIN/ffmpeg-$HOST_TRIPLE" && ! -e "$BIN/ffmpeg" ]
   ln -sf "ffmpeg-$HOST_TRIPLE" "$BIN/ffmpeg"
 fi
 
+# Universal macOS builds need ffmpeg-universal-apple-darwin next to the arch-specific copies.
+ARM_BIN="$BIN/ffmpeg-aarch64-apple-darwin"
+X64_BIN="$BIN/ffmpeg-x86_64-apple-darwin"
+UNI_BIN="$BIN/ffmpeg-universal-apple-darwin"
+if [[ -x "$ARM_BIN" && -x "$X64_BIN" ]]; then
+  if [[ ! -x "$UNI_BIN" ]] || [[ "$ARM_BIN" -nt "$UNI_BIN" ]] || [[ "$X64_BIN" -nt "$UNI_BIN" ]]; then
+    echo "Creating universal ffmpeg sidecar…"
+    lipo -create "$ARM_BIN" "$X64_BIN" -output "$UNI_BIN"
+    chmod +x "$UNI_BIN"
+  fi
+  echo "ok: $UNI_BIN ($(du -h "$UNI_BIN" | awk '{print $1}'))"
+elif [[ -x "$ARM_BIN" ]]; then
+  ln -sf "ffmpeg-aarch64-apple-darwin" "$UNI_BIN"
+elif [[ -x "$X64_BIN" ]]; then
+  ln -sf "ffmpeg-x86_64-apple-darwin" "$UNI_BIN"
+fi
+
 if [[ "$ok" -eq 0 ]]; then
   echo "error: could not obtain any ffmpeg sidecar." >&2
   exit 1

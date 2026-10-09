@@ -44,7 +44,12 @@ bash scripts/generate-updater-keys.sh --force
 | `TAURI_SIGNING_PRIVATE_KEY` | Private key **file contents** (or local path for `npm run build:mac`) |
 | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Optional; empty if the key has no password |
 
-Add the private key as a GitHub Actions secret (`TAURI_SIGNING_PRIVATE_KEY` = full file contents of `cloudbreak-files.key`).
+Both secrets are set on `azevedomedia0/CloudBreak-Files` (private key from `~/.tauri/cloudbreak-files.key`; password empty). Rotate by regenerating keys and re-running:
+
+```bash
+gh secret set TAURI_SIGNING_PRIVATE_KEY -R azevedomedia0/CloudBreak-Files < ~/.tauri/cloudbreak-files.key
+printf '' | gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD -R azevedomedia0/CloudBreak-Files
+```
 
 Local:
 
@@ -79,9 +84,13 @@ npm run build:mac
 
 Universal macOS builds typically publish one `.app.tar.gz` used for both `darwin-aarch64` and `darwin-x86_64`.
 
-## Private repository note
+## Public manifest URL
 
-The app repo is public, so GitHub Releases assets are downloadable for updates. If you ever move updates to private hosting, point `plugins.updater.endpoints` at a public HTTPS CDN instead.
+The repo is **public**, so anonymous clients can fetch:
+
+`https://github.com/azevedomedia0/CloudBreak-Files/releases/latest/download/latest.json`
+
+(404 until the first published release that includes `latest.json`.) A private repo would block that download — keep Releases on this public repo, or point `plugins.updater.endpoints` at a public CDN.
 
 ## Verify after a release
 
