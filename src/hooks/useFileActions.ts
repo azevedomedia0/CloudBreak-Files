@@ -194,18 +194,41 @@ export function useFileActions({
     }
   };
 
-  // File Deletion
-  const handleDeleteFile = (fileId: string) => {
-    const isLocal = files.some(f => f.id === fileId && f.localPath);
-    const question = isLocal
-      ? 'Remove this file from Cloudbreak? The file stays on your disk.'
-      : 'Remove this file from the library?';
-    if (confirmBeforeDelete && !window.confirm(question)) return;
-    setFiles(prev => prev.filter(f => f.id !== fileId));
-    if (selectedFileId === fileId) {
-      setSelectedFileId(null);
+  // Move local files to the Trash. Returns the ids that were moved; a failure is reported and that file stays.
+  const trashLocalFiles = async (targets: FileItem[]): Promise<string[]> => {
+    const moved: string[] = [];
+    const failures: string[] = [];
+    for (const target of targets) {
+      try {
+        await localFs.trashFile(target.localPath as string);
+        moved.push(target.id);
+      } catch (err) {
+        failures.push(`${target.name}: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
-    showToast(isLocal ? 'Removed from Cloudbreak. The file is still on your disk' : 'Removed from the library');
+    if (failures.length) showToast(`Could not move to the Trash. ${failures[0]}`);
+    return moved;
+  };
+
+  const removeFromList = (ids: string[]) => {
+    if (!ids.length) return;
+    setFiles(prev => prev.filter(f => !ids.includes(f.id)));
+    if (selectedFileId && ids.includes(selectedFileId)) setSelectedFileId(null);
+  };
+
+  // File Deletion. Local files go to the Trash; everything else is only removed from the library.
+  const handleDeleteFile = async (fileId: string) => {
+    const target = files.find(f => f.id === fileId);
+    if (target?.localPath && localFs.available()) {
+      if (confirmBeforeDelete && !window.confirm(`Move “${target.name}” to the Trash?`)) return;
+      const moved = await trashLocalFiles([target]);
+      removeFromList(moved);
+      if (moved.length) showToast(`Moved “${target.name}” to the Trash`);
+      return;
+    }
+    if (confirmBeforeDelete && !window.confirm('Remove this file from the library?')) return;
+    removeFromList([fileId]);
+    showToast('Removed from the library');
   };
 
   // Batch Restore — put selected Trash items back into Downloads
@@ -418,21 +441,28 @@ export function useFileActions({
     });
   };
 
-  // Batch Delete
-  const handleBatchDelete = (fileIds: string[]) => {
+  // Batch Delete. Local files go to the Trash; everything else is only removed from the library.
+  const handleBatchDelete = async (fileIds: string[]) => {
     if (fileIds.length === 0) return;
-    if (
-      confirmBeforeDelete
-      && !window.confirm(`Remove ${fileIds.length} file${fileIds.length === 1 ? '' : 's'} from the library?`)
-    ) {
-      return;
+    const targets = files.filter(f => fileIds.includes(f.id));
+    const local = localFs.available() ? targets.filter(f => f.localPath) : [];
+    const count = fileIds.length;
+    const noun = `${count} item${count === 1 ? '' : 's'}`;
+    if (confirmBeforeDelete) {
+      const question = local.length
+        ? `Move ${local.length === count ? noun : `${local.length} of ${noun}`} to the Trash and remove the rest from the library?`
+        : `Remove ${noun} from the library?`;
+      if (!window.confirm(question)) return;
     }
-    setFiles(prev => prev.filter(f => !fileIds.includes(f.id)));
-    if (selectedFileId && fileIds.includes(selectedFileId)) {
-      setSelectedFileId(null);
+    const moved = local.length ? await trashLocalFiles(local) : [];
+    const localIds = new Set(local.map(f => f.id));
+    const toRemove = [...fileIds.filter(id => !localIds.has(id)), ...moved];
+    removeFromList(toRemove);
+    if (local.length && moved.length) {
+      showToast(`Moved ${moved.length} to the Trash${toRemove.length > moved.length ? ` and removed ${toRemove.length - moved.length} from the library` : ''}`);
+    } else if (!local.length) {
+      showToast(`Removed ${noun}`);
     }
-    const anyLocal = files.some(f => fileIds.includes(f.id) && f.localPath);
-    showToast(`Removed ${fileIds.length} item${fileIds.length === 1 ? '' : 's'}${anyLocal ? '. Local files stay on your disk' : ''}`);
   };
 
   // SHA-256 of the file. Files over 100 MB are skipped so the whole file is not read into memory.
