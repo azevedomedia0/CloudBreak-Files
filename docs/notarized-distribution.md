@@ -1,6 +1,6 @@
 # Notarized direct distribution (macOS)
 
-Ship a signed, notarized `.dmg` from our own site instead of the Mac App Store. The Developer ID Application certificate (`Steven Azevedo (X8NUFM9WY7)`) is already installed.
+Ship a signed, notarized `.dmg` from our own site instead of the Mac App Store. The Developer ID Application certificate (`Your Name (TEAM_ID)`) is already installed.
 
 ## 1. Get the desktop app to launch (blocker)
 - `CLAUDE.md` says the app has never run under Tauri. The CSP, the on-disk `vault.json`, and the transparent window are untested.
@@ -13,8 +13,10 @@ Ship a signed, notarized `.dmg` from our own site instead of the Mac App Store. 
 - Probably no special entitlements are needed. If a test build is blocked, add only the entitlement it needs.
 
 ## 3. Notarization credentials (one time)
-- Create an app-specific password at appleid.apple.com, or an App Store Connect API key.
-- Set `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID=X8NUFM9WY7` in the shell. Never commit them.
+- Create an App Store Connect **Team** API key with Developer access (Users and Access, Integrations), or an app-specific password at account.apple.com. Keep the `.p8` file outside the repo and outside any synced folder (for example `~/.private_keys/`, mode 600).
+- With an API key, export `APPLE_SIGNING_IDENTITY`, `APPLE_API_ISSUER` (the Issuer ID UUID), `APPLE_API_KEY` (the Key ID) and `APPLE_API_KEY_PATH`.
+- With an app-specific password, export `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD` and `APPLE_TEAM_ID`.
+- Never commit these values, and never paste them into docs, issues or chat.
 
 ## 4. Build a universal app
 ```bash
@@ -34,12 +36,13 @@ With the variables set, Tauri signs, submits to Apple, waits, and staples. Outpu
 - Point the website's "Download for Mac" button at it (it currently links to `#download`).
 - The repo is private, so release downloads will not work publicly. Use a public releases repo or our own hosting.
 
-## 7. Later
-- GitHub Actions on a macOS runner, with the certificate and credentials as secrets.
-- `tauri-plugin-updater` with its own signing key for auto-updates.
-- Windows and Linux build paths (Linux is "coming soon" on the site).
+## 7. Automation and other platforms
+- `.github/workflows/release.yml` builds macOS (universal, signed, notarized), Windows and Linux on a `v*` tag and uploads them to a draft release. It has not been run yet.
+- Repository secrets it needs: `APPLE_CERTIFICATE` (base64 of the exported Developer ID `.p12`), `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_API_ISSUER`, `APPLE_API_KEY`, `APPLE_API_KEY_P8` (the key file contents).
+- Windows and Linux installers are unsigned. Windows will show a SmartScreen warning until the app is code-signed.
+- Auto-updates (`tauri-plugin-updater`) are not set up. They need an updater key pair that only the maintainer should generate and keep, and a place to host the update manifest.
 
 ## Risks to settle first
-- Unfinished features: the media tools return "not implemented" and the encrypt buttons are demo flags. Label the release a 0.1 beta or hide them.
-- The site claims "True E2EE" file sharing. Make sure the shipped app matches.
+- Still demo or limited: the in-session encryption limit is 32 MB per file, and P2P sharing passes files as base64, so "any file size" on the site is not accurate. Video trim and convert need `ffmpeg` on PATH, which a downloaded app will not have unless it is bundled.
+- The site's "True E2EE" claim is backed by the P2P library code (chunk encryption and key wrapping), but make sure the wording matches the real limits above.
 - A clean-machine test may show missing permission prompts (folders, network) that do not appear on the dev Mac.
