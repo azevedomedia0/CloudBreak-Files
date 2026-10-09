@@ -44,7 +44,8 @@ export const CloudAccountsSection: React.FC<CloudAccountsSectionProps> = ({ acco
 
       {!collapsed.accounts && (
         <div className="space-y-0.5">
-          {accounts.filter(acc => acc.status !== 'offline').map(acc => {
+          {accounts.map(acc => {
+            const isOffline = acc.status === 'offline';
             const isSelected = selectedAccountId === acc.id && !selectedLibraryId && !selectedFolderId;
             const pct = Math.min(100, Math.round((acc.usedBytes / acc.totalBytes) * 100));
 
@@ -56,16 +57,19 @@ export const CloudAccountsSection: React.FC<CloudAccountsSectionProps> = ({ acco
                   onSelectFolder(null);
                   onSelectLibrary(null);
                 }}
-                title={`${acc.name} (${acc.provider})\nAccount: ${acc.email}\nSecurity: ${acc.encryptionLevel}`}
+                title={isOffline
+                  ? `${acc.name} (${acc.provider})\nOffline: could not reach the provider. Open settings to reconnect.`
+                  : `${acc.name} (${acc.provider})\nAccount: ${acc.email}\nSecurity: ${acc.encryptionLevel}`}
                 className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-all group ${
                   isSelected
                     ? 'bg-sky-500/20 text-sky-200 font-medium shadow-sm'
                     : 'text-neutral-300 hover:bg-white/5 hover:text-white'
-                }`}
+                } ${isOffline ? 'opacity-60' : ''}`}
               >
                 <div className="flex items-center gap-2 truncate">
                   <ProviderIcon account={acc} />
                   <span className="truncate">{acc.name}</span>
+                  {isOffline && <span className="text-[9px] font-mono uppercase text-amber-400/90 shrink-0">offline</span>}
                 </div>
                 
                 <span

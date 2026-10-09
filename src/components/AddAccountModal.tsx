@@ -9,6 +9,7 @@ import {
   defaultEndpoint,
 } from '../services/cloud';
 import { AccessTokenGuide, isTokenProvider } from './cloud/AccessTokenGuide';
+import { buildCloudAccount } from '../utils/cloudAccount';
 
 export interface MountedCloudResult {
   account: CloudAccount;
@@ -30,14 +31,6 @@ const PROVIDERS: { name: CloudProviderKind; desc: string; auth: 'token' | 'webda
   { name: 'MEGA Drive', desc: 'Email + password (prelogin)', auth: 'mega' },
   { name: 'Nextcloud', desc: 'WebDAV URL + app password', auth: 'webdav' },
 ];
-
-const COLORS: Record<CloudProviderKind, string> = {
-  'Google Drive': 'from-amber-500 to-emerald-500',
-  Dropbox: 'from-blue-600 to-indigo-600',
-  OneDrive: 'from-blue-500 to-sky-600',
-  'MEGA Drive': 'from-red-500 to-rose-600',
-  Nextcloud: 'from-blue-600 via-sky-500 to-cyan-400',
-};
 
 export const AddAccountModal: React.FC<AddAccountModalProps> = ({
   isOpen,
@@ -75,19 +68,7 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
         endpoint: endpoint.trim() || defaultEndpoint(provider),
       });
 
-      const account: CloudAccount = {
-        id: accountId,
-        name: provider === 'Nextcloud' ? 'NextCloud' : provider,
-        provider,
-        email: info.email,
-        avatarColor: COLORS[provider],
-        usedBytes: info.usedBytes,
-        totalBytes: info.totalBytes || 1,
-        status: 'connected',
-        encryptionLevel: provider === 'MEGA Drive' ? 'Zero-Knowledge Vault' : 'Standard TLS',
-        liveConnected: true,
-        endpoint: endpoint.trim() || defaultEndpoint(provider),
-      };
+      const account = buildCloudAccount(provider, info, endpoint.trim());
 
       onAddAccount({ account, folders: library.folders, files: library.files, note });
       setAccessToken('');
