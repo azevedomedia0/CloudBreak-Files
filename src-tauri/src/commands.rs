@@ -215,8 +215,26 @@ pub fn process_photo_render(req: PhotoRenderRequest) -> Result<PhotoRenderResult
         .map_err(|e| e.to_string())
 }
 
+/// The only folder the media commands may read, write or delete in.
+fn media_temp_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    Ok(app
+        .path()
+        .temp_dir()
+        .map_err(|e| format!("Could not find temp dir: {e}"))?
+        .join("cloudbreak-media"))
+}
+
+/// Require `path` to be inside the media temp folder, so the web view cannot point these commands at other files.
+fn in_media_temp(app: &AppHandle, path: &str) -> Result<std::path::PathBuf, String> {
+    let temp = media_temp_dir(app)?;
+    crate::local_fs::resolve_in_roots(&[temp], std::path::Path::new(path))
+        .map_err(|_| "Media files must be in the app's temporary media folder".to_string())
+}
+
 #[tauri::command]
-pub fn trim_video_stream(req: VideoTrimRequest) -> Result<MediaProcessResult, String> {
+pub fn trim_video_stream(mut req: VideoTrimRequest, app: AppHandle) -> Result<MediaProcessResult, String> {
+    req.input_path = in_media_temp(&app, &req.input_path)?.to_string_lossy().into_owned();
+    req.output_path = in_media_temp(&app, &req.output_path)?.to_string_lossy().into_owned();
     media::trim_video_stream(&req).map_err(|e| e.to_string())
 }
 
@@ -236,11 +254,7 @@ pub fn media_stage_temp(req: StageTempRequest, app: AppHandle) -> Result<String,
     if data.len() > 200 * 1024 * 1024 {
         return Err("Media file exceeds the 200 MB staging limit".into());
     }
-    let temp = app
-        .path()
-        .temp_dir()
-        .map_err(|e| format!("Could not find temp dir: {e}"))?
-        .join("cloudbreak-media");
+    let temp = media_temp_dir(&app)?;
     let path = media::stage_temp_file(&temp, &data, &req.extension).map_err(|e| e.to_string())?;
     Ok(path.to_string_lossy().into_owned())
 }
@@ -253,21 +267,21 @@ pub struct ReadTempRequest {
 
 /// Read a staged/output media file as base64 (capped at 200 MB).
 #[tauri::command]
-pub fn media_read_temp(req: ReadTempRequest) -> Result<String, String> {
-    let path = std::path::Path::new(&req.path);
-    let meta = std::fs::metadata(path).map_err(|e| e.to_string())?;
+pub fn media_read_temp(req: ReadTempRequest, app: AppHandle) -> Result<String, String> {
+    let path = in_media_temp(&app, &req.path)?;
+    let meta = std::fs::metadata(&path).map_err(|e| e.to_string())?;
     if meta.len() > 200 * 1024 * 1024 {
         return Err("Output file exceeds the 200 MB read limit".into());
     }
-    let data = std::fs::read(path).map_err(|e| e.to_string())?;
+    let data = std::fs::read(&path).map_err(|e| e.to_string())?;
     Ok(B64.encode(data))
 }
 
 #[tauri::command]
-pub fn media_cleanup_temp(req: ReadTempRequest) -> Result<(), String> {
-    let path = std::path::Path::new(&req.path);
-    if path.exists() {
-        std::fs::remove_file(path).map_err(|e| e.to_string())?;
+pub fn media_cleanup_temp(req: ReadTempRequest, app: AppHandle) -> Result<(), String> {
+    let path = in_media_temp(&app, &req.path)?;
+    if path.is_file() {
+        std::fs::remove_file(&path).map_err(|e| e.to_string())?;
     }
     Ok(())
 }
