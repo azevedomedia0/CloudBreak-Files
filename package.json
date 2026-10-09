@@ -11,7 +11,8 @@
     "lint": "tsc --noEmit",
     "test:crypto": "cargo test --manifest-path src-tauri/Cargo.toml crypto::tests && tsx scripts/cross-crypto-roundtrip.mts",
     "test:vault": "tsx scripts/browser-vault-persist-test.mts",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "test:app": "bash scripts/run-app-selftest.sh"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",

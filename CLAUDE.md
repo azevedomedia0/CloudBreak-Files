@@ -10,6 +10,7 @@ Tauri 2 + React 19 + Vite + Tailwind 4 desktop app. It manages many cloud accoun
 - Browser vault persistence: `npm run test:vault`
 - Editor text round-trip (what gets written to local files): `npx tsx scripts/editor-text-roundtrip-test.mts`
 - Desktop app: `npm run tauri dev`
+- In-app self-test (runs inside the real desktop app, debug build only): `npm run test:app`. It checks vault unlock and `vault.json`, the security policy, the asset protocol, local file saves, the path limits, video trim and save, drag permission and toolbar spacing. It uses a throwaway app data folder. Needs port 3000 free and ffmpeg.
 - Release build: `npm run tauri build -- --target universal-apple-darwin` (see `docs/notarized-distribution.md`)
 
 ## Notes
@@ -41,11 +42,8 @@ Tauri 2 + React 19 + Vite + Tailwind 4 desktop app. It manages many cloud accoun
 3. Copy those six files into `src-tauri/icons/`. `public/icon.png` is the web favicon.
 
 ## Not verified
-- The native folder picker, scanning, saving edits to disk and the macOS permission prompts have not been clicked through in the real desktop app. The path checks and the editor-to-text conversion are unit tested, and a launch smoke test of the built app passed.
-- Launching with `npm run tauri dev` and unlocking the vault in the real desktop app. `vault.json` has not been written by the desktop app yet, so the CSP and the on-disk file are untested at runtime.
-- A real first launch on a second Mac or fresh user account (Gatekeeper prompt, folder and network permission prompts). A simulated quarantined download on the dev Mac passed.
-- Window dragging: there is no `data-tauri-drag-region`, so the overlay title bar may not drag the window. Fixing it may also need the `core:window:allow-start-dragging` permission.
-- Toolbar spacing next to the native window buttons (a 62px spacer, an estimate).
+- Things that need a person at the screen: the native folder picker and save dialog, the macOS permission prompts (Desktop, Documents, Downloads, external drives), and actually dragging the window by the toolbar. The self-test confirms the drag permission is granted, that 55% of the toolbar is draggable space, and that the toolbar clears the native window buttons by 8px, but it cannot send mouse events.
+- A real first launch on a second Mac or fresh user account (Gatekeeper prompt). A simulated quarantined download on the dev Mac passed.
 - `.github/workflows/release.yml` has never been run.
 
 ## Remaining work
@@ -57,4 +55,3 @@ Tauri 2 + React 19 + Vite + Tailwind 4 desktop app. It manages many cloud accoun
 - Some sidebar actions still create placeholder entries without a real connection, for example "Connect to server" adds an entry that is marked online. Removable devices and "Server Nodes" are not backed by real detection.
 - The P2P create flow fills in invited peers with placeholder status and node IDs until a real peer connects.
 - Provider credentials are saved in plain browser storage (`services/cloud/credentials.ts`). Moving them to the OS keychain from Rust is the safer design.
-- `vite.config.ts` and other files may still need review for warnings after dependency upgrades.

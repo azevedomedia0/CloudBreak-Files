@@ -4,6 +4,7 @@ pub mod crypto;
 pub mod local_fs;
 pub mod media;
 pub mod p2p;
+pub mod selftest;
 pub mod storage;
 pub mod terminal;
 pub mod tray;
@@ -55,6 +56,13 @@ pub fn run() {
             commands::media_read_temp,
             commands::media_cleanup_temp,
             cloud_http::cloud_http,
+            selftest::selftest_dir,
+            selftest::selftest_make_fixtures,
+            selftest::selftest_allow_folder,
+            selftest::selftest_read_app_file,
+            selftest::selftest_app_data_dir,
+            selftest::selftest_finish,
+            selftest::selftest_window_buttons,
             local_fs::local_pick_folder,
             local_fs::local_pick_save_folder,
             local_fs::local_trash_file,
