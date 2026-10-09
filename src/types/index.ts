@@ -42,7 +42,7 @@ export interface VideoMetadata {
 
 export interface EncryptionInfo {
   isEncrypted: boolean;
-  algorithm: string; // e.g. 'AES-256-GCM'
+  algorithm: string; // e.g. 'AES-256-GCM' or 'AES-256-GCM-STREAM'
   keyFingerprint: string;
   checksumSha256: string;
   encryptedAt?: string;
@@ -53,6 +53,10 @@ export interface EncryptionInfo {
   salt?: string;
   /** MIME type of the plaintext before encryption (restored on decrypt). */
   originalMimeType?: string;
+  /** Desktop streaming cipher path (CBSTRM01). Present when algorithm is AES-256-GCM-STREAM. */
+  streamCipherPath?: string;
+  /** Original plaintext path before streaming encrypt (for restore on decrypt). */
+  streamPlainPath?: string;
 }
 
 export interface FileItem {

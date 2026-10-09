@@ -1,4 +1,4 @@
-//! Photo adjustments (image crate) and video trim/transcode (ffmpeg on PATH).
+//! Photo adjustments (image crate) and video trim/transcode (bundled ffmpeg sidecar, Homebrew, or PATH).
 
 use crate::crypto::compute_sha256;
 use base64::engine::general_purpose::STANDARD as B64;
@@ -118,7 +118,10 @@ pub struct MediaProcessResult {
 pub enum MediaError {
     #[error("{0}")]
     Message(String),
-    #[error("ffmpeg was not found on PATH — install ffmpeg to trim or transcode video")]
+    #[error(
+        "Video trim and convert need ffmpeg. Install it with Homebrew (brew install ffmpeg), \
+         or rebuild the desktop app so the bundled copy is included."
+    )]
     FfmpegMissing,
 }
 
@@ -418,34 +421,90 @@ pub fn process_photo_render(
     })
 }
 
-pub(crate) fn find_ffmpeg() -> Result<PathBuf, MediaError> {
-    which_ffmpeg().ok_or(MediaError::FfmpegMissing)
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FfmpegStatus {
+    pub available: bool,
+    pub path: Option<String>,
+    /// `bundled` | `env` | `homebrew` | `path` | `missing`
+    pub source: String,
+    pub install_hint: String,
 }
 
-fn which_ffmpeg() -> Option<PathBuf> {
+pub const FFMPEG_INSTALL_HINT: &str =
+    "Install ffmpeg with Homebrew: brew install ffmpeg. Release builds of Cloudbreak Files ship a bundled copy.";
+
+pub(crate) fn find_ffmpeg() -> Result<PathBuf, MediaError> {
+    which_ffmpeg().map(|(path, _)| path).ok_or(MediaError::FfmpegMissing)
+}
+
+pub fn ffmpeg_status() -> FfmpegStatus {
+    match which_ffmpeg() {
+        Some((path, source)) => FfmpegStatus {
+            available: true,
+            path: Some(path.to_string_lossy().into_owned()),
+            source: source.to_string(),
+            install_hint: String::new(),
+        },
+        None => FfmpegStatus {
+            available: false,
+            path: None,
+            source: "missing".into(),
+            install_hint: FFMPEG_INSTALL_HINT.into(),
+        },
+    }
+}
+
+fn ffmpeg_binary_name() -> &'static str {
+    if cfg!(windows) {
+        "ffmpeg.exe"
+    } else {
+        "ffmpeg"
+    }
+}
+
+/// Sidecar next to the app binary (Tauri `externalBin`) and common Homebrew paths.
+fn which_ffmpeg() -> Option<(PathBuf, &'static str)> {
     if let Ok(p) = std::env::var("FFMPEG_PATH") {
         let path = PathBuf::from(p);
         if path.is_file() {
-            return Some(path);
+            return Some((path, "env"));
         }
     }
-    let name = if cfg!(windows) { "ffmpeg.exe" } else { "ffmpeg" };
-    // Common install locations first — GUI apps often get a stripped PATH.
-    let bundled = [
+
+    let name = ffmpeg_binary_name();
+
+    // Bundled sidecar: Contents/MacOS/ffmpeg (release) or target/*/ffmpeg (dev with externalBin).
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let candidate = dir.join(name);
+            if candidate.is_file() {
+                return Some((candidate, "bundled"));
+            }
+            // Dev tree: src-tauri/binaries/ffmpeg-<triple> when running `cargo test` / odd layouts.
+            let binaries = dir.join("binaries").join(name);
+            if binaries.is_file() {
+                return Some((binaries, "bundled"));
+            }
+        }
+    }
+
+    let homebrew = [
         PathBuf::from("/opt/homebrew/bin").join(name),
         PathBuf::from("/usr/local/bin").join(name),
         PathBuf::from("/usr/bin").join(name),
     ];
-    for candidate in &bundled {
+    for candidate in &homebrew {
         if candidate.is_file() {
-            return Some(candidate.clone());
+            return Some((candidate.clone(), "homebrew"));
         }
     }
+
     std::env::var_os("PATH").and_then(|paths| {
         for dir in std::env::split_paths(&paths) {
             let candidate = dir.join(name);
             if candidate.is_file() {
-                return Some(candidate);
+                return Some((candidate, "path"));
             }
         }
         None
@@ -716,7 +775,7 @@ mod tests {
 
     #[test]
     fn ffmpeg_trim_real_clip_when_available() {
-        let Some(ffmpeg) = which_ffmpeg() else {
+        let Some((ffmpeg, _)) = which_ffmpeg() else {
             eprintln!("skipping ffmpeg trim test — ffmpeg not found");
             return;
         };

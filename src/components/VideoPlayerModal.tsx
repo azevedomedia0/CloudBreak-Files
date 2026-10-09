@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Play } from 'lucide-react';
 import { FileItem, VideoConvertOptions, CloudAccount, FolderItem, isAudioConvertFormat, convertFormatMime } from '../types';
-import { discardTempOutput, trimAndTranscode } from '../services/mediaBridge';
+import { discardTempOutput, getFfmpegStatus, trimAndTranscode, type FfmpegStatus } from '../services/mediaBridge';
 import { localFs } from '../services/localFsBridge';
+import { isTauri } from '@tauri-apps/api/core';
 import { PlayerHeader } from './video-player/PlayerHeader';
 import { TrimPanel } from './video-player/TrimPanel';
 import { ConvertPanel, SaveDestination } from './video-player/ConvertPanel';
@@ -58,6 +59,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const [playError, setPlayError] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [castStatus, setCastStatus] = useState<string | null>(null);
+  const [ffmpegStatus, setFfmpegStatus] = useState<FfmpegStatus | null>(null);
 
   // Active Tool Mode
   const [activeTab, setActiveTab] = useState<'player' | 'trim' | 'convert'>(initialTab);
@@ -120,6 +122,18 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   }, [file.id, isOpen, initialTab]);
 
   useEffect(() => dropOutput, []);
+
+  useEffect(() => {
+    if (!isOpen || !isTauri()) {
+      setFfmpegStatus(null);
+      return;
+    }
+    let cancelled = false;
+    void getFfmpegStatus().then(status => {
+      if (!cancelled) setFfmpegStatus(status);
+    });
+    return () => { cancelled = true; };
+  }, [isOpen]);
 
   useEffect(() => {
     setConvertOptions(prev => ({ ...prev, trimStart, trimEnd }));
@@ -280,8 +294,14 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const defaultBaseName = `${sourceBaseName}${isTrimmed ? '_clip' : ''}${isAudioConvertFormat(convertOptions.format) ? '' : `_${convertOptions.resolution}`}`;
   const outputName = `${customBaseName.trim() || defaultBaseName}.${convertOptions.format}`;
 
+  const ffmpegMissing = isTauri() && ffmpegStatus !== null && !ffmpegStatus.available;
+
   // Perform Transcode / Convert (ffmpeg in Tauri, MediaRecorder in browser)
   const startTranscode = async () => {
+    if (ffmpegMissing) {
+      setSaveError(ffmpegStatus?.installHint || 'ffmpeg is required to convert video.');
+      return;
+    }
     setIsTranscoding(true);
     setTranscodeProgress(5);
     setTranscodeComplete(false);
@@ -449,6 +469,17 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
         
         {/* Header */}
         <PlayerHeader file={file} duration={duration} activeTab={activeTab} setActiveTab={setActiveTab} onClose={onClose} />
+
+        {ffmpegMissing && (activeTab === 'trim' || activeTab === 'convert') && (
+          <div
+            role="status"
+            className="shrink-0 px-4 py-2.5 bg-amber-500/15 border-b border-amber-500/30 text-amber-100 text-[12px] leading-snug"
+          >
+            <span className="font-semibold text-amber-50">ffmpeg not found. </span>
+            {ffmpegStatus?.installHint || 'Install ffmpeg to trim and convert video in the desktop app.'}
+            <span className="text-amber-200/80"> You can still play this file.</span>
+          </div>
+        )}
 
         {/* Video Viewport & Controls */}
         <div className="flex flex-1 overflow-hidden">

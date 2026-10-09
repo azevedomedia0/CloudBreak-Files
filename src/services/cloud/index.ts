@@ -82,7 +82,7 @@ export const cloudService = {
     };
 
     const result = await syncWith(creds);
-    credentialStore.save(creds);
+    await credentialStore.save(creds);
     const library = mapRemoteEntries(accountId, result.entries);
 
     const note = input.provider === 'MEGA Drive'
@@ -107,8 +107,13 @@ export const cloudService = {
     return { info: result.account, library, note };
   },
 
-  disconnect(accountId: CloudProviderId): void {
-    credentialStore.remove(accountId);
+  async disconnect(accountId: CloudProviderId): Promise<void> {
+    await credentialStore.remove(accountId);
+  },
+
+  /** Load credentials from the OS keychain (desktop) or localStorage (browser). */
+  async hydrateCredentials(): Promise<void> {
+    await credentialStore.hydrate();
   },
 
   providerKinds(): CloudProviderKind[] {

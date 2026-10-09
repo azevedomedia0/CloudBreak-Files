@@ -1,5 +1,7 @@
 //! Tauri commands for P2P library sharing.
 
+use crate::crypto::MAX_SESSION_BYTES;
+use crate::local_fs::{self, LocalRoots};
 use crate::p2p::chunk_store::{library_dir, ChunkStore};
 use crate::p2p::identity::{identity_path, PeerIdentity};
 use crate::p2p::invite::LibraryInvite;
@@ -11,7 +13,7 @@ use crate::p2p::manifest::{LibraryManifest, ManifestFileEntry};
 use crate::p2p::swarm::{SwarmHandle, SwarmStatus};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tauri::{AppHandle, Manager, State};
 use crate::tray;
@@ -83,8 +85,12 @@ pub fn p2p_get_identity(
 pub struct CreateLibraryFile {
     pub name: String,
     pub mime_type: String,
-    /// Base64 plaintext bytes (web/Tauri pass small/medium files).
-    pub content_base64: String,
+    /// Base64 plaintext (small/medium files, max ~32 MB). Prefer `local_path` for large files.
+    #[serde(default)]
+    pub content_base64: Option<String>,
+    /// Absolute path under an allowed local root — streamed into the chunk store (no base64 IPC).
+    #[serde(default)]
+    pub local_path: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -117,6 +123,7 @@ pub struct CreateLibraryResult {
 pub async fn p2p_create_library(
     app: AppHandle,
     state: State<'_, P2pState>,
+    roots: State<'_, LocalRoots>,
     req: CreateLibraryRequest,
 ) -> Result<CreateLibraryResult, String> {
     let identity = ensure_identity(&app, &state, "Cloudbreak User")?;
@@ -134,21 +141,39 @@ pub async fn p2p_create_library(
     let mut files = Vec::new();
     let mut file_ids = Vec::new();
     for (i, f) in req.files.iter().enumerate() {
-        let bytes = base64::Engine::decode(
-            &base64::engine::general_purpose::STANDARD,
-            f.content_base64.trim(),
-        )
-        .map_err(|e| format!("file decode: {e}"))?;
         let file_id = format!("pf-{library_id}-{i}");
-        let (chunks, hash) = store
-            .ingest_file(&root_key, &file_id, &bytes)
-            .map_err(|e| e.to_string())?;
+        let (chunks, hash, size_bytes) = if let Some(path) = f.local_path.as_ref().filter(|p| !p.is_empty()) {
+            let resolved = local_fs::resolve_in_roots(&local_fs::snapshot(&roots), Path::new(path))?;
+            store
+                .ingest_path(&root_key, &file_id, &resolved)
+                .map_err(|e| e.to_string())?
+        } else {
+            let b64 = f
+                .content_base64
+                .as_ref()
+                .ok_or_else(|| "file needs contentBase64 or localPath".to_string())?;
+            let bytes = base64::Engine::decode(
+                &base64::engine::general_purpose::STANDARD,
+                b64.trim(),
+            )
+            .map_err(|e| format!("file decode: {e}"))?;
+            if bytes.len() > MAX_SESSION_BYTES {
+                return Err(format!(
+                    "File is too large for the base64 bridge (max {} MB). Use a local file path instead.",
+                    MAX_SESSION_BYTES / (1024 * 1024)
+                ));
+            }
+            let (chunks, hash) = store
+                .ingest_file(&root_key, &file_id, &bytes)
+                .map_err(|e| e.to_string())?;
+            (chunks, hash, bytes.len() as u64)
+        };
         file_ids.push(file_id.clone());
         files.push(ManifestFileEntry {
             file_id,
             name: f.name.clone(),
             mime_type: f.mime_type.clone(),
-            size_bytes: bytes.len() as u64,
+            size_bytes,
             plaintext_sha256: hash,
             chunks,
         });
@@ -564,6 +589,65 @@ pub fn p2p_fetch_manifest(
     let dir = library_dir(&data, &library_id);
     let (manifest, _) = LibraryManifest::load_local(&dir).map_err(|e| e.to_string())?;
     Ok(manifest)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MaterializeFileResult {
+    pub file_id: String,
+    pub name: String,
+    pub mime_type: String,
+    pub path: String,
+    pub size_bytes: u64,
+}
+
+/// Decrypt a library file to the app temp folder (no base64 IPC). Prefer this for large files.
+#[tauri::command]
+pub fn p2p_materialize_file(
+    app: AppHandle,
+    state: State<'_, P2pState>,
+    library_id: String,
+    file_id: String,
+) -> Result<MaterializeFileResult, String> {
+    let identity = ensure_identity(&app, &state, "Cloudbreak User")?;
+    let data = app_data_dir(&app)?;
+    let index = LibraryIndex::load(&data).map_err(|e| e.to_string())?;
+    let rec = index
+        .get(&library_id)
+        .ok_or_else(|| "library not found".to_string())?;
+    let root_key = unwrap_for_peer(&rec.local_wrapped_key, &identity.x25519_secret())
+        .map_err(|e| e.to_string())?;
+    let dir = library_dir(&data, &library_id);
+    let (manifest, _) = LibraryManifest::load_local(&dir).map_err(|e| e.to_string())?;
+    let entry = manifest
+        .files
+        .iter()
+        .find(|f| f.file_id == file_id)
+        .ok_or_else(|| "file not in manifest".to_string())?;
+    let store = ChunkStore::open(dir).map_err(|e| e.to_string())?;
+    let temp = crate::commands::media_temp_dir(&app)?;
+    let safe_name = entry
+        .name
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_' { c } else { '_' })
+        .collect::<String>();
+    let dest = temp.join(format!("{file_id}_{safe_name}"));
+    let size = store
+        .materialize_file(
+            &root_key,
+            &file_id,
+            &entry.chunks,
+            &entry.plaintext_sha256,
+            &dest,
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(MaterializeFileResult {
+        file_id,
+        name: entry.name.clone(),
+        mime_type: entry.mime_type.clone(),
+        path: dest.to_string_lossy().into_owned(),
+        size_bytes: size,
+    })
 }
 
 async fn ensure_swarm(app: &AppHandle, state: &P2pState) -> Result<Arc<SwarmHandle>, String> {

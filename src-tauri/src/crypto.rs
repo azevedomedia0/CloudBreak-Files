@@ -6,6 +6,9 @@ use hmac::Hmac;
 use pbkdf2::pbkdf2;
 use rand::RngCore;
 use sha2::{Digest, Sha256};
+use std::fs::File;
+use std::io::{Read, Write};
+use std::path::Path;
 use subtle::ConstantTimeEq;
 
 /// OWASP recommendation for PBKDF2-HMAC-SHA256. Keep in sync with `src/services/rustBridge.ts`.
@@ -16,6 +19,9 @@ pub const SALT_LEN: usize = 16; // 128 bits
 pub const MIN_PASSPHRASE_LEN: usize = 8;
 /// Soft cap for session encrypt/decrypt payloads (IPC + memory).
 pub const MAX_SESSION_BYTES: usize = 32 * 1024 * 1024;
+/// Chunk size for path-based streaming vault encryption (no IPC base64).
+pub const STREAM_CHUNK_SIZE: usize = 1024 * 1024;
+const STREAM_MAGIC: &[u8; 8] = b"CBSTRM01";
 const SESSION_KEY_DOMAIN: &[u8] = b"aethercloud-file-session";
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -44,6 +50,10 @@ pub enum CryptoError {
     PayloadTooLarge,
     #[error("Invalid session key length")]
     InvalidKey,
+    #[error("Invalid stream ciphertext")]
+    InvalidStream,
+    #[error("I/O error: {0}")]
+    Io(String),
 }
 
 /// Reject empty or short passphrases.
@@ -210,6 +220,154 @@ pub fn decrypt_with_key(encrypted: &EncryptedAsset, key: &[u8; KEY_LEN]) -> Resu
         .map_err(|_| CryptoError::DecryptionFailure)
 }
 
+/// Result of streaming a file through the vault session key (path → path).
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StreamEncryptResult {
+    pub output_path: String,
+    pub salt: String,
+    pub key_fingerprint: String,
+    pub sha256_checksum: String,
+    pub size_bytes: u64,
+    pub chunk_count: u32,
+    pub algorithm: String,
+}
+
+/// Encrypt a file on disk in 1 MiB AES-GCM chunks. No size cap (not IPC-bound).
+pub fn encrypt_file_stream(
+    src: &Path,
+    dst: &Path,
+    key: &[u8; KEY_LEN],
+) -> Result<StreamEncryptResult, CryptoError> {
+    let cipher = Aes256Gcm::new_from_slice(key).map_err(|_| CryptoError::InvalidKey)?;
+    let mut rng = rand::thread_rng();
+    let mut salt = [0u8; SALT_LEN];
+    rng.fill_bytes(&mut salt);
+
+    let mut input = File::open(src).map_err(|e| CryptoError::Io(e.to_string()))?;
+    let mut output = File::create(dst).map_err(|e| CryptoError::Io(e.to_string()))?;
+    output
+        .write_all(STREAM_MAGIC)
+        .map_err(|e| CryptoError::Io(e.to_string()))?;
+    output
+        .write_all(&salt)
+        .map_err(|e| CryptoError::Io(e.to_string()))?;
+    // Placeholder for chunk_count (filled at end).
+    let count_pos = STREAM_MAGIC.len() + SALT_LEN;
+    output
+        .write_all(&0u32.to_le_bytes())
+        .map_err(|e| CryptoError::Io(e.to_string()))?;
+
+    let mut hasher = Sha256::new();
+    let mut buf = vec![0u8; STREAM_CHUNK_SIZE];
+    let mut chunk_count: u32 = 0;
+    let mut total: u64 = 0;
+    loop {
+        let n = input.read(&mut buf).map_err(|e| CryptoError::Io(e.to_string()))?;
+        if n == 0 {
+            break;
+        }
+        let chunk = &buf[..n];
+        hasher.update(chunk);
+        total += n as u64;
+        let mut nonce_bytes = [0u8; NONCE_LEN];
+        rng.fill_bytes(&mut nonce_bytes);
+        let nonce = Nonce::from_slice(&nonce_bytes);
+        let ct = cipher
+            .encrypt(nonce, chunk)
+            .map_err(|_| CryptoError::EncryptionFailure)?;
+        output
+            .write_all(&nonce_bytes)
+            .map_err(|e| CryptoError::Io(e.to_string()))?;
+        output
+            .write_all(&(ct.len() as u32).to_le_bytes())
+            .map_err(|e| CryptoError::Io(e.to_string()))?;
+        output
+            .write_all(&ct)
+            .map_err(|e| CryptoError::Io(e.to_string()))?;
+        chunk_count += 1;
+    }
+
+    // Rewrite chunk count at fixed offset.
+    use std::io::{Seek, SeekFrom};
+    output
+        .seek(SeekFrom::Start(count_pos as u64))
+        .map_err(|e| CryptoError::Io(e.to_string()))?;
+    output
+        .write_all(&chunk_count.to_le_bytes())
+        .map_err(|e| CryptoError::Io(e.to_string()))?;
+    output.flush().map_err(|e| CryptoError::Io(e.to_string()))?;
+
+    Ok(StreamEncryptResult {
+        output_path: dst.to_string_lossy().into_owned(),
+        salt: hex::encode(salt),
+        key_fingerprint: compute_key_fingerprint(key),
+        sha256_checksum: hex::encode(hasher.finalize()),
+        size_bytes: total,
+        chunk_count,
+        algorithm: "AES-256-GCM-STREAM".into(),
+    })
+}
+
+/// Decrypt a CBSTRM01 file written by `encrypt_file_stream`.
+pub fn decrypt_file_stream(
+    src: &Path,
+    dst: &Path,
+    key: &[u8; KEY_LEN],
+) -> Result<(u64, String), CryptoError> {
+    let cipher = Aes256Gcm::new_from_slice(key).map_err(|_| CryptoError::InvalidKey)?;
+    let mut input = File::open(src).map_err(|e| CryptoError::Io(e.to_string()))?;
+    let mut magic = [0u8; 8];
+    input
+        .read_exact(&mut magic)
+        .map_err(|_| CryptoError::InvalidStream)?;
+    if &magic != STREAM_MAGIC {
+        return Err(CryptoError::InvalidStream);
+    }
+    let mut salt = [0u8; SALT_LEN];
+    input
+        .read_exact(&mut salt)
+        .map_err(|_| CryptoError::InvalidStream)?;
+    let mut count_buf = [0u8; 4];
+    input
+        .read_exact(&mut count_buf)
+        .map_err(|_| CryptoError::InvalidStream)?;
+    let chunk_count = u32::from_le_bytes(count_buf);
+
+    let mut output = File::create(dst).map_err(|e| CryptoError::Io(e.to_string()))?;
+    let mut hasher = Sha256::new();
+    let mut total: u64 = 0;
+    for _ in 0..chunk_count {
+        let mut nonce_bytes = [0u8; NONCE_LEN];
+        input
+            .read_exact(&mut nonce_bytes)
+            .map_err(|_| CryptoError::InvalidStream)?;
+        let mut len_buf = [0u8; 4];
+        input
+            .read_exact(&mut len_buf)
+            .map_err(|_| CryptoError::InvalidStream)?;
+        let ct_len = u32::from_le_bytes(len_buf) as usize;
+        if ct_len > STREAM_CHUNK_SIZE + 32 {
+            return Err(CryptoError::InvalidStream);
+        }
+        let mut ct = vec![0u8; ct_len];
+        input
+            .read_exact(&mut ct)
+            .map_err(|_| CryptoError::InvalidStream)?;
+        let nonce = Nonce::from_slice(&nonce_bytes);
+        let plain = cipher
+            .decrypt(nonce, ct.as_ref())
+            .map_err(|_| CryptoError::DecryptionFailure)?;
+        hasher.update(&plain);
+        output
+            .write_all(&plain)
+            .map_err(|e| CryptoError::Io(e.to_string()))?;
+        total += plain.len() as u64;
+    }
+    output.flush().map_err(|e| CryptoError::Io(e.to_string()))?;
+    Ok((total, hex::encode(hasher.finalize())))
+}
+
 /// Compute SHA-256 checksum of raw bytes
 pub fn compute_sha256(data: &[u8]) -> String {
     let mut hasher = Sha256::new();
@@ -285,6 +443,26 @@ mod tests {
         let enc = encrypt_bytes(b"hello vault", PASS).unwrap();
         assert_ne!(enc.ciphertext, hex::encode(b"hello vault"));
         assert_eq!(decrypt_bytes(&enc, PASS).unwrap(), b"hello vault");
+    }
+
+    #[test]
+    fn stream_file_round_trip() {
+        let dir = std::env::temp_dir().join(format!("cb-stream-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let src = dir.join("plain.bin");
+        let enc_path = dir.join("plain.cbenc");
+        let out = dir.join("out.bin");
+        let mut data = vec![0u8; STREAM_CHUNK_SIZE + 100];
+        rand::thread_rng().fill_bytes(&mut data);
+        std::fs::write(&src, &data).unwrap();
+        let key = [7u8; KEY_LEN];
+        let meta = encrypt_file_stream(&src, &enc_path, &key).unwrap();
+        assert_eq!(meta.chunk_count, 2);
+        let (size, hash) = decrypt_file_stream(&enc_path, &out, &key).unwrap();
+        assert_eq!(size, data.len() as u64);
+        assert_eq!(hash, meta.sha256_checksum);
+        assert_eq!(std::fs::read(&out).unwrap(), data);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

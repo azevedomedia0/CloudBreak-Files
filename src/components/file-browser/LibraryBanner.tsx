@@ -61,7 +61,29 @@ export const LibraryBanner: React.FC<LibraryBannerProps> = ({
                 </>
               ) : (
                 <>
-                  Currently seeding to <strong className="text-purple-300 font-semibold">{selectedLibrary.seedingPeers?.length || Math.max(1, selectedLibrary.members.length - 1)} specified P2P users</strong> with zero-knowledge encryption.
+                  {(() => {
+                    const peers = selectedLibrary.seedingPeers || [];
+                    const connected = peers.filter(p => p.status === 'connected' || p.status === 'seeding').length;
+                    const pending = peers.filter(p => p.status === 'pending').length;
+                    if (!peers.length) {
+                      return <>Seeding this library — add recipients to track pending invites.</>;
+                    }
+                    if (connected > 0) {
+                      return (
+                        <>
+                          Connected to <strong className="text-purple-300 font-semibold">{connected} peer{connected === 1 ? '' : 's'}</strong>
+                          {pending > 0 ? <> · {pending} pending invite{pending === 1 ? '' : 's'}</> : null}
+                          {' '}with zero-knowledge encryption.
+                        </>
+                      );
+                    }
+                    return (
+                      <>
+                        Waiting for <strong className="text-amber-300 font-semibold">{pending || peers.length} pending invite{pending === 1 ? '' : 's'}</strong>
+                        {' '}— share the invite link to connect.
+                      </>
+                    );
+                  })()}
                 </>
               )}
             </p>
@@ -157,14 +179,22 @@ export const LibraryBanner: React.FC<LibraryBannerProps> = ({
               <span
                 key={peer.id}
                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/40 border border-sky-400/20 text-neutral-200 font-mono shrink-0"
-                title={`Peer Node: ${peer.peerNodeId || 'relay'}\nTransfer Speed: ${peer.transferSpeed || 'Active'}\nStatus: ${peer.status}`}
+                title={[
+                  peer.peerNodeId ? `Peer: ${peer.peerNodeId}` : 'No peer id yet',
+                  peer.transferSpeed ? `Transferred: ${peer.transferSpeed}` : null,
+                  `Status: ${peer.status === 'pending' ? 'Pending invite' : peer.status}`,
+                ].filter(Boolean).join('\n')}
               >
                 <span className={`w-1.5 h-1.5 rounded-full ${
                   peer.status === 'seeding' ? 'bg-sky-400 animate-pulse' :
-                  peer.status === 'connected' ? 'bg-emerald-400' : 'bg-neutral-500'
+                  peer.status === 'connected' ? 'bg-emerald-400' :
+                  peer.status === 'pending' ? 'bg-amber-400' : 'bg-neutral-500'
                 }`} />
                 <span className="text-white font-sans">{peer.name}</span>
-                {peer.transferSpeed && peer.status === 'seeding' && (
+                {peer.status === 'pending' && (
+                  <span className="text-amber-300/90 font-sans text-[9px]">pending</span>
+                )}
+                {peer.transferSpeed && peer.status === 'connected' && (
                   <span className="text-sky-300 font-bold">({peer.transferSpeed})</span>
                 )}
               </span>

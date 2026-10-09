@@ -72,28 +72,32 @@ export function useCloudAccounts({
     const account = accounts.find(a => a.id === accountId);
     if (!account) return;
 
-    cloudService.disconnect(accountId as CloudProviderId);
-    setAccounts(prev => prev.filter(a => a.id !== accountId));
-    setFolders(prev => prev.filter(folder => folder.accountId !== accountId));
-    setFiles(prev => prev.filter(file => file.accountId !== accountId));
-    setDisconnectedAccountIds(prev => new Set(prev).add(accountId));
+    void (async () => {
+      await cloudService.disconnect(accountId as CloudProviderId);
+      setAccounts(prev => prev.filter(a => a.id !== accountId));
+      setFolders(prev => prev.filter(folder => folder.accountId !== accountId));
+      setFiles(prev => prev.filter(file => file.accountId !== accountId));
+      setDisconnectedAccountIds(prev => new Set(prev).add(accountId));
 
-    if (selectedAccountId === accountId) {
-      setSelectedAccountId('all');
-      setSelectedFolderId(null);
-      setSelectedLibraryId(null);
-      setSelectedSourceId(null);
-    }
-    const selected = files.find(f => f.id === selectedFileId);
-    if (selected?.accountId === accountId) setSelectedFileId(null);
+      if (selectedAccountId === accountId) {
+        setSelectedAccountId('all');
+        setSelectedFolderId(null);
+        setSelectedLibraryId(null);
+        setSelectedSourceId(null);
+      }
+      const selected = files.find(f => f.id === selectedFileId);
+      if (selected?.accountId === accountId) setSelectedFileId(null);
 
-    showToast(`Disconnected ${account.name}. Your files stay in the provider.`);
+      showToast(`Disconnected ${account.name}. Your files stay in the provider.`);
+    })();
   };
 
-  // Re-sync every saved connection once at launch. An unreachable one shows as offline.
+  // Hydrate keychain/local credentials, then re-sync each saved connection once at launch.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
+      await cloudService.hydrateCredentials();
+      if (cancelled) return;
       const failed: string[] = [];
       for (const creds of credentialStore.list()) {
         try {

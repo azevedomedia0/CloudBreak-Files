@@ -5,6 +5,13 @@ coverage/
 .DS_Store
 *.log
 .env*
+# Updater private keys must never be committed (public key lives in tauri.conf.json).
+*.key
+!*.key.pub
 src-tauri/target/
 src-tauri/gen/
+# Fetched by scripts/fetch-ffmpeg.sh for release / CI (keep .gitkeep).
+src-tauri/binaries/ffmpeg
+src-tauri/binaries/ffmpeg-*
+src-tauri/tauri.ffmpeg.conf.json
 *.zip

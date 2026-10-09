@@ -30,6 +30,15 @@ import {
   CloudAccount, FileItem, FolderItem, SharedLibrary,
   CloudProviderId, FileCategory,
 } from './types';
+import { createDefaultLocalFolders } from './utils/defaultLocalFolders';
+import { getFfmpegStatus } from './services/mediaBridge';
+import {
+  checkForAppUpdate,
+  currentAppVersion,
+  downloadAndInstallUpdate,
+  updaterAvailable,
+} from './services/updaterBridge';
+import { isTauri } from '@tauri-apps/api/core';
 import {
   AppPreferences,
   applyTheme,
@@ -43,10 +52,10 @@ import { p2pBridge } from './services/p2pBridge';
 export default function App() {
   // Accounts & Navigation States
   const [selectedAccountId, setSelectedAccountId] = useState<CloudProviderId>('all');
-  const [folders, setFolders] = useState<FolderItem[]>([]);
+  const [folders, setFolders] = useState<FolderItem[]>(() => createDefaultLocalFolders());
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [selectedLibraryId, setSelectedLibraryId] = useState<string | null>(null);
-  // A network share (by name) or removable device (by id) opened from the sidebar's Network section
+  // A network share or removable device (by stable id) opened from the sidebar Network section
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
 
   // Sidebar dynamic items & modals
@@ -79,6 +88,8 @@ export default function App() {
   const [sharingLibrary, setSharingLibrary] = useState<SharedLibrary | null>(null);
   const [isVaultSecurityOpen, setIsVaultSecurityOpen] = useState<boolean>(false);
   const [isProfileSettingsOpen, setIsProfileSettingsOpen] = useState<boolean>(false);
+  const [updateChecking, setUpdateChecking] = useState(false);
+  const [appVersion, setAppVersion] = useState<string | null>(null);
   const [userProfile, setUserProfileState] = useState<UserProfile>(() => loadProfile());
   const [isAddAccountOpen, setIsAddAccountOpen] = useState<boolean>(false);
   const [integratingAccount, setIntegratingAccount] = useState<CloudAccount | null>(null);
@@ -139,6 +150,79 @@ export default function App() {
     document.documentElement.classList.toggle('reduce-motion', appPreferences.reduceMotion);
   }, [appPreferences.reduceMotion]);
 
+  // One-time notice when the desktop app has no ffmpeg (dev builds / incomplete release).
+  useEffect(() => {
+    if (!isTauri()) return;
+    const key = 'cloudbreak.ffmpegMissingDismissed';
+    try {
+      if (localStorage.getItem(key) === '1') return;
+    } catch { /* private mode */ }
+    let cancelled = false;
+    void getFfmpegStatus().then(status => {
+      if (cancelled || status.available) return;
+      showToast(status.installHint || 'ffmpeg is required for video trim and convert.');
+      try {
+        localStorage.setItem(key, '1');
+      } catch { /* ignore */ }
+    });
+    return () => { cancelled = true; };
+  }, [showToast]);
+
+  // Resolve installed version + quiet launch check for a newer signed release.
+  useEffect(() => {
+    if (!isTauri()) return;
+    let cancelled = false;
+    void currentAppVersion().then(v => {
+      if (!cancelled) setAppVersion(v);
+    });
+    const key = 'cloudbreak.updatePromptDismissed';
+    void (async () => {
+      try {
+        if (!(await updaterAvailable())) return;
+        const result = await checkForAppUpdate();
+        if (cancelled || !result.available) return;
+        const dismissed = (() => {
+          try {
+            return localStorage.getItem(key);
+          } catch {
+            return null;
+          }
+        })();
+        if (dismissed === result.version) return;
+        showToast(`Update ${result.version} is available — open Profile → Preferences to install`);
+        try {
+          localStorage.setItem(key, result.version);
+        } catch { /* ignore */ }
+      } catch {
+        // Offline / private repo / no latest.json yet — quiet.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [showToast]);
+
+  const handleCheckForUpdates = async () => {
+    if (!isTauri()) {
+      showToast('Updates are available in the desktop app');
+      return;
+    }
+    setUpdateChecking(true);
+    try {
+      const result = await checkForAppUpdate();
+      if (!result.available) {
+        showToast(`You’re on the latest version (${result.currentVersion})`);
+        return;
+      }
+      const note = result.notes ? ` — ${result.notes.slice(0, 80)}` : '';
+      showToast(`Downloading update ${result.version}${note}…`);
+      await downloadAndInstallUpdate(result.update);
+      // relaunch is called inside downloadAndInstallUpdate
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err));
+    } finally {
+      setUpdateChecking(false);
+    }
+  };
+
   useGlobalShortcuts({
     canQuickLook: !!selectedFileId && !editingPhotoFile && !editingDocumentFile && !playingVideoFile && !playingAudioFile && !sharingLibrary,
     onToggleSidebar: () => setIsSidebarCollapsed(prev => !prev),
@@ -147,9 +231,12 @@ export default function App() {
 
   const {
     removableDevices, customFavorites, networkServers, favoritedSourceIds,
+    isRescanningLocal,
     handleCreateFolder, handleAddLocalFolderFromDisk, handleBrowseFavoriteFolder,
+    handleRescanLocalFolders,
     handleAddNetworkServer, selectAccount, selectFolder, selectLibrary, openSource,
     handleAddFavoriteNetwork, handleAddFavoriteDevice, handleEjectDevice,
+    handleSelectRemovableDevice, handleSelectNetworkServer,
   } = useSidebarSources({
     folders, files, selectedAccountId, selectedFolderId, selectedSourceId, isVaultUnlocked,
     setFolders, setFiles, setSelectedAccountId, setSelectedFolderId, setSelectedLibraryId,
@@ -241,7 +328,7 @@ export default function App() {
   // Active path title
   const activeAccount = accounts.find(a => a.id === selectedAccountId);
   const activeSourceName = selectedSourceId
-    ? networkServers.find(s => s.name === selectedSourceId)?.name ?? removableDevices.find(d => d.id === selectedSourceId)?.name
+    ? networkServers.find(s => s.id === selectedSourceId)?.name ?? removableDevices.find(d => d.id === selectedSourceId)?.name
     : undefined;
   const activePathTitle = activeSourceName
     ? activeSourceName
@@ -375,6 +462,8 @@ export default function App() {
               onToggleCollapse={() => setIsSidebarCollapsed(prev => !prev)}
               onAddFavorite={() => setIsAddFavoriteOpen(true)}
               onAddNewFolder={handleAddLocalFolderFromDisk}
+              onRescanLocalFolders={handleRescanLocalFolders}
+              isRescanningLocal={isRescanningLocal}
               onAddNewIncomingLibrary={() => setIsJoinIncomingOpen(true)}
               onAddNewOutgoingLibrary={() => setIsNewLibraryOpen(true)}
               onAddNewSharedLibrary={() => setIsNewLibraryOpen(true)}
@@ -383,10 +472,11 @@ export default function App() {
               networkServers={networkServers}
               removableDevices={removableDevices}
               onEjectDevice={handleEjectDevice}
-              onSelectRemovableDevice={device => openSource(device.id)}
+              onSelectRemovableDevice={handleSelectRemovableDevice}
               selectedRemovableDeviceId={selectedSourceId}
-              onSelectNetworkServer={openSource}
-              selectedNetworkServerName={selectedSourceId}
+              onSelectNetworkServer={handleSelectNetworkServer}
+              selectedNetworkServerId={selectedSourceId}
+              swarmStatus={swarmStatus}
               selectedSourceId={selectedSourceId}
               onSelectFavoriteSource={openSource}
             />
@@ -599,6 +689,9 @@ export default function App() {
         peerId={swarmStatus?.peerId ?? null}
         swarmListening={swarmStatus?.listening ?? false}
         p2pLibraryCount={sharedLibraries.length}
+        onCheckForUpdates={handleCheckForUpdates}
+        updateChecking={updateChecking}
+        appVersion={appVersion}
         showToast={showToast}
         isAddAccountOpen={isAddAccountOpen}
         setIsAddAccountOpen={setIsAddAccountOpen}

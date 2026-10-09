@@ -19,7 +19,7 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            args: --target universal-apple-darwin
+            args: --target universal-apple-darwin --config tauri.ffmpeg.conf.json
             rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
           - os: windows-latest
             args: ''
@@ -41,7 +41,24 @@ jobs:
         with:
           workspaces: src-tauri
 
+      - name: Use Cargo target dir outside the workspace
+        if: matrix.os == 'macos-latest'
+        run: echo "CARGO_TARGET_DIR=${RUNNER_TEMP}/cloudbreak-cargo-target" >> "$GITHUB_ENV"
+
       - run: npm ci
+
+      - name: Clear stale Xcode icon helpers (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          pkill -x ibtoold 2>/dev/null || true
+          pkill -x actool 2>/dev/null || true
+
+      - name: Fetch ffmpeg sidecars (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          bash scripts/fetch-ffmpeg.sh
+          # Enable Tauri externalBin only when the binaries are present.
+          printf '%s\n' '{"bundle":{"externalBin":["binaries/ffmpeg"]}}' > src-tauri/tauri.ffmpeg.conf.json
 
       # macOS only: import the Developer ID certificate into a temporary keychain
       # and write the App Store Connect API key to a file outside the repo.
@@ -75,6 +92,9 @@ jobs:
           APPLE_SIGNING_IDENTITY: ${{ matrix.os == 'macos-latest' && secrets.APPLE_SIGNING_IDENTITY || '' }}
           APPLE_API_ISSUER: ${{ matrix.os == 'macos-latest' && secrets.APPLE_API_ISSUER || '' }}
           APPLE_API_KEY: ${{ matrix.os == 'macos-latest' && secrets.APPLE_API_KEY || '' }}
+          # Signs updater artifacts (.tar.gz / .sig) and lets tauri-action upload latest.json.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'Cloudbreak Files ${{ github.ref_name }}'

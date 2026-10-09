@@ -11,6 +11,7 @@ import { FileContextMenu, FileRenameField } from './file-browser/FileContextMenu
 import { FileGetInfo } from './file-browser/FileGetInfo';
 import { isEditableDocument } from '../utils/documentKind';
 import { getFolderIcon } from '../utils/folderIcons';
+import { sortLocalRootFolders } from '../utils/defaultLocalFolders';
 import { childFoldersOf, groupFilesByLocalFolders } from '../utils/groupFilesByLocation';
 import { accentForSelection } from '../utils/selectionAccent';
 import { isZipArchive } from '../utils/unzipArchive';
@@ -104,7 +105,10 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   const groupByLocation =
     (selectedCategory === 'files' || selectedCategory === 'photo' || selectedCategory === 'video')
     && (viewMode === 'icons' || viewMode === 'list');
-  const localFolders = useMemo(() => folders.filter(folder => folder.accountId === 'all'), [folders]);
+  const localFolders = useMemo(
+    () => sortLocalRootFolders(folders.filter(folder => folder.accountId === 'all' && !folder.parentId)),
+    [folders],
+  );
   const locationSections = useMemo(
     () => (groupByLocation
       ? groupFilesByLocalFolders(files, localFolders, folders, {

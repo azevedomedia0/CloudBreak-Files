@@ -11,32 +11,35 @@ Tauri 2 + React 19 + Vite + Tailwind 4 desktop app. It manages many cloud accoun
 - Editor text round-trip (what gets written to local files): `npx tsx scripts/editor-text-roundtrip-test.mts`
 - Desktop app: `npm run tauri dev`
 - In-app self-test (runs inside the real desktop app, debug build only): `npm run test:app`. It checks vault unlock and `vault.json`, the security policy, the asset protocol, local file saves, the path limits, video trim and save, drag permission and toolbar spacing. It uses a throwaway app data folder. Needs port 3000 free and ffmpeg.
-- Release build: `npm run tauri build -- --target universal-apple-darwin` (see `docs/notarized-distribution.md`)
+- Release build: `npm run build:mac` (see `docs/notarized-distribution.md`; sets `CARGO_TARGET_DIR` outside OneDrive)
+- Updater keys: `npm run updater:keys` (private key in `~/.tauri/`; see `docs/auto-updates.md`)
 
 ## Notes
 - Do not run `npm install` inside a OneDrive folder if you can avoid it. `node_modules` will sync. Use `CARGO_TARGET_DIR` outside OneDrive for Rust builds.
 - Never write Apple credentials, key IDs, key file paths, tokens or passwords into this file, the docs or commits. Release credentials live in the maintainer's shell or in GitHub Actions secrets.
 
-- If a macOS build fails with `Failed to create app Assets.car: failed to run actool`, a stale Xcode helper is usually the cause. Run `pkill -x ibtoold` and build again from a normal terminal.
+- If a macOS build fails with `Failed to create app Assets.car: failed to run actool`, first confirm `CloudBreak-icon.icon` is not in `bundle.icon` (Tauri’s actool flags break glass Icon Studio docs). Otherwise run `pkill -x ibtoold` and rebuild from a normal terminal.
 
 ## What works
-- **Vault crypto** (`src-tauri/src/crypto.rs`, `commands.rs`): AES-256-GCM, PBKDF2 (600,000 iterations), constant-time passphrase verifier. The session key is held in Rust, not JS. In-session encryption is limited to 32 MB per file.
+- **Vault crypto** (`src-tauri/src/crypto.rs`, `commands.rs`): AES-256-GCM, PBKDF2 (600,000 iterations), constant-time passphrase verifier. The session key is held in Rust, not JS. Small blobs still use the 32 MB IPC path; desktop local files use path-based streaming encrypt (`encrypt_session_file` / `CBSTRM01`, no size cap).
 - **Vault passphrase check** is saved: `vault.json` in the app data folder in the desktop app (`vault_store.rs`), localStorage in the browser (`services/browserVaultStore.ts`). A corrupt file or entry is an error and is never silently replaced.
 - **Encrypt buttons and uploads** encrypt with the vault session key when the vault is unlocked (`utils/fileEncryption.ts`, `hooks/useFileActions.ts`).
 - **Rust and Web Crypto** use the same format. `npm run test:crypto` checks both directions against a fixture.
-- **P2P libraries** (`src-tauri/src/p2p/`): chunked AES-GCM file encryption, encrypted manifests, X25519 key wrapping, invite links. Files are passed through the bridge as base64, so very large files are impractical.
-- **Media** (`src-tauri/src/media.rs`): photo adjustments (image crate) and video trim/convert. Video needs `ffmpeg` on PATH. It is not bundled.
-- **Local files** (desktop app, `src-tauri/src/local_fs.rs`, `services/localFsBridge.ts`): the native folder picker adds a folder. Cloudbreak scans it, remembers it across launches (`local_roots.json` in the app data folder) and loads media through Tauri's asset protocol. Every read, write and rename is checked against the added folders: `..`, symlinks and paths outside them are refused (11 unit tests). Saving a text or HTML document writes it in place. An edited photo is saved as a new file next to the original. Renaming renames on disk. "Delete" moves a local file to the Trash (restorable; macOS Cocoa API, no Finder permission prompt). A video converted from a local file is read in place and saved with the native save dialog or a chosen folder (`local_save_from_temp`). Word, PDF and other formats the editor cannot produce are never overwritten. `src-tauri/Info.plist` holds the macOS permission texts.
+- **P2P libraries** (`src-tauri/src/p2p/`): chunked AES-GCM file encryption, encrypted manifests, X25519 key wrapping, invite links. Create accepts a `localPath` (streamed ingest) or base64 under 32 MB; large files materialize via `p2p_materialize_file` (temp path + asset URL). Invitees stay `pending` until a real swarm peer connects.
+- **Media** (`src-tauri/src/media.rs`): photo adjustments (image crate) and video trim/convert. Video uses a bundled `ffmpeg` sidecar in release builds (`npm run fetch:ffmpeg` / `build:mac`); otherwise Homebrew or PATH. Missing ffmpeg shows a first-run toast and a banner in the video trim/convert UI.
+- **Local files** (desktop app, `src-tauri/src/local_fs.rs`, `services/localFsBridge.ts`): the native folder picker adds a folder. Cloudbreak scans it, remembers it across launches (`local_roots.json` in the app data folder) and loads media through Tauri's asset protocol. The Local Files sidebar refresh button rescans all remembered folders from disk. Every read, write and rename is checked against the added folders: `..`, symlinks and paths outside them are refused (11 unit tests). Saving a text or HTML document writes it in place. An edited photo is saved as a new file next to the original. Renaming renames on disk. "Delete" moves a local file to the Trash (restorable; macOS Cocoa API, no Finder permission prompt). A video converted from a local file is read in place and saved with the native save dialog or a chosen folder (`local_save_from_temp`). Word, PDF and other formats the editor cannot produce are never overwritten. `src-tauri/Info.plist` holds the macOS permission texts.
+- **Sidebar network & devices** (`src-tauri/src/mounted_volumes.rs`, `hooks/useSidebarSources.ts`): macOS lists mounted `/Volumes` and network shares via `getmntinfo`; saved SMB/NFS servers are probed over TCP and only marked online when they respond. Connect to Server opens the share in Finder and saves the entry; no demo NAS placeholders. Removable drives can be ejected via `diskutil`.
 - **Media commands** (`media_read_temp`, `media_cleanup_temp`, `trim_video_stream`) only accept paths inside the app's temp media folder.
-- **Cloud accounts** (`services/cloud/`): Google Drive, Dropbox, OneDrive, MEGA login, Nextcloud. Saved connections are re-synced at launch (`hooks/useCloudAccounts.ts`). One that cannot be reached shows as offline.
+- **Cloud accounts** (`services/cloud/`): Google Drive, Dropbox, OneDrive, MEGA login, Nextcloud. Saved connections are re-synced at launch (`hooks/useCloudAccounts.ts`). One that cannot be reached shows as offline. Provider tokens/passwords live in the **OS keychain** on desktop (`src-tauri/src/credentials_store.rs` via the `keyring` crate); the browser preview still uses localStorage. Legacy localStorage entries are migrated into the keychain once and cleared.
 - **Desktop shell**: signed, hardened-runtime, notarized macOS build. `macOSPrivateApi` is on so the transparent window works. The app icon is `src-tauri/icons/CloudBreak-icon.icon` (Icon Composer). The toolbar leaves room for the native window buttons.
+- **Auto-updates** (`tauri-plugin-updater`): minisign pubkey in `tauri.conf.json`; manifest at GitHub Releases `latest.json`; Profile → Preferences “Check for updates”; CI signs with `TAURI_SIGNING_PRIVATE_KEY` (see `docs/auto-updates.md`).
 
 ## Layout
 - `src/App.tsx` (about 630 lines) wires state together. Logic lives in hooks: `useFileActions`, `useVault`, `useP2pLibraries`, `useCloudAccounts`, `useNotifications`, `useSidebarSources`, plus `useResizablePanel`, `useToast`, `useGlobalShortcuts`.
 - Big components are split into folders: `components/file-browser/`, `components/sidebar/`, `components/video-player/`, `components/document-editor/`.
 
 ## App icon
-`src-tauri/icons/CloudBreak-icon.icon` is compiled by Tauri with `actool` (Xcode 26 or newer) into `Assets.car`. The classic icons (`32x32.png`, `128x128.png`, `128x128@2x.png`, `icon.icns`, `icon.ico`, `icon.png`) are generated from a render of it. To regenerate:
+`src-tauri/icons/CloudBreak-icon.icon` is the Icon Composer source. Shipped builds use `icon.icns` (not `Assets.car`) because Tauri 2.12’s actool invocation fails on glass Icon Studio documents. Regenerate the classic icons from a render when the design changes:
 1. `ictool src-tauri/icons/CloudBreak-icon.icon --export-image --output-file design/app-icon-1024.png --platform macOS --rendition Default --width 1024 --height 1024 --scale 1` (`ictool` is in Xcode's Icon Composer.app)
 2. `npx tauri icon design/app-icon-1024.png -o /tmp/icons`
 3. Copy those six files into `src-tauri/icons/`. `public/icon.png` is the web favicon.
@@ -47,11 +50,5 @@ Tauri 2 + React 19 + Vite + Tailwind 4 desktop app. It manages many cloud accoun
 - `.github/workflows/release.yml` has never been run.
 
 ## Remaining work
-- Local files: a folder is only scanned when it is added or at launch. There is no rescan button, so a file saved outside Cloudbreak shows up after a restart.
-- Bundle `ffmpeg` (or ship a clear first-run message), since a downloaded app will not have it on PATH.
-- Streaming encryption for files over 32 MB, and a non-base64 path for large P2P transfers.
-- Auto-updates (`tauri-plugin-updater`): needs an updater key pair and a hosted manifest.
 - The Windows build is only configured in the workflow. It is untested and unsigned.
-- Some sidebar actions still create placeholder entries without a real connection, for example "Connect to server" adds an entry that is marked online. Removable devices and "Server Nodes" are not backed by real detection.
-- The P2P create flow fills in invited peers with placeholder status and node IDs until a real peer connects.
-- Provider credentials are saved in plain browser storage (`services/cloud/credentials.ts`). Moving them to the OS keychain from Rust is the safer design.
+- Auto-updates need the `TAURI_SIGNING_PRIVATE_KEY` GitHub secret; `latest.json` is served from public GitHub Releases.

@@ -2,6 +2,11 @@ import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import type { FileItem, SharedLibrary } from '../types';
 import { p2pBridge, recordToSharedLibrary, type SwarmStatus } from '../services/p2pBridge';
 import type { CreateP2pLibraryForm, JoinP2pLibraryForm } from '../components/SidebarModals';
+import { mergeSwarmPeersIntoLibraries, pendingInvitePeer } from '../utils/p2pPeers';
+import { localFs } from '../services/localFsBridge';
+import { isTauri } from '@tauri-apps/api/core';
+
+const MAX_BASE64_P2P_BYTES = 32 * 1024 * 1024;
 
 interface UseP2pLibrariesOptions {
   userName: string;
@@ -49,7 +54,10 @@ export function useP2pLibraries({
           }
         }
         const status = await p2pBridge.swarmStatus();
-        if (!cancelled) setSwarmStatus(status);
+        if (!cancelled) {
+          setSwarmStatus(status);
+          setSharedLibraries(prev => mergeSwarmPeersIntoLibraries(prev, status));
+        }
         try {
           await p2pBridge.refreshTrayStatus();
         } catch {
@@ -69,6 +77,7 @@ export function useP2pLibraries({
       }
       const status = await p2pBridge.swarmStatus();
       setSwarmStatus(status);
+      setSharedLibraries(prev => mergeSwarmPeersIntoLibraries(prev, status));
       showToast(
         status.listening
           ? `Private swarm listening · invite-dial only · ${status.peers.filter(p => p.connected).length} peer(s)`
@@ -93,13 +102,39 @@ export function useP2pLibraries({
   const handleCreateLibrary = async (form: CreateP2pLibraryForm) => {
     await p2pBridge.getIdentity(userName);
     const selected = files.filter(f => f.id === selectedFileId).slice(0, 1);
-    const payloadFiles = [];
+    const payloadFiles: Array<{
+      name: string;
+      mimeType: string;
+      contentBase64?: string;
+      localPath?: string;
+    }> = [];
     for (const f of selected) {
       try {
+        if (f.localPath && isTauri()) {
+          payloadFiles.push({
+            name: f.name,
+            mimeType: f.mimeType,
+            localPath: f.localPath,
+          });
+          continue;
+        }
+        if (f.sizeBytes > MAX_BASE64_P2P_BYTES) {
+          showToast(
+            `“${f.name}” is too large for the browser bridge (max ${MAX_BASE64_P2P_BYTES / (1024 * 1024)} MB). Add it as a local file in the desktop app.`,
+          );
+          continue;
+        }
         const res = await fetch(f.url);
         const buf = new Uint8Array(await res.arrayBuffer());
+        if (buf.byteLength > MAX_BASE64_P2P_BYTES) {
+          showToast(`“${f.name}” exceeds the ${MAX_BASE64_P2P_BYTES / (1024 * 1024)} MB bridge limit`);
+          continue;
+        }
         let binary = '';
-        buf.forEach(b => { binary += String.fromCharCode(b); });
+        const chunk = 0x8000;
+        for (let i = 0; i < buf.length; i += chunk) {
+          binary += String.fromCharCode(...buf.subarray(i, i + chunk));
+        }
         payloadFiles.push({
           name: f.name,
           mimeType: f.mimeType,
@@ -151,20 +186,19 @@ export function useP2pLibraries({
           status: 'pending' as const,
         })),
       ];
-      newLib.seedingPeers = recipientList.map((email, i) => ({
-        id: `p-${stamp}-${i}`,
-        name: email.includes('@') ? email.split('@')[0] : email,
-        email,
-        peerNodeId: `node-${email.toLowerCase().replace(/[^a-z0-9]/g, '')}-mesh`,
-        status: 'seeding' as const,
-        role: form.role,
-      }));
+      newLib.seedingPeers = recipientList.map((email, i) =>
+        pendingInvitePeer(email, form.role, stamp, i),
+      );
       newLib.memberCount = newLib.members.length;
     }
     setSharedLibraries(prev => [...prev.filter(l => l.id !== newLib.id), newLib]);
     setSelectedLibraryId(newLib.id);
     const peerCount = recipientList.length;
-    const peerNote = peerCount > 1 ? ` to ${peerCount} peers` : peerCount === 1 ? ' to 1 peer' : '';
+    const peerNote = peerCount > 1
+      ? ` · ${peerCount} pending invites`
+      : peerCount === 1
+        ? ' · 1 pending invite'
+        : '';
     try {
       await navigator.clipboard.writeText(result.invite);
       showToast(`Seeding “${form.name}”${peerNote} — invite copied to clipboard`);
@@ -191,33 +225,63 @@ export function useP2pLibraries({
     setSharedLibraries(prev => [...prev.filter(l => l.id !== newLib.id), newLib]);
     setSelectedLibraryId(newLib.id);
 
-    // Materialize decrypted files into the browser file list when available
+    // Materialize decrypted files into the file list (path on desktop; base64 only as fallback).
     try {
       const manifest = await p2pBridge.fetchManifest(newLib.id);
       const imported: FileItem[] = [];
       for (const entry of manifest.files) {
         try {
-          const decrypted = await p2pBridge.readFile(newLib.id, entry.fileId);
-          const bytes = Uint8Array.from(atob(decrypted.contentBase64), c => c.charCodeAt(0));
-          const blob = new Blob([bytes], { type: decrypted.mimeType || entry.mimeType });
-          const url = URL.createObjectURL(blob);
+          let url: string;
+          let sizeBytes = entry.sizeBytes;
+          let mimeType = entry.mimeType;
+          let localPath: string | undefined;
+          if (isTauri() && entry.sizeBytes > MAX_BASE64_P2P_BYTES) {
+            const mat = await p2pBridge.materializeFile(newLib.id, entry.fileId);
+            localPath = mat.path;
+            url = localFs.assetUrl(mat.path);
+            sizeBytes = mat.sizeBytes;
+            mimeType = mat.mimeType || entry.mimeType;
+          } else if (isTauri()) {
+            try {
+              const mat = await p2pBridge.materializeFile(newLib.id, entry.fileId);
+              localPath = mat.path;
+              url = localFs.assetUrl(mat.path);
+              sizeBytes = mat.sizeBytes;
+              mimeType = mat.mimeType || entry.mimeType;
+            } catch {
+              const decrypted = await p2pBridge.readFile(newLib.id, entry.fileId);
+              const bytes = Uint8Array.from(atob(decrypted.contentBase64), c => c.charCodeAt(0));
+              const blob = new Blob([bytes], { type: decrypted.mimeType || entry.mimeType });
+              url = URL.createObjectURL(blob);
+              sizeBytes = decrypted.sizeBytes;
+              mimeType = decrypted.mimeType || entry.mimeType;
+            }
+          } else {
+            const decrypted = await p2pBridge.readFile(newLib.id, entry.fileId);
+            const bytes = Uint8Array.from(atob(decrypted.contentBase64), c => c.charCodeAt(0));
+            const blob = new Blob([bytes], { type: decrypted.mimeType || entry.mimeType });
+            url = URL.createObjectURL(blob);
+            sizeBytes = decrypted.sizeBytes;
+            mimeType = decrypted.mimeType || entry.mimeType;
+          }
           imported.push({
             id: entry.fileId,
-            name: form.name ? `${entry.name}` : decrypted.name || entry.name,
+            name: entry.name,
             folderPath: `/P2P/${newLib.name}`,
             accountId: 'all',
-            sizeBytes: decrypted.sizeBytes,
-            category: entry.mimeType.startsWith('image/')
+            sizeBytes,
+            category: mimeType.startsWith('image/')
               ? 'photo'
-              : entry.mimeType.startsWith('video/')
+              : mimeType.startsWith('video/')
                 ? 'video'
-                : entry.mimeType.startsWith('audio/')
+                : mimeType.startsWith('audio/')
                   ? 'audio'
                   : 'document',
-            mimeType: decrypted.mimeType || entry.mimeType,
+            mimeType,
             updatedAt: new Date().toISOString(),
             url,
-            thumbnailUrl: entry.mimeType.startsWith('image/') ? url : undefined,
+            localPath,
+            thumbnailUrl: mimeType.startsWith('image/') ? url : undefined,
             tags: ['P2P', 'E2EE'],
             encryption: {
               isEncrypted: true,

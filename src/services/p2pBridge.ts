@@ -39,7 +39,10 @@ export interface P2pLibraryRecord {
 export interface CreateLibraryFileInput {
   name: string;
   mimeType: string;
-  contentBase64: string;
+  /** Small/medium files over the JS bridge (max ~32 MB). Prefer `localPath` for large files. */
+  contentBase64?: string;
+  /** Absolute path under an allowed local root — streamed into the chunk store (desktop). */
+  localPath?: string;
 }
 
 export interface CreateLibraryInput {
@@ -164,7 +167,11 @@ async function browserCreateLibrary(input: CreateLibraryInput): Promise<CreateLi
   for (let i = 0; i < input.files.length; i++) {
     const fid = `pf-${libraryId}-${i}`;
     fileIds.push(fid);
-    fileMap.set(fid, b64decode(input.files[i].contentBase64));
+    const b64 = input.files[i].contentBase64;
+    if (!b64) {
+      throw new Error('Browser P2P create needs file bytes (localPath is desktop-only)');
+    }
+    fileMap.set(fid, b64decode(b64));
   }
   const rootCid = `cid-${libraryId}`;
   const invitePayload = {
@@ -326,6 +333,19 @@ export const p2pBridge = {
     return invoke<string>('tray_refresh_status');
   },
 
+  /**
+   * Decrypt a library file to the app temp folder (desktop). Prefer over `readFile` for large files.
+   */
+  async materializeFile(
+    libraryId: string,
+    fileId: string,
+  ): Promise<{ fileId: string; name: string; mimeType: string; path: string; sizeBytes: number }> {
+    if (!(await isTauri())) {
+      throw new Error('materializeFile requires the desktop app');
+    }
+    return invoke('p2p_materialize_file', { libraryId, fileId });
+  },
+
   async readFile(libraryId: string, fileId: string): Promise<DecryptedFileResult> {
     if (await isTauri()) {
       return invoke<DecryptedFileResult>('p2p_read_file', { libraryId, fileId });
@@ -365,24 +385,36 @@ export const p2pBridge = {
   },
 
   /**
-   * Assemble a decrypted Blob by streaming chunks (for video/audio playback).
+   * Assemble a decrypted Blob. On desktop, materializes to temp then reads via asset URL
+   * (avoids accumulating base64 in JS for large files).
    */
   async assembleFileBlob(libraryId: string, fileId: string, mimeType?: string): Promise<Blob> {
     if (await isTauri()) {
-      const first = await this.streamChunk(libraryId, fileId, 0);
-      const parts: Uint8Array[] = [b64decode(first.contentBase64)];
-      for (let i = 1; i < first.totalChunks; i++) {
-        const chunk = await this.streamChunk(libraryId, fileId, i);
-        parts.push(b64decode(chunk.contentBase64));
+      try {
+        const mat = await this.materializeFile(libraryId, fileId);
+        const { convertFileSrc } = await import('@tauri-apps/api/core');
+        const res = await fetch(convertFileSrc(mat.path));
+        if (!res.ok) throw new Error(`Could not read materialized file (${res.status})`);
+        return new Blob([await res.arrayBuffer()], {
+          type: mimeType || mat.mimeType || 'application/octet-stream',
+        });
+      } catch {
+        // Fall back to chunk streaming if materialize fails.
+        const first = await this.streamChunk(libraryId, fileId, 0);
+        const parts: Uint8Array[] = [b64decode(first.contentBase64)];
+        for (let i = 1; i < first.totalChunks; i++) {
+          const chunk = await this.streamChunk(libraryId, fileId, i);
+          parts.push(b64decode(chunk.contentBase64));
+        }
+        const total = parts.reduce((n, p) => n + p.length, 0);
+        const merged = new Uint8Array(total);
+        let offset = 0;
+        for (const p of parts) {
+          merged.set(p, offset);
+          offset += p.length;
+        }
+        return new Blob([merged.slice()], { type: mimeType || 'application/octet-stream' });
       }
-      const total = parts.reduce((n, p) => n + p.length, 0);
-      const merged = new Uint8Array(total);
-      let offset = 0;
-      for (const p of parts) {
-        merged.set(p, offset);
-        offset += p.length;
-      }
-      return new Blob([merged.slice()], { type: mimeType || 'application/octet-stream' });
     }
     const file = await this.readFile(libraryId, fileId);
     return new Blob([b64decode(file.contentBase64).slice()], {

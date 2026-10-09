@@ -1,48 +1,107 @@
 # Notarized direct distribution (macOS)
 
-Ship a signed, notarized `.dmg` from our own site instead of the Mac App Store. The Developer ID Application certificate (`Your Name (TEAM_ID)`) is already installed.
+Ship a signed, notarized `.dmg` from our own site instead of the Mac App Store.
 
-## 1. Get the desktop app to launch (blocker)
-- `CLAUDE.md` says the app has never run under Tauri. The CSP, the on-disk `vault.json`, and the transparent window are untested.
-- Run `npm run tauri dev`. Check that the window opens, the vault unlocks, and `vault.json` is written.
-- Decide on window transparency. Direct distribution allows Tauri's `macos-private-api` feature, so enable it or drop `"transparent": true`.
+## Current state
 
-## 2. Configure signing in `src-tauri/tauri.conf.json`
-- Add a `bundle.macOS` block: `signingIdentity`, `hardenedRuntime: true`, `minimumSystemVersion`, optional `entitlements` file. Hardened runtime is required for notarization.
-- Add a `category` (e.g. `public.app-category.productivity`).
-- Probably no special entitlements are needed. If a test build is blocked, add only the entitlement it needs.
+- **Release config** is in `src-tauri/tauri.conf.json`: `hardenedRuntime`, `minimumSystemVersion` 12.0, `Entitlements.plist`, productivity category, `.app` + `.dmg` targets.
+- **Icon Composer source** lives at `src-tauri/icons/CloudBreak-icon.icon` for regenerating `icon.icns` / PNGs. It is **not** listed in `bundle.icon` because Tauri 2.12 invokes `actool` with flags that fail on glass Icon Studio documents (`Bad file descriptor`). The shipped app uses `icon.icns` until Tauri or `actool` fixes that path.
+- **Local build**: `npm run build:mac` (wrapper around `scripts/build-macos-release.sh`). Uses `CARGO_TARGET_DIR=/tmp/cloudbreak-cargo-target` by default so OneDrive does not sync Rust artifacts.
+- **CI**: `.github/workflows/release.yml` on `v*` tags — universal macOS (signed + notarized when secrets are set) and Windows. Builds upload to a **draft** prerelease.
+
+## 1. Smoke-test the desktop app
+
+- `npm run tauri dev` — window, vault unlock, `vault.json` in app data.
+- `npm run test:app` — automated checks in a throwaway data dir (debug build, port 3000, ffmpeg).
+
+## 2. Signing identity (local)
+
+Developer ID Application must be in the login keychain:
+
+```bash
+security find-identity -v -p codesigning
+```
+
+Export the full name (including team id in parentheses) as:
+
+```bash
+export APPLE_SIGNING_IDENTITY='Developer ID Application: … (TEAM_ID)'
+```
+
+Optional: set `bundle.macOS.signingIdentity` in `tauri.conf.json` instead of the env var.
 
 ## 3. Notarization credentials (one time)
-- Create an App Store Connect **Team** API key with Developer access (Users and Access, Integrations), or an app-specific password at account.apple.com. Keep the `.p8` file outside the repo and outside any synced folder (for example `~/.private_keys/`, mode 600).
-- With an API key, export `APPLE_SIGNING_IDENTITY`, `APPLE_API_ISSUER` (the Issuer ID UUID), `APPLE_API_KEY` (the Key ID) and `APPLE_API_KEY_PATH`.
-- With an app-specific password, export `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD` and `APPLE_TEAM_ID`.
-- Never commit these values, and never paste them into docs, issues or chat.
 
-## 4. Build a universal app
+Create an App Store Connect **Team** API key (Users and Access → Integrations), or an app-specific password. Keep the `.p8` outside the repo and outside synced folders (e.g. `~/.private_keys/`, mode 600).
+
+**API key (recommended for CI and local):**
+
+- `APPLE_SIGNING_IDENTITY`
+- `APPLE_API_ISSUER` — Issuer ID UUID
+- `APPLE_API_KEY` — Key ID
+- `APPLE_API_KEY_PATH` — path to `AuthKey_<KEY_ID>.p8`
+
+**App-specific password:**
+
+- `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`
+
+Never commit or paste these values.
+
+## 4. Build
+
 ```bash
-rustup target add aarch64-apple-darwin x86_64-apple-darwin
-npm run tauri build -- --target universal-apple-darwin
+rustup target add aarch64-apple-darwin x86_64-apple-darwin   # once
+npm run build:mac
 ```
-With the variables set, Tauri signs, submits to Apple, waits, and staples. Output: `.app` and `.dmg`.
+
+Equivalent: `npm run tauri build -- --target universal-apple-darwin` with `CARGO_TARGET_DIR` set as above.
+
+With signing + notarization env vars set, Tauri signs, submits to Apple, waits, and staples. Output under `$CARGO_TARGET_DIR/.../release/bundle/`: `.app` and `.dmg`.
+
+If bundling fails with `Failed to create app Assets.car`, confirm `CloudBreak-icon.icon` is **not** in `bundle.icon` (see Current state). You can also run `pkill -x ibtoold` and rebuild.
 
 ## 5. Verify before shipping
-- `codesign --verify --deep --strict --verbose=2 <app>`
-- `spctl -a -vv <app>` should say "accepted, source=Notarized Developer ID"
-- `xcrun stapler validate <dmg>`
-- Download the DMG through a browser (so it is quarantined) onto a second Mac or a fresh user account and open it.
+
+```bash
+codesign --verify --deep --strict --verbose=2 "<path>/Cloudbreak Files.app"
+spctl -a -vv "<path>/Cloudbreak Files.app"    # expect notarized Developer ID after notarization
+xcrun stapler validate "<path>.dmg"
+```
+
+Download the DMG in a browser (quarantine) on a second Mac or fresh user account and open it.
 
 ## 6. Publish
-- Upload the DMG to a GitHub Release tagged with the version.
-- Point the website's "Download for Mac" button at it (it currently links to `#download`).
-- The repo is private, so release downloads will not work publicly. Use a public releases repo or our own hosting.
 
-## 7. Automation and other platforms
-- `.github/workflows/release.yml` builds macOS (universal, signed, notarized) and Windows on a `v*` tag and uploads them to a draft release. It has not been run yet.
-- Repository secrets it needs: `APPLE_CERTIFICATE` (base64 of the exported Developer ID `.p12`), `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_API_ISSUER`, `APPLE_API_KEY`, `APPLE_API_KEY_P8` (the key file contents).
-- The Windows installer is unsigned and will show a SmartScreen warning until the app is code-signed. There is no Linux build.
-- Auto-updates (`tauri-plugin-updater`) are not set up. They need an updater key pair that only the maintainer should generate and keep, and a place to host the update manifest.
+- Upload the DMG to a GitHub Release (tag `v*` triggers CI) or host elsewhere.
+- Point the website “Download for Mac” at the public URL. The marketing site section `#download` still links to the web preview until a stable download URL exists.
+- Private repo: public release assets need a public releases repo or non-GitHub hosting.
 
-## Risks to settle first
-- Still demo or limited: the in-session encryption limit is 32 MB per file, and P2P sharing passes files as base64, so "any file size" on the site is not accurate. Video trim and convert need `ffmpeg` on PATH, which a downloaded app will not have unless it is bundled.
-- The site's "True E2EE" claim is backed by the P2P library code (chunk encryption and key wrapping), but make sure the wording matches the real limits above.
-- A clean-machine test may show missing permission prompts (folders, network) that do not appear on the dev Mac.
+## 7. GitHub Actions secrets
+
+For `.github/workflows/release.yml`:
+
+| Secret | Purpose |
+|--------|---------|
+| `APPLE_CERTIFICATE` | Base64 of exported Developer ID `.p12` |
+| `APPLE_CERTIFICATE_PASSWORD` | `.p12` export password |
+| `APPLE_SIGNING_IDENTITY` | Full codesign identity string |
+| `APPLE_API_ISSUER` | App Store Connect Issuer ID |
+| `APPLE_API_KEY` | API Key ID |
+| `APPLE_API_KEY_P8` | Contents of the `.p8` file |
+| `TAURI_SIGNING_PRIVATE_KEY` | Updater private key file contents (`~/.tauri/cloudbreak-files.key`) |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Optional updater key password (omit if empty) |
+
+Push `v0.1.0` (or run workflow_dispatch), test the draft release installers, then publish the release.
+
+Auto-updates: see [`docs/auto-updates.md`](./auto-updates.md). CI signs updater artifacts and uploads `latest.json` when the signing secrets are set.
+
+## Other platforms and follow-ups
+
+- Windows installer from the same workflow is **unsigned** (SmartScreen warning).
+- No Linux build in CI.
+- Video tools: `npm run build:mac` fetches and embeds ffmpeg (`scripts/fetch-ffmpeg.sh`). Dev builds without it show a first-run toast and an in-player banner.
+
+## Product limits (wording / support)
+
+- Vault: 32 MB IPC path for small blobs; desktop local files use streaming encrypt. P2P prefers `localPath` ingest / materialize over base64.
+- Video trim/convert: release builds embed ffmpeg; otherwise install via Homebrew or use the in-app message.

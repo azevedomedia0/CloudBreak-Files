@@ -38,6 +38,9 @@ interface ProfileSettingsModalProps {
   peerId?: string | null;
   swarmListening?: boolean;
   p2pLibraryCount?: number;
+  onCheckForUpdates?: () => void | Promise<void>;
+  updateChecking?: boolean;
+  appVersion?: string | null;
 }
 
 type SettingsTab = 'profile' | 'preferences' | 'notifications' | 'security' | 'storage' | 'network';
@@ -111,6 +114,9 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
   peerId = null,
   swarmListening = false,
   p2pLibraryCount = 0,
+  onCheckForUpdates,
+  updateChecking = false,
+  appVersion = null,
 }) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
   const [name, setName] = useState(userProfile.name);
@@ -394,6 +400,25 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
 
               <PrefRow title="Native Rust crypto engine" description="Use Tauri AES-GCM when running as a desktop app">
                 <Toggle on={prefs.rustEngineEnabled} onChange={() => patchPrefs('rustEngineEnabled', !prefs.rustEngineEnabled)} />
+              </PrefRow>
+
+              <PrefRow
+                title="App updates"
+                description={
+                  appVersion
+                    ? `Installed version ${appVersion}. Checks the signed GitHub Releases manifest.`
+                    : 'Checks the signed GitHub Releases manifest (desktop app only).'
+                }
+              >
+                <button
+                  type="button"
+                  disabled={!onCheckForUpdates || updateChecking}
+                  onClick={() => { void onCheckForUpdates?.(); }}
+                  className="px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-sky-500/20 text-sky-200 border border-sky-400/30 hover:bg-sky-500/30 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+                >
+                  <RefreshCw className={`w-3 h-3 ${updateChecking ? 'animate-spin' : ''}`} />
+                  {updateChecking ? 'Checking…' : 'Check for updates'}
+                </button>
               </PrefRow>
 
               <div className="flex justify-end pt-1">

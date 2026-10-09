@@ -48,6 +48,39 @@ export interface TrimTranscodeResult {
   outputPath?: string;
 }
 
+export interface FfmpegStatus {
+  available: boolean;
+  path: string | null;
+  /** bundled | env | homebrew | path | missing */
+  source: string;
+  installHint: string;
+}
+
+const FFMPEG_INSTALL_HINT =
+  'Install ffmpeg with Homebrew: brew install ffmpeg. Release builds of Cloudbreak Files ship a bundled copy.';
+
+/** Desktop: whether ffmpeg is available for trim / convert. Browser always reports unavailable. */
+export async function getFfmpegStatus(): Promise<FfmpegStatus> {
+  if (!isTauri()) {
+    return {
+      available: false,
+      path: null,
+      source: 'missing',
+      installHint: 'Open the desktop app to trim and convert video with ffmpeg.',
+    };
+  }
+  try {
+    return await invoke<FfmpegStatus>('ffmpeg_status');
+  } catch {
+    return {
+      available: false,
+      path: null,
+      source: 'missing',
+      installHint: FFMPEG_INSTALL_HINT,
+    };
+  }
+}
+
 function bytesToBase64(bytes: Uint8Array): string {
   const CHUNK = 0x8000;
   let binary = '';

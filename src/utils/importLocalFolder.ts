@@ -237,11 +237,22 @@ async function diskEntryToItem(entry: LocalEntry, folderId: string, folderPath: 
   };
 }
 
+export type ImportLocalFolderOptions = {
+  /** Override the root folder id (used for stable Desktop / Documents / … entries). */
+  rootId?: string;
+  /** Override the sidebar display name (e.g. Pictures → Photos). */
+  displayName?: string;
+};
+
 /** Scan a folder the user added in the desktop app and build the sidebar folders and file list. */
-export async function importLocalFolderAtPath(folder: LocalFolder): Promise<LocalFolderImport> {
+export async function importLocalFolderAtPath(
+  folder: LocalFolder,
+  options: ImportLocalFolderOptions = {},
+): Promise<LocalFolderImport> {
   const scan = await localFs.scanFolder(folder.path);
-  const rootId = `folder-local-${folder.path}`;
-  const rootFolder: FolderItem = { id: rootId, name: folder.name, accountId: 'all', itemCount: 0, color: 'sky' };
+  const displayName = options.displayName ?? folder.name;
+  const rootId = options.rootId ?? `folder-local-${folder.path}`;
+  const rootFolder: FolderItem = { id: rootId, name: displayName, accountId: 'all', itemCount: 0, color: 'sky' };
   const folders: FolderItem[] = [rootFolder];
   const folderIds = new Map<string, string>([['', rootId]]);
   const pending: Array<{ entry: LocalEntry; folderId: string; folderPath: string }> = [];
@@ -259,7 +270,7 @@ export async function importLocalFolderAtPath(folder: LocalFolder): Promise<Loca
       pending.push({
         entry,
         folderId: parentId,
-        folderPath: folderPathFor(folder.name, parentRel ? parentRel.split('/') : []),
+        folderPath: folderPathFor(displayName, parentRel ? parentRel.split('/') : []),
       });
     }
   }

@@ -37,6 +37,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": [
       "app",
       "dmg"
@@ -47,12 +48,23 @@
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
-      "icons/icon.ico",
-      "icons/CloudBreak-icon.icon"
+      "icons/icon.ico"
     ],
     "macOS": {
       "hardenedRuntime": true,
-      "minimumSystemVersion": "12.0"
+      "minimumSystemVersion": "12.0",
+      "entitlements": "Entitlements.plist"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQzNEYxMjYzMjI1Q0Y3N0EKUldSNjkxd2lZeEpQMDgzUmdsblNra2tYMVRyU2UrWFUweGthQ3VTRk1YZmJpMVAvY3Q3ME5RS2IK",
+      "endpoints": [
+        "https://github.com/azevedomedia0/CloudBreak-Files/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

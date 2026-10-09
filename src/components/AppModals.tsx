@@ -54,6 +54,9 @@ export interface AppModalsProps {
   peerId?: string | null;
   swarmListening?: boolean;
   p2pLibraryCount?: number;
+  onCheckForUpdates?: () => void | Promise<void>;
+  updateChecking?: boolean;
+  appVersion?: string | null;
   showToast: (msg: string) => void;
   isAddAccountOpen: boolean;
   setIsAddAccountOpen: (open: boolean) => void;
@@ -74,11 +77,11 @@ export interface AppModalsProps {
   handleJoinIncomingLibrary: (form: JoinP2pLibraryForm) => void | Promise<void>;
   isAddFavoriteOpen: boolean;
   setIsAddFavoriteOpen: (open: boolean) => void;
-  networkServers: Array<{ name: string; desc: string; online: boolean }>;
+  networkServers: Array<{ id: string; name: string; desc: string; online: boolean }>;
   removableDevices: RemovableDevice[];
   favoritedSourceIds: ReadonlySet<string>;
   onBrowseFavoriteFolder: () => Promise<boolean>;
-  onAddFavoriteNetwork: (serverName: string) => void;
+  onAddFavoriteNetwork: (serverId: string) => void;
   onAddFavoriteDevice: (deviceId: string) => void;
   isConnectServerOpen: boolean;
   setIsConnectServerOpen: (open: boolean) => void;
@@ -126,6 +129,9 @@ export const AppModals: React.FC<AppModalsProps> = ({
   peerId = null,
   swarmListening = false,
   p2pLibraryCount = 0,
+  onCheckForUpdates,
+  updateChecking = false,
+  appVersion = null,
   showToast,
   isAddAccountOpen,
   setIsAddAccountOpen,
@@ -250,6 +256,9 @@ export const AppModals: React.FC<AppModalsProps> = ({
     peerId={peerId}
     swarmListening={swarmListening}
     p2pLibraryCount={p2pLibraryCount}
+    onCheckForUpdates={onCheckForUpdates}
+    updateChecking={updateChecking}
+    appVersion={appVersion}
   />
 
   {/* Modal 5: Connect / Mount New Cloud Account */}

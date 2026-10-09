@@ -504,11 +504,11 @@ type FavoriteChooserView = 'menu' | 'network' | 'device';
 interface AddFavoriteModalProps {
   isOpen: boolean;
   onClose: () => void;
-  networkServers: Array<{ name: string; desc: string; online: boolean }>;
+  networkServers: Array<{ id: string; name: string; desc: string; online: boolean }>;
   removableDevices: RemovableDevice[];
   favoritedSourceIds: ReadonlySet<string>;
   onBrowseFolder: () => Promise<boolean>;
-  onAddNetwork: (serverName: string) => void;
+  onAddNetwork: (serverId: string) => void;
   onAddDevice: (deviceId: string) => void;
 }
 
@@ -639,14 +639,14 @@ export const AddFavoriteModal: React.FC<AddFavoriteModalProps> = ({
                 <p className="text-xs text-neutral-400 py-4 text-center">No network servers connected yet.</p>
               )}
               {networkServers.map(server => {
-                const already = favoritedSourceIds.has(server.name);
+                const already = favoritedSourceIds.has(server.id);
                 return (
                   <button
-                    key={server.name}
+                    key={server.id}
                     type="button"
                     disabled={already}
                     onClick={() => {
-                      onAddNetwork(server.name);
+                      onAddNetwork(server.id);
                       resetAndClose();
                     }}
                     className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-left transition-all disabled:opacity-40 disabled:cursor-not-allowed"
