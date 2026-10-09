@@ -216,7 +216,7 @@ pub fn process_photo_render(req: PhotoRenderRequest) -> Result<PhotoRenderResult
 }
 
 /// The only folder the media commands may read, write or delete in.
-fn media_temp_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+pub fn media_temp_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
     Ok(app
         .path()
         .temp_dir()
@@ -232,8 +232,17 @@ fn in_media_temp(app: &AppHandle, path: &str) -> Result<std::path::PathBuf, Stri
 }
 
 #[tauri::command]
-pub fn trim_video_stream(mut req: VideoTrimRequest, app: AppHandle) -> Result<MediaProcessResult, String> {
-    req.input_path = in_media_temp(&app, &req.input_path)?.to_string_lossy().into_owned();
+pub fn trim_video_stream(
+    mut req: VideoTrimRequest,
+    app: AppHandle,
+    roots: State<'_, crate::local_fs::LocalRoots>,
+) -> Result<MediaProcessResult, String> {
+    // The source is a staged copy, or a file in a folder the user added (so big videos are not copied around).
+    let input = in_media_temp(&app, &req.input_path).or_else(|_| {
+        crate::local_fs::resolve_in_roots(&crate::local_fs::snapshot(&roots), std::path::Path::new(&req.input_path))
+            .map_err(|_| "The video must be in an added folder".to_string())
+    })?;
+    req.input_path = input.to_string_lossy().into_owned();
     req.output_path = in_media_temp(&app, &req.output_path)?.to_string_lossy().into_owned();
     media::trim_video_stream(&req).map_err(|e| e.to_string())
 }

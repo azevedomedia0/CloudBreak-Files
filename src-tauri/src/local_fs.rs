@@ -24,6 +24,8 @@ const MAX_READ_BYTES: u64 = 64 * 1024 * 1024;
 #[derive(Default)]
 pub struct LocalRoots {
     roots: Mutex<Vec<PathBuf>>,
+    /// Folders allowed for this session only (save destinations). Never written to disk.
+    session_only: Mutex<Vec<PathBuf>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -222,6 +224,39 @@ fn rename_in_place(path: &Path, new_name: &str) -> Result<PathBuf, String> {
     Ok(target)
 }
 
+/// `name`, or `name 2`, `name 3`, ... if a file with that name is already in `dir`.
+pub fn unique_destination(dir: &Path, name: &str) -> PathBuf {
+    let first = dir.join(name);
+    if !first.exists() {
+        return first;
+    }
+    let (stem, ext) = match name.rfind('.') {
+        Some(dot) if dot > 0 => (&name[..dot], &name[dot..]),
+        _ => (name, ""),
+    };
+    let mut n = 2;
+    loop {
+        let candidate = dir.join(format!("{stem} {n}{ext}"));
+        if !candidate.exists() {
+            return candidate;
+        }
+        n += 1;
+    }
+}
+
+/// Copy `src` to `dest` through a temp file in the destination folder, so a failed copy leaves no partial file.
+pub fn copy_atomic(src: &Path, dest: &Path) -> Result<(), String> {
+    let dir = dest.parent().ok_or("That path has no parent folder")?;
+    let name = dest.file_name().ok_or("That path has no file name")?.to_string_lossy().into_owned();
+    let tmp = dir.join(format!(".{name}.cloudbreak-tmp"));
+    fs::copy(src, &tmp)
+        .and_then(|_| fs::rename(&tmp, dest))
+        .map_err(|e| {
+            let _ = fs::remove_file(&tmp);
+            format!("Could not save {name}: {e}")
+        })
+}
+
 fn load_roots(file: &Path) -> Vec<PathBuf> {
     fs::read_to_string(file)
         .ok()
@@ -249,8 +284,13 @@ fn roots_file(app: &AppHandle) -> Result<PathBuf, String> {
         .join(ROOTS_FILE))
 }
 
-fn snapshot(state: &State<'_, LocalRoots>) -> Vec<PathBuf> {
-    state.roots.lock().map(|r| r.clone()).unwrap_or_default()
+/// Every folder the web view may use right now: remembered folders plus session-only save destinations.
+pub fn snapshot(state: &LocalRoots) -> Vec<PathBuf> {
+    let mut all = state.roots.lock().map(|r| r.clone()).unwrap_or_default();
+    if let Ok(extra) = state.session_only.lock() {
+        all.extend(extra.iter().cloned());
+    }
+    all
 }
 
 /// Called at startup: load the folders picked in earlier sessions and let the web view load their media.
@@ -265,18 +305,25 @@ pub fn restore_roots(app: &AppHandle, state: &LocalRoots) {
     }
 }
 
-fn add_root(app: &AppHandle, state: &State<'_, LocalRoots>, root: PathBuf) -> Result<LocalFolder, String> {
+/// Allow a folder. `remember` keeps it for later launches; otherwise it is only allowed until the app quits.
+fn add_root(app: &AppHandle, state: &LocalRoots, root: PathBuf, remember: bool) -> Result<LocalFolder, String> {
     let root = fs::canonicalize(&root).map_err(|e| format!("Could not open that folder: {e}"))?;
     if !root.is_dir() {
         return Err("That is not a folder".into());
     }
-    app.asset_protocol_scope()
-        .allow_directory(&root, true)
-        .map_err(|e| format!("Could not allow that folder: {e}"))?;
-    let mut guard = state.roots.lock().map_err(|_| "Local folder list is unavailable".to_string())?;
-    if !guard.contains(&root) {
-        guard.push(root.clone());
+    if remember {
+        app.asset_protocol_scope()
+            .allow_directory(&root, true)
+            .map_err(|e| format!("Could not allow that folder: {e}"))?;
+        let mut guard = state.roots.lock().map_err(|_| "Local folder list is unavailable".to_string())?;
+        if !guard.contains(&root) {
+            guard.push(root.clone());
+        }
         save_roots(&roots_file(app)?, &guard)?;
+    } else if let Ok(mut guard) = state.session_only.lock() {
+        if !guard.contains(&root) {
+            guard.push(root.clone());
+        }
     }
     Ok(folder_of(&root))
 }
@@ -296,13 +343,31 @@ pub async fn local_pick_folder(app: AppHandle, state: State<'_, LocalRoots>) -> 
     .map_err(|e| e.to_string())?;
     let Some(picked) = picked else { return Ok(None) };
     let path = picked.into_path().map_err(|e| e.to_string())?;
-    add_root(&app, &state, path).map(Some)
+    add_root(&app, &state, path, true).map(Some)
+}
+
+/// Folder picker for choosing where to save something. The folder is allowed for this session only.
+#[tauri::command]
+pub async fn local_pick_save_folder(app: AppHandle, state: State<'_, LocalRoots>) -> Result<Option<LocalFolder>, String> {
+    let dialog_app = app.clone();
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        dialog_app
+            .dialog()
+            .file()
+            .set_title("Choose where to save")
+            .blocking_pick_folder()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    let Some(picked) = picked else { return Ok(None) };
+    let path = picked.into_path().map_err(|e| e.to_string())?;
+    add_root(&app, &state, path, false).map(Some)
 }
 
 /// Folders picked in earlier sessions that still exist.
 #[tauri::command]
 pub fn local_list_folders(state: State<'_, LocalRoots>) -> Vec<LocalFolder> {
-    snapshot(&state).iter().map(|p| folder_of(p)).collect()
+    state.roots.lock().map(|r| r.iter().map(|p| folder_of(p)).collect()).unwrap_or_default()
 }
 
 /// Stop tracking a folder. The files on disk are not touched.
@@ -361,6 +426,67 @@ pub fn local_rename_file(path: String, new_name: String, state: State<'_, LocalR
     let resolved = resolve_in_roots(&snapshot(&state), Path::new(&path))?;
     let renamed = rename_in_place(&resolved, &new_name)?;
     info_for(&renamed)
+}
+
+/// Move a file to the Trash. It can be restored from there.
+#[tauri::command]
+pub fn local_trash_file(path: String, state: State<'_, LocalRoots>) -> Result<(), String> {
+    let resolved = resolve_in_roots(&snapshot(&state), Path::new(&path))?;
+    let meta = fs::symlink_metadata(&resolved).map_err(|e| format!("Could not find the file: {e}"))?;
+    if !meta.is_file() {
+        return Err("Only files can be moved to the Trash from here".into());
+    }
+    move_to_trash(&resolved).map_err(|e| format!("Could not move the file to the Trash: {e}"))
+}
+
+/// On macOS this uses the system file manager directly. The default (asking Finder) would need
+/// Automation permission and show a prompt.
+fn move_to_trash(path: &Path) -> Result<(), trash::Error> {
+    let mut ctx = trash::TrashContext::default();
+    #[cfg(target_os = "macos")]
+    {
+        use trash::macos::{DeleteMethod, TrashContextExtMacos};
+        ctx.set_delete_method(DeleteMethod::NsFileManager);
+    }
+    ctx.delete(path)
+}
+
+/// Save a finished media file from the app's temp folder. With `folder`, it goes there (renamed if the
+/// name is taken). Without it, the macOS save dialog opens. Returns `None` if the user cancels.
+#[tauri::command]
+pub async fn local_save_from_temp(
+    temp_path: String,
+    file_name: String,
+    folder: Option<String>,
+    app: AppHandle,
+    state: State<'_, LocalRoots>,
+) -> Result<Option<LocalFileInfo>, String> {
+    let temp = crate::commands::media_temp_dir(&app)?;
+    let src = resolve_in_roots(&[temp], Path::new(&temp_path))
+        .map_err(|_| "Media files must be in the app's temporary media folder".to_string())?;
+    let name = valid_file_name(&file_name)?.to_string();
+
+    let dest = match folder {
+        Some(dir) => {
+            let dir = resolve_in_roots(&snapshot(&state), Path::new(&dir))?;
+            if !dir.is_dir() {
+                return Err("That is not a folder".into());
+            }
+            unique_destination(&dir, &name)
+        }
+        None => {
+            let dialog_app = app.clone();
+            let picked = tauri::async_runtime::spawn_blocking(move || {
+                dialog_app.dialog().file().set_file_name(name).blocking_save_file()
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+            let Some(picked) = picked else { return Ok(None) };
+            picked.into_path().map_err(|e| e.to_string())?
+        }
+    };
+    copy_atomic(&src, &dest)?;
+    info_for(&dest).map(Some)
 }
 
 #[cfg(test)]
@@ -505,6 +631,61 @@ mod tests {
         save_roots(&file, &[keep.clone(), gone.clone()]).unwrap();
         fs::remove_dir_all(&gone).unwrap();
         assert_eq!(load_roots(&file), vec![keep]);
+    }
+
+    #[test]
+    fn unique_destination_adds_a_number_when_the_name_is_taken() {
+        let t = Tmp::new();
+        assert_eq!(unique_destination(&t.0, "clip.mp4"), t.0.join("clip.mp4"));
+        fs::write(t.0.join("clip.mp4"), "x").unwrap();
+        assert_eq!(unique_destination(&t.0, "clip.mp4"), t.0.join("clip 2.mp4"));
+        fs::write(t.0.join("clip 2.mp4"), "x").unwrap();
+        assert_eq!(unique_destination(&t.0, "clip.mp4"), t.0.join("clip 3.mp4"));
+        fs::write(t.0.join("README"), "x").unwrap();
+        assert_eq!(unique_destination(&t.0, "README"), t.0.join("README 2"));
+    }
+
+    #[test]
+    fn copy_atomic_copies_and_leaves_no_temp_file() {
+        let t = Tmp::new();
+        let src = t.0.join("src.bin");
+        fs::write(&src, [5u8; 1000]).unwrap();
+        let dest = t.0.join("out.bin");
+        copy_atomic(&src, &dest).unwrap();
+        assert_eq!(fs::read(&dest).unwrap(), vec![5u8; 1000]);
+        assert!(src.exists());
+        let names: Vec<_> = fs::read_dir(&t.0).unwrap().filter_map(Result::ok).map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+        assert!(!names.iter().any(|n| n.contains("cloudbreak-tmp")));
+    }
+
+    #[test]
+    fn copy_atomic_failure_leaves_nothing_behind() {
+        let t = Tmp::new();
+        let missing = t.0.join("nope.bin");
+        assert!(copy_atomic(&missing, &t.0.join("out.bin")).is_err());
+        assert_eq!(fs::read_dir(&t.0).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn session_only_folders_are_allowed_but_not_listed_as_remembered() {
+        let t = Tmp::new();
+        let state = LocalRoots::default();
+        state.roots.lock().unwrap().push(t.0.join("keep"));
+        state.session_only.lock().unwrap().push(t.0.join("scratch"));
+        let all = snapshot(&state);
+        assert_eq!(all.len(), 2);
+        assert!(all.contains(&t.0.join("scratch")));
+        assert_eq!(state.roots.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    #[ignore = "moves a real file to the user's Trash; run by hand with --ignored"]
+    fn trash_moves_a_file_out_of_its_folder() {
+        let t = Tmp::new();
+        let file = t.0.join("cloudbreak-trash-test.txt");
+        fs::write(&file, "bye").unwrap();
+        move_to_trash(&file).unwrap();
+        assert!(!file.exists());
     }
 
     #[test]

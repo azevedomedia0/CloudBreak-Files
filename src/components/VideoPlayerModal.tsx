@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Play } from 'lucide-react';
 import { FileItem, VideoConvertOptions, CloudAccount, FolderItem, isAudioConvertFormat, convertFormatMime } from '../types';
-import { trimAndTranscode } from '../services/mediaBridge';
+import { discardTempOutput, trimAndTranscode } from '../services/mediaBridge';
+import { localFs } from '../services/localFsBridge';
 import { PlayerHeader } from './video-player/PlayerHeader';
 import { TrimPanel } from './video-player/TrimPanel';
 import { ConvertPanel, SaveDestination } from './video-player/ConvertPanel';
@@ -89,7 +90,15 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const [customBaseName, setCustomBaseName] = useState<string>('');
   const [savedLocalName, setSavedLocalName] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [localFolder, setLocalFolder] = useState<{ name: string; handle: LocalDirectoryHandle } | null>(null);
+  // In the browser a folder is a directory handle; in the desktop app it is a path chosen with the native dialog.
+  const [localFolder, setLocalFolder] = useState<{ name: string; handle?: LocalDirectoryHandle; path?: string } | null>(null);
+  // Desktop app: the finished file in the app's temp folder, kept so it can be saved without re-sending the video.
+  const outputPathRef = useRef<string | null>(null);
+  const dropOutput = () => {
+    const path = outputPathRef.current;
+    outputPathRef.current = null;
+    void discardTempOutput(path);
+  };
 
   // Initialize durations and reset on file change
   useEffect(() => {
@@ -100,6 +109,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     setTranscodeComplete(false);
     setIsTranscoding(false);
     setTranscodeProgress(0);
+    dropOutput();
     setTranscodedResultUrl(null);
     setCustomBaseName('');
     setSavedLocalName(null);
@@ -108,6 +118,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       setActiveTab(initialTab);
     }
   }, [file.id, isOpen, initialTab]);
+
+  useEffect(() => dropOutput, []);
 
   useEffect(() => {
     setConvertOptions(prev => ({ ...prev, trimStart, trimEnd }));
@@ -277,12 +289,14 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     if (transcodedResultUrl?.startsWith('blob:')) {
       try { URL.revokeObjectURL(transcodedResultUrl); } catch { /* ignore */ }
     }
+    dropOutput();
     setTranscodedResultUrl(null);
 
     try {
       const result = await trimAndTranscode(
         {
           sourceUrl: file.url,
+          sourcePath: file.localPath,
           sourceExtension: file.name.split('.').pop() || 'mp4',
           startSeconds: trimStart,
           endSeconds: trimEnd,
@@ -294,6 +308,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
         },
         pct => setTranscodeProgress(pct),
       );
+      outputPathRef.current = result.outputPath ?? null;
       setTranscodedResultUrl(result.blobUrl);
       setTranscodeProgress(100);
       setTranscodeComplete(true);
@@ -352,6 +367,15 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
   const browseLocalFolder = async () => {
     setSaveError(null);
+    if (localFs.available()) {
+      try {
+        const picked = await localFs.pickSaveFolder();
+        if (picked) setLocalFolder({ name: picked.name, path: picked.path });
+      } catch (err) {
+        setSaveError(err instanceof Error ? err.message : "Couldn't open that folder. Try another one.");
+      }
+      return;
+    }
     const showDirectoryPicker = (window as unknown as {
       showDirectoryPicker?: (opts: { mode: 'readwrite' }) => Promise<LocalDirectoryHandle>;
     }).showDirectoryPicker;
@@ -376,7 +400,13 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       return;
     }
     try {
-      if (localFolder) {
+      if (localFs.available() && outputPathRef.current) {
+        const info = await localFs.saveFromTemp(outputPathRef.current, outputName, localFolder?.path);
+        if (info) setSavedLocalName(localFolder ? `${localFolder.name}/${info.name}` : info.name);
+        return;
+      }
+
+      if (localFolder?.handle) {
         const blob = await (await fetch(sourceUrl)).blob();
         const fileHandle = await localFolder.handle.getFileHandle(outputName, { create: true });
         const writable = await fileHandle.createWritable();
@@ -405,7 +435,9 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
         setSavedLocalName(outputName);
       }
     } catch (err) {
-      if ((err as Error).name !== 'AbortError') setSaveError("Couldn't save the file. Try again or pick another location.");
+      if ((err as Error).name !== 'AbortError') {
+        setSaveError(localFs.available() && err instanceof Error ? err.message : "Couldn't save the file. Try again or pick another location.");
+      }
     }
   };
 

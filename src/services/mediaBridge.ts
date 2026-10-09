@@ -25,6 +25,8 @@ export interface MediaProcessResult {
 
 export interface TrimTranscodeOptions {
   sourceUrl: string;
+  /** Absolute path of the source when it is a file in an added folder (desktop app). It is read in place, not copied. */
+  sourcePath?: string;
   /** Suggested extension of the source (mp4, mov, …). */
   sourceExtension?: string;
   startSeconds: number;
@@ -34,6 +36,16 @@ export interface TrimTranscodeOptions {
   quality: VideoConvertOptions['quality'];
   fps: number;
   includeAudio: boolean;
+}
+
+export interface TrimTranscodeResult {
+  blobUrl: string;
+  mimeType: string;
+  sizeBytes: number;
+  checksum?: string;
+  engine: string;
+  /** Desktop app only: the finished file in the app's temp folder. Pass it to `discardTempOutput` when done. */
+  outputPath?: string;
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -136,7 +148,7 @@ export function photoResultToBlobUrl(result: PhotoRenderResult): string {
 export async function trimAndTranscode(
   opts: TrimTranscodeOptions,
   onProgress?: (pct: number) => void
-): Promise<{ blobUrl: string; mimeType: string; sizeBytes: number; checksum?: string; engine: string }> {
+): Promise<TrimTranscodeResult> {
   onProgress?.(5);
 
   if (isTauri()) {
@@ -145,18 +157,33 @@ export async function trimAndTranscode(
   return trimWithMediaRecorder(opts, onProgress);
 }
 
+/** Delete a finished output kept in the app's temp folder (see `trimAndTranscode`). Safe to call twice. */
+export async function discardTempOutput(path: string | null | undefined): Promise<void> {
+  if (!path || !isTauri()) return;
+  try {
+    await invoke('media_cleanup_temp', { req: { path } });
+  } catch { /* already gone */ }
+}
+
 async function trimWithFfmpeg(
   opts: TrimTranscodeOptions,
   onProgress?: (pct: number) => void
-): Promise<{ blobUrl: string; mimeType: string; sizeBytes: number; checksum?: string; engine: string }> {
+): Promise<TrimTranscodeResult> {
   onProgress?.(10);
-  const bytes = await fetchBytes(opts.sourceUrl);
-  onProgress?.(25);
-
-  const srcExt = opts.sourceExtension || extFromUrlOrName(opts.sourceUrl, 'mp4');
-  const inputPath = (await invoke('media_stage_temp', {
-    req: { dataBase64: bytesToBase64(bytes), extension: srcExt },
-  })) as string;
+  // A local file is read where it is. Anything else is copied into the app's temp folder first.
+  let inputPath: string;
+  let stagedInput = false;
+  if (opts.sourcePath) {
+    inputPath = opts.sourcePath;
+  } else {
+    const bytes = await fetchBytes(opts.sourceUrl);
+    onProgress?.(25);
+    const srcExt = opts.sourceExtension || extFromUrlOrName(opts.sourceUrl, 'mp4');
+    inputPath = (await invoke('media_stage_temp', {
+      req: { dataBase64: bytesToBase64(bytes), extension: srcExt },
+    })) as string;
+    stagedInput = true;
+  }
 
   const outExt = opts.format;
   // Stage an empty placeholder path by writing a tiny stub then overwriting via ffmpeg output_path.
@@ -165,6 +192,7 @@ async function trimWithFfmpeg(
   })) as string;
 
   onProgress?.(40);
+  let keepOutput = false;
   try {
     const result = (await invoke('trim_video_stream', {
       req: {
@@ -190,20 +218,19 @@ async function trimWithFfmpeg(
       new Blob([Uint8Array.from(outBytes)], { type: mimeType })
     );
     onProgress?.(100);
+    keepOutput = true;
     return {
       blobUrl,
       mimeType,
       sizeBytes: outBytes.byteLength,
       checksum: result.sha256Checksum,
       engine: 'ffmpeg',
+      // Kept so it can be saved to a folder without sending the video through the web view again.
+      outputPath: result.outputPath,
     };
   } finally {
-    try {
-      await invoke('media_cleanup_temp', { req: { path: inputPath } });
-    } catch { /* ignore */ }
-    try {
-      await invoke('media_cleanup_temp', { req: { path: stub } });
-    } catch { /* ignore */ }
+    if (stagedInput) await discardTempOutput(inputPath);
+    if (!keepOutput) await discardTempOutput(stub);
   }
 }
 

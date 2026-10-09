@@ -59,6 +59,24 @@ export const localFs = {
     return invoke<LocalFolder | null>('local_pick_folder');
   },
 
+  /** Folder picker for choosing where to save something. Allowed for this session only, never remembered. */
+  pickSaveFolder(): Promise<LocalFolder | null> {
+    return invoke<LocalFolder | null>('local_pick_save_folder');
+  },
+
+  /** Move a file to the Trash. It can be restored from there. */
+  trashFile(path: string): Promise<void> {
+    return invoke<void>('local_trash_file', { path });
+  },
+
+  /**
+   * Save a finished media file from the app's temp folder. With `folder` it goes there (renamed if the name is
+   * taken); without it the macOS save dialog opens. Resolves to `null` if the user cancels.
+   */
+  saveFromTemp(tempPath: string, fileName: string, folder?: string): Promise<LocalFileInfo | null> {
+    return invoke<LocalFileInfo | null>('local_save_from_temp', { tempPath, fileName, folder: folder ?? null });
+  },
+
   /** Folders added in earlier sessions that still exist. */
   listFolders(): Promise<LocalFolder[]> {
     return invoke<LocalFolder[]>('local_list_folders');
