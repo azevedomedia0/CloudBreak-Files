@@ -1,12 +1,26 @@
 # Cloudbreak Files
 
-Desktop app (Tauri 2, React 19, Vite, Tailwind 4) that manages many cloud accounts and has a client-side encrypted vault.
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
-Most of the UI runs on sample data. Cloud accounts, uploads, photo editing and video trimming are not connected to real services yet.
+Open-source desktop file explorer for macOS (Windows/Linux builds planned).  
+**Tauri 2 · React 19 · Vite · Tailwind 4**
+
+Manage local folders, multiple cloud accounts, a client-side encrypted vault, media tools, and private P2P libraries — without sample/demo data on a fresh launch.
+
+**Repository:** [github.com/azevedomedia0/CloudBreak-Files](https://github.com/azevedomedia0/CloudBreak-Files)
+
+## Features
+
+- **Local Files** — add folders, rescan from disk, edit/save in place (path-sandboxed)
+- **Encrypted vault** — AES-256-GCM, PBKDF2 (600k), session key held in Rust
+- **Cloud accounts** — Google Drive, Dropbox, OneDrive, MEGA, Nextcloud (credentials in the OS keychain on desktop)
+- **Media** — photo adjustments; video trim/convert (bundled ffmpeg in release builds)
+- **P2P libraries** — invite-dial E2EE sharing with chunked encryption
+- **Auto-updates** — signed Tauri updater (see [`docs/auto-updates.md`](docs/auto-updates.md))
 
 ## Run
 
-Needs Node.js and, for the desktop app, Rust.
+Needs Node.js 22+ and, for the desktop app, a Rust toolchain.
 
 ```bash
 npm install
@@ -14,15 +28,26 @@ npm run dev          # web preview at http://localhost:3000
 npm run tauri dev    # desktop app
 ```
 
+Do not keep `node_modules` inside OneDrive if you can avoid it. For Rust builds, set `CARGO_TARGET_DIR` outside OneDrive (the macOS release script does this by default).
+
 ## Check
 
 ```bash
-npm run lint                  # TypeScript type check
-cd src-tauri && cargo test    # Rust tests (crypto and vault file)
+npm run lint                  # TypeScript
+cd src-tauri && cargo test    # Rust (crypto, local FS path checks, …)
+npm run test:crypto           # Rust ↔ Web Crypto interop
+npm run test:app              # in-app self-test (desktop debug build)
 ```
 
-## Security notes
+## Release (macOS)
 
-- Encryption is AES-256-GCM with a PBKDF2-HMAC-SHA256 key (600,000 iterations). Passphrases need 8 or more characters.
-- The vault stores a salted passphrase check in `vault.json` in the app data folder. It never stores the passphrase or a key.
-- Uploads and the "encrypt" buttons do not encrypt file bytes yet.
+```bash
+npm run build:mac             # signed/notarized when Apple env vars are set
+```
+
+See [`docs/notarized-distribution.md`](docs/notarized-distribution.md) and [`docs/auto-updates.md`](docs/auto-updates.md).  
+Never commit Apple API keys, updater private keys, or `.p8` / `.p12` files.
+
+## License
+
+Licensed under the [Apache License, Version 2.0](LICENSE).

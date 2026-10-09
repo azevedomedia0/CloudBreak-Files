@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { Cpu, Globe, Radio, Server, Settings } from 'lucide-react';
+import { Settings } from 'lucide-react';
+import type { NetworkServerEntry } from '../services/volumesBridge';
+import type { SwarmStatus } from '../services/p2pBridge';
 import { CloudAccount, FolderItem, SharedLibrary, CloudProviderId, RemovableDevice, FavoriteShortcut } from '../types';
 import { FavoritesSection } from './sidebar/FavoritesSection';
 import { FoldersSection } from './sidebar/FoldersSection';
@@ -13,6 +15,7 @@ import { useSectionOrder } from '../hooks/useSectionOrder';
 import { DraggableSidebarSection } from './DraggableSidebarSection';
 import { isIncomingLibrary, isOutgoingLibrary } from '../utils/libraryDirection';
 import { getFolderIcon } from '../utils/folderIcons';
+import { sortLocalRootFolders } from '../utils/defaultLocalFolders';
 
 interface SidebarProps {
   accounts: CloudAccount[];
@@ -36,17 +39,20 @@ interface SidebarProps {
   onToggleCollapse?: () => void;
   onAddFavorite?: () => void;
   onAddNewFolder?: () => void;
+  onRescanLocalFolders?: () => void;
+  isRescanningLocal?: boolean;
   onAddNewSharedLibrary?: () => void;
   onAddNewIncomingLibrary?: () => void;
   onAddNewOutgoingLibrary?: () => void;
   onAddNetworkServer?: () => void;
-  networkServers?: Array<{ name: string; desc: string; icon?: any; online: boolean }>;
+  networkServers?: NetworkServerEntry[];
   removableDevices?: RemovableDevice[];
   onEjectDevice?: (deviceId: string) => void;
   onSelectRemovableDevice?: (device: RemovableDevice) => void;
   selectedRemovableDeviceId?: string | null;
-  onSelectNetworkServer?: (name: string) => void;
-  selectedNetworkServerName?: string | null;
+  onSelectNetworkServer?: (server: NetworkServerEntry) => void;
+  selectedNetworkServerId?: string | null;
+  swarmStatus?: SwarmStatus | null;
   customFavorites?: FavoriteShortcut[];
   selectedSourceId?: string | null;
   onSelectFavoriteSource?: (sourceId: string) => void;
@@ -79,22 +85,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onToggleCollapse,
   onAddFavorite,
   onAddNewFolder,
+  onRescanLocalFolders,
+  isRescanningLocal = false,
   onAddNewSharedLibrary,
   onAddNewIncomingLibrary,
   onAddNewOutgoingLibrary,
   onAddNetworkServer,
-  networkServers = [
-    { name: 'Studio NAS (10GbE SMB)', desc: '192.168.1.100', icon: Server, online: true },
-    { name: 'Render Farm Cluster', desc: 'Node 01-08', icon: Cpu, online: true },
-    { name: 'Cloudbreak P2P Relay', desc: 'Direct encrypted', icon: Radio, online: true },
-    { name: 'Edge Gateway (Cloud Relay)', desc: 'Direct encrypted proxy', icon: Globe, online: true },
-  ],
+  networkServers = [],
   removableDevices = [],
   onEjectDevice,
   onSelectRemovableDevice,
   selectedRemovableDeviceId,
   onSelectNetworkServer,
-  selectedNetworkServerName,
+  selectedNetworkServerId,
+  swarmStatus = null,
   customFavorites = [],
   selectedSourceId = null,
   onSelectFavoriteSource,
@@ -120,9 +124,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const onlineServerCount = networkServers.filter(s => s.online).length;
   const totalServerCount = networkServers.length;
-  const p2pSharedCount = sharedLibraries.length;
-
-  const visibleFolders = folders.filter(f => f.accountId === 'all' && !f.parentId);
+  const visibleFolders = sortLocalRootFolders(
+    folders.filter(f => f.accountId === 'all' && !f.parentId),
+  );
 
   // Map section keys to their component rendering
   const sectionComponents = useMemo(() => ({
@@ -149,6 +153,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         onSelectFolder={onSelectFolder}
         onSelectLibrary={onSelectLibrary}
         onAddNewFolder={onAddNewFolder}
+        onRescanFolders={onRescanLocalFolders}
+        isRescanning={isRescanningLocal}
         collapsed={collapsed}
         toggleSection={toggleSection}
         visibleFolders={visibleFolders}
@@ -203,14 +209,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
         onSelectRemovableDevice={onSelectRemovableDevice}
         selectedRemovableDeviceId={selectedRemovableDeviceId}
         onSelectNetworkServer={onSelectNetworkServer}
-        selectedNetworkServerName={selectedNetworkServerName}
+        selectedNetworkServerId={selectedNetworkServerId}
         collapsed={collapsed}
         toggleSection={toggleSection}
         onlineServerCount={onlineServerCount}
         totalServerCount={totalServerCount}
       />
     ),
-  }), [accounts, selectedAccountId, onSelectAccount, selectedFolderId, onSelectFolder, selectedLibraryId, onSelectLibrary, onAddFavorite, customFavorites, collapsed, visibleFolders, incomingLibraries, outgoingLibraries, onAddNewSharedLibrary, onAddNewIncomingLibrary, onAddNewOutgoingLibrary, onOpenAddAccount, onOpenAccountSettings, onAddNetworkServer, networkServers, removableDevices, onEjectDevice, onSelectRemovableDevice, selectedRemovableDeviceId, onSelectNetworkServer, selectedNetworkServerName, onlineServerCount, totalServerCount, selectedSourceId, onSelectFavoriteSource]);
+  }), [accounts, selectedAccountId, onSelectAccount, selectedFolderId, onSelectFolder, selectedLibraryId, onSelectLibrary, onAddFavorite, customFavorites, collapsed, visibleFolders, incomingLibraries, outgoingLibraries, onAddNewFolder, onRescanLocalFolders, isRescanningLocal, onAddNewSharedLibrary, onAddNewIncomingLibrary, onAddNewOutgoingLibrary, onOpenAddAccount, onOpenAccountSettings, onAddNetworkServer, networkServers, removableDevices, onEjectDevice, onSelectRemovableDevice, selectedRemovableDeviceId, onSelectNetworkServer, selectedNetworkServerId, onlineServerCount, totalServerCount, selectedSourceId, onSelectFavoriteSource]);
 
   if (isCollapsed) {
     return null;
@@ -219,11 +225,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <aside 
       style={{ width: `${width}px` }}
-      className="macos-sidebar-glass flex flex-col h-full select-none shrink-0 text-xs overflow-hidden transition-[width] duration-200 ease-out"
+      className="macos-sidebar-glass flex flex-col h-full min-h-0 select-none shrink-0 text-xs overflow-hidden transition-[width] duration-200 ease-out"
     >
       
-      {/* Scrollable macOS Finder Navigation */}
-      <div className={`flex-1 overflow-y-auto px-3 py-2 ${compact ? 'space-y-2 text-[11px]' : 'space-y-4'}`}>
+      {/* Scrollable navigation — takes remaining height above the pinned footer */}
+      <div className={`flex-1 min-h-0 overflow-y-auto px-3 py-2 ${compact ? 'space-y-2 text-[11px]' : 'space-y-4'}`}>
 
         {/* Render sections in custom order */}
         {sectionOrder.map((sectionKey) => (
@@ -242,8 +248,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       </div>
 
-      {/* Bottom Profile & App Settings Tile */}
-      <ProfileFooter onOpenVaultSecurity={onOpenVaultSecurity} onOpenProfileSettings={onOpenProfileSettings} userProfile={userProfile} incomingLibraries={incomingLibraries} outgoingLibraries={outgoingLibraries} onlineServerCount={onlineServerCount} totalServerCount={totalServerCount} />
+      {/* Always pinned to the bottom of the sidebar viewport */}
+      <ProfileFooter onOpenVaultSecurity={onOpenVaultSecurity} onOpenProfileSettings={onOpenProfileSettings} userProfile={userProfile} incomingLibraries={incomingLibraries} outgoingLibraries={outgoingLibraries} onlineServerCount={onlineServerCount} totalServerCount={totalServerCount} swarmStatus={swarmStatus} />
 
     </aside>
   );

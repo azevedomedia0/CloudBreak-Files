@@ -12,5 +12,11 @@
 	<string>Cloudbreak Files needs access to external drives so you can browse, preview and edit the files you add.</string>
 	<key>NSNetworkVolumesUsageDescription</key>
 	<string>Cloudbreak Files needs access to network volumes so you can browse, preview and edit the files you add.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Cloudbreak Files uses your local network for P2P library sharing and discovering nearby peers and servers.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_cloudbreak-p2p._tcp</string>
+	</array>
 </dict>
 </plist>

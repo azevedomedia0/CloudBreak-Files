@@ -370,10 +370,58 @@ pub async fn local_pick_save_folder(app: AppHandle, state: State<'_, LocalRoots>
     add_root(&app, &state, path, false).map(Some)
 }
 
+/// Allow a folder path (e.g. a mounted volume) for browsing without using the picker.
+#[tauri::command]
+pub fn local_remember_folder(path: String, app: AppHandle, state: State<'_, LocalRoots>) -> Result<LocalFolder, String> {
+    add_root(&app, &state, PathBuf::from(path), true)
+}
+
 /// Folders picked in earlier sessions that still exist.
 #[tauri::command]
 pub fn local_list_folders(state: State<'_, LocalRoots>) -> Vec<LocalFolder> {
     state.roots.lock().map(|r| r.iter().map(|p| folder_of(p)).collect()).unwrap_or_default()
+}
+
+/// Standard macOS locations for the Local Files sidebar (display name, path).
+fn standard_folder_candidates() -> Vec<(String, PathBuf)> {
+    let mut out = Vec::new();
+    if let Ok(home) = std::env::var("HOME") {
+        let home = PathBuf::from(home);
+        for (name, relative) in [
+            ("Desktop", "Desktop"),
+            ("Documents", "Documents"),
+            ("Photos", "Pictures"),
+            ("Videos", "Movies"),
+            ("Music", "Music"),
+            ("Downloads", "Downloads"),
+        ] {
+            out.push((name.to_string(), home.join(relative)));
+        }
+    }
+    out.push(("Applications".to_string(), PathBuf::from("/Applications")));
+    out
+}
+
+/// Add the standard user folders (Desktop, Documents, …) when they exist on disk.
+/// Returns each folder with its sidebar display name. Skips missing paths quietly.
+#[tauri::command]
+pub fn local_ensure_standard_folders(app: AppHandle, state: State<'_, LocalRoots>) -> Vec<LocalFolder> {
+    let mut added = Vec::new();
+    for (display_name, path) in standard_folder_candidates() {
+        if !path.is_dir() {
+            continue;
+        }
+        match add_root(&app, &state, path, true) {
+            Ok(folder) => added.push(LocalFolder {
+                path: folder.path,
+                name: display_name,
+            }),
+            Err(_) => {
+                // Permission denied or unreadable — keep the empty sidebar stub.
+            }
+        }
+    }
+    added
 }
 
 /// Stop tracking a folder. The files on disk are not touched.

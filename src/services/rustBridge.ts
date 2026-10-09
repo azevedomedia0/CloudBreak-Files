@@ -25,6 +25,17 @@ export interface RustEncryptedAsset {
   sha256Checksum: string;
 }
 
+/** Path-based streaming vault encrypt (desktop). No 32 MB / base64 IPC limit. */
+export interface RustStreamEncryptResult {
+  outputPath: string;
+  salt: string;
+  keyFingerprint: string;
+  sha256Checksum: string;
+  sizeBytes: number;
+  chunkCount: number;
+  algorithm: string;
+}
+
 export interface RustStorageStats {
   totalUsed: number;
   totalQuota: number;
@@ -268,6 +279,36 @@ class RustBridgeService {
       keyFingerprint: this.webSessionFingerprint ?? 'unknown',
       sha256Checksum: await sha256Hex(data),
     };
+  }
+
+  /**
+   * Stream-encrypt a local file on disk (desktop). Use for files over 32 MB or to avoid base64 IPC.
+   */
+  public async encryptSessionFile(
+    path: string,
+    outputPath?: string,
+  ): Promise<RustStreamEncryptResult> {
+    const invoke = this.getInvoke();
+    if (!invoke) {
+      throw new Error('Streaming file encryption requires the desktop app');
+    }
+    return (await invoke('encrypt_session_file', {
+      req: { path, outputPath: outputPath ?? null },
+    })) as RustStreamEncryptResult;
+  }
+
+  /** Stream-decrypt a CBSTRM01 vault file to an allowed local path (desktop). */
+  public async decryptSessionFile(
+    path: string,
+    outputPath: string,
+  ): Promise<RustStreamEncryptResult> {
+    const invoke = this.getInvoke();
+    if (!invoke) {
+      throw new Error('Streaming file decryption requires the desktop app');
+    }
+    return (await invoke('decrypt_session_file', {
+      req: { path, outputPath },
+    })) as RustStreamEncryptResult;
   }
 
   /** Decrypt file bytes produced by `encryptWithSession`. Requires an unlocked vault. */

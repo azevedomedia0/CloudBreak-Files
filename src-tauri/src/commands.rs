@@ -1,6 +1,10 @@
-use crate::crypto::{self, EncryptedAsset, PassphraseVerifier, KEY_LEN, MAX_SESSION_BYTES};
+use crate::crypto::{
+    self, EncryptedAsset, PassphraseVerifier, StreamEncryptResult, KEY_LEN, MAX_SESSION_BYTES,
+};
+use crate::local_fs::{self, LocalRoots};
+use std::path::Path;
 use crate::media::{
-    self, MediaProcessResult, PhotoRenderRequest, PhotoRenderResult, VideoTrimRequest,
+    self, FfmpegStatus, MediaProcessResult, PhotoRenderRequest, PhotoRenderResult, VideoTrimRequest,
 };
 use crate::storage::{CloudAccount, StorageManager, StorageStats};
 use crate::vault_store;
@@ -137,6 +141,75 @@ pub fn decrypt_session_data(
     Ok(B64.encode(plain))
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionEncryptFileRequest {
+    pub path: String,
+    /// Optional output path; default is `<path>.cbenc` beside the source.
+    pub output_path: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionDecryptFileRequest {
+    pub path: String,
+    pub output_path: String,
+}
+
+/// Stream-encrypt a local file with the vault session key (no 32 MB / base64 IPC limit).
+#[tauri::command]
+pub fn encrypt_session_file(
+    req: SessionEncryptFileRequest,
+    state: State<'_, AppState>,
+    roots: State<'_, LocalRoots>,
+) -> Result<StreamEncryptResult, String> {
+    let vault = lock(&state.vault);
+    let key = vault
+        .session_key
+        .as_ref()
+        .ok_or_else(|| "Vault is locked — unlock to encrypt files".to_string())?;
+    let rootsnap = local_fs::snapshot(&roots);
+    let src = local_fs::resolve_in_roots(&rootsnap, Path::new(&req.path))?;
+    let dst = if let Some(out) = req.output_path.filter(|p| !p.is_empty()) {
+        local_fs::resolve_in_roots(&rootsnap, Path::new(&out))?
+    } else {
+        let name = format!(
+            "{}.cbenc",
+            src.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("file")
+        );
+        local_fs::resolve_in_roots(&rootsnap, &src.with_file_name(name))?
+    };
+    crypto::encrypt_file_stream(&src, &dst, key).map_err(|e| e.to_string())
+}
+
+/// Stream-decrypt a CBSTRM01 vault file to an allowed local path.
+#[tauri::command]
+pub fn decrypt_session_file(
+    req: SessionDecryptFileRequest,
+    state: State<'_, AppState>,
+    roots: State<'_, LocalRoots>,
+) -> Result<StreamEncryptResult, String> {
+    let vault = lock(&state.vault);
+    let key = vault
+        .session_key
+        .as_ref()
+        .ok_or_else(|| "Vault is locked — unlock to decrypt files".to_string())?;
+    let src = local_fs::resolve_in_roots(&local_fs::snapshot(&roots), Path::new(&req.path))?;
+    let dst = local_fs::resolve_in_roots(&local_fs::snapshot(&roots), Path::new(&req.output_path))?;
+    let (size, hash) = crypto::decrypt_file_stream(&src, &dst, key).map_err(|e| e.to_string())?;
+    Ok(StreamEncryptResult {
+        output_path: dst.to_string_lossy().into_owned(),
+        salt: String::new(),
+        key_fingerprint: crypto::compute_key_fingerprint(key),
+        sha256_checksum: hash,
+        size_bytes: size,
+        chunk_count: 0,
+        algorithm: "AES-256-GCM-STREAM".into(),
+    })
+}
+
 #[tauri::command]
 pub fn compute_sha256_checksum(content: String) -> String {
     crypto::compute_sha256(content.as_bytes())
@@ -229,6 +302,12 @@ fn in_media_temp(app: &AppHandle, path: &str) -> Result<std::path::PathBuf, Stri
     let temp = media_temp_dir(app)?;
     crate::local_fs::resolve_in_roots(&[temp], std::path::Path::new(path))
         .map_err(|_| "Media files must be in the app's temporary media folder".to_string())
+}
+
+/// Whether ffmpeg is available (bundled sidecar, Homebrew, or PATH).
+#[tauri::command]
+pub fn ffmpeg_status() -> FfmpegStatus {
+    media::ffmpeg_status()
 }
 
 #[tauri::command]

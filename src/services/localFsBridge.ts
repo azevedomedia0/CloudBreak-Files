@@ -82,6 +82,16 @@ export const localFs = {
     return invoke<LocalFolder[]>('local_list_folders');
   },
 
+  /** Register Desktop / Documents / Photos / … when those folders exist on disk. */
+  ensureStandardFolders(): Promise<LocalFolder[]> {
+    return invoke<LocalFolder[]>('local_ensure_standard_folders');
+  },
+
+  /** Allow a mounted volume path for scanning (no picker). */
+  rememberFolder(path: string): Promise<LocalFolder> {
+    return invoke<LocalFolder>('local_remember_folder', { path });
+  },
+
   /** Stop tracking a folder. Nothing on disk is changed. */
   forgetFolder(path: string): Promise<void> {
     return invoke<void>('local_forget_folder', { path });

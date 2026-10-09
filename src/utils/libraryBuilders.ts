@@ -44,12 +44,8 @@ export function buildOutgoingLibrary(opts: {
       id: `p-${stamp}-${i}`,
       name: peerName,
       email: memberEmail,
-      peerNodeId: `node-${slug(peerName)}-mesh`,
-      status: 'seeding' as const,
-      transferSpeed: i === 0 ? '24.5 MB/s' : undefined,
-      progressPercent: i === 0 ? 12 : undefined,
+      status: 'pending' as const,
       role,
-      publicKey: `0x${Math.random().toString(16).substring(2, 10)}`,
     });
   });
 

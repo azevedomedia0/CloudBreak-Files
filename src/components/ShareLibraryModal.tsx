@@ -5,6 +5,7 @@ import {
   Radio, Wifi, ArrowUpRight, ArrowDownLeft, ShieldCheck, Play, Pause, FolderDown, Unlink,
 } from 'lucide-react';
 import { SharedLibrary, SharedMember, P2PPeer } from '../types';
+import { peerStatusLabel, shortPeerId } from '../utils/p2pPeers';
 
 interface ShareLibraryModalProps {
   library: SharedLibrary;
@@ -60,26 +61,21 @@ export const ShareLibraryModal: React.FC<ShareLibraryModalProps> = ({
       }
       existing.add(key);
       const name = token.includes('@') ? token.split('@')[0] : token;
-      const nodeHint = i === 0 && peerNodeId.trim()
-        ? peerNodeId.trim()
-        : `node-${name.toLowerCase().replace(/[^a-z0-9]/g, '')}-mesh`;
+      const nodeHint = i === 0 && peerNodeId.trim() ? peerNodeId.trim() : undefined;
       addedPeers.push({
         id: `p-${stamp}-${i}`,
         name,
         email: token,
         peerNodeId: nodeHint,
-        status: 'seeding',
-        transferSpeed: addedPeers.length === 0 ? '12.8 MB/s' : undefined,
-        progressPercent: addedPeers.length === 0 ? 10 : undefined,
+        status: 'pending',
         role: inviteRole,
-        publicKey: `0x${Math.random().toString(16).substring(2, 10)}...${Math.random().toString(16).substring(2, 6)}`,
       });
       addedMembers.push({
         id: `m-${stamp}-${i}`,
         name,
         email: token,
         role: inviteRole,
-        status: 'active',
+        status: 'pending',
       });
     });
 
@@ -353,14 +349,14 @@ export const ShareLibraryModal: React.FC<ShareLibraryModalProps> = ({
               {/* Specified Peers List */}
               <div className="space-y-2 pt-1">
                 <h4 className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wider flex items-center justify-between">
-                  <span>Specified P2P Recipients Being Seeded ({library.seedingPeers?.length || 0})</span>
+                  <span>Specified Recipients ({library.seedingPeers?.length || 0})</span>
                   <span className="font-mono text-[10px] text-sky-400">Zero-Knowledge Peer ACL</span>
                 </h4>
                 
                 <div className="divide-y divide-white/5 border border-white/10 rounded-xl bg-neutral-950/60 overflow-hidden">
                   {(library.seedingPeers || []).length === 0 ? (
                     <div className="p-4 text-center text-xs text-neutral-400 italic">
-                      No specific peers authorized yet. Specify users above to start seeding.
+                      No recipients yet. Add emails above — they stay pending until a peer connects.
                     </div>
                   ) : (
                     (library.seedingPeers || []).map(peer => (
@@ -375,15 +371,25 @@ export const ShareLibraryModal: React.FC<ShareLibraryModalProps> = ({
                               <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded border ${
                                 peer.status === 'seeding' ? 'bg-sky-500/15 text-sky-300 border-sky-400/30' :
                                 peer.status === 'connected' ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' :
+                                peer.status === 'pending' ? 'bg-amber-500/10 text-amber-300 border-amber-500/25' :
                                 'bg-neutral-800 text-neutral-400 border-neutral-700'
                               }`}>
-                                {peer.status === 'seeding' ? `Seeding (${peer.transferSpeed || '14.2 MB/s'})` : peer.status}
+                                {peerStatusLabel(peer)}
                               </span>
                             </div>
                             <div className="flex items-center gap-2 text-[11px] text-neutral-400 font-mono truncate">
-                              <span>{peer.email}</span>
-                              <span>•</span>
-                              <span className="text-neutral-500">Node: {peer.peerNodeId || 'mesh-node'}</span>
+                              {peer.email && <span>{peer.email}</span>}
+                              {peer.peerNodeId && (
+                                <>
+                                  {peer.email && <span>•</span>}
+                                  <span className="text-neutral-500" title={peer.peerNodeId}>
+                                    Node: {shortPeerId(peer.peerNodeId)}
+                                  </span>
+                                </>
+                              )}
+                              {!peer.peerNodeId && peer.status === 'pending' && (
+                                <span className="text-neutral-500">Waiting for peer</span>
+                              )}
                             </div>
                           </div>
                         </div>

@@ -75,17 +75,23 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
 
   React.useEffect(() => {
     if (!account) return;
-    const saved = credentialStore.get(account.id);
-    const nextKind = asProviderKind(account.provider);
-    setAccountName(account.name);
-    setAccountEmail(account.email);
-    setServerEndpoint(account.endpoint || saved?.endpoint || (nextKind ? defaultEndpoint(nextKind) : ''));
-    setUsername(saved?.username || '');
-    setApiKey('');
-    setActiveTab('integration');
-    setTestResult('idle');
-    setTestError(null);
-    setConfirmingDisconnect(false);
+    let cancelled = false;
+    void (async () => {
+      await credentialStore.hydrate();
+      if (cancelled) return;
+      const saved = credentialStore.get(account.id);
+      const nextKind = asProviderKind(account.provider);
+      setAccountName(account.name);
+      setAccountEmail(account.email);
+      setServerEndpoint(account.endpoint || saved?.endpoint || (nextKind ? defaultEndpoint(nextKind) : ''));
+      setUsername(saved?.username || '');
+      setApiKey('');
+      setActiveTab('integration');
+      setTestResult('idle');
+      setTestError(null);
+      setConfirmingDisconnect(false);
+    })();
+    return () => { cancelled = true; };
   }, [account?.id]);
 
   if (!isOpen || !account) return null;
@@ -162,9 +168,11 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
   };
 
   const handleDisconnect = () => {
-    cloudService.disconnect(account.id);
-    onDisconnect?.(account.id);
-    onClose();
+    void (async () => {
+      await cloudService.disconnect(account.id);
+      onDisconnect?.(account.id);
+      onClose();
+    })();
   };
 
   const pct = Math.min(100, Math.round((account.usedBytes / Math.max(account.totalBytes, 1)) * 100));

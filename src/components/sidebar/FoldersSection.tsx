@@ -1,5 +1,5 @@
 import React from 'react';
-import { Folder, Plus, ChevronDown } from 'lucide-react';
+import { Plus, RefreshCw, ChevronDown } from 'lucide-react';
 import { FolderItem, CloudProviderId } from '../../types';
 import { SidebarSectionKey } from './sectionKey';
 
@@ -9,13 +9,19 @@ export interface FoldersSectionProps {
   onSelectFolder: (folderId: string | null) => void;
   onSelectLibrary: (libraryId: string | null) => void;
   onAddNewFolder?: () => void;
+  onRescanFolders?: () => void;
+  isRescanning?: boolean;
   collapsed: Partial<Record<SidebarSectionKey, boolean>>;
   toggleSection: (section: SidebarSectionKey) => void;
   visibleFolders: FolderItem[];
   getFolderIcon: (name: string, isSelected: boolean) => React.ReactNode;
 }
 
-export const FoldersSection: React.FC<FoldersSectionProps> = ({ onSelectAccount, selectedFolderId, onSelectFolder, onSelectLibrary, onAddNewFolder, collapsed, toggleSection, visibleFolders, getFolderIcon }) => (
+export const FoldersSection: React.FC<FoldersSectionProps> = ({
+  onSelectAccount, selectedFolderId, onSelectFolder, onSelectLibrary,
+  onAddNewFolder, onRescanFolders, isRescanning = false,
+  collapsed, toggleSection, visibleFolders, getFolderIcon,
+}) => (
     <div className="space-y-0.5">
       <div 
         onClick={() => toggleSection('directories')}
@@ -37,6 +43,19 @@ export const FoldersSection: React.FC<FoldersSectionProps> = ({ onSelectAccount,
               all
             </button>
           )}
+          <button
+            type="button"
+            disabled={isRescanning}
+            onClick={(e) => {
+              e.stopPropagation();
+              onRescanFolders?.();
+            }}
+            className="w-4 h-4 flex items-center justify-center bg-transparent text-neutral-400 hover:text-sky-300 transition-colors disabled:opacity-40 disabled:cursor-wait"
+            title="Rescan local folders from disk"
+            aria-label="Rescan local folders from disk"
+          >
+            <RefreshCw className={`w-3 h-3 stroke-[2.5] ${isRescanning ? 'animate-spin' : ''}`} />
+          </button>
           <button
             type="button"
             onClick={(e) => {

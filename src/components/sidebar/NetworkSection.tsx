@@ -1,25 +1,26 @@
 import React from 'react';
 import { Plus, ChevronDown, Database, Server, Usb, Disc } from 'lucide-react';
 import { RemovableDevice } from '../../types';
+import type { NetworkServerEntry } from '../../services/volumesBridge';
 import { formatBytes } from '../../utils/format';
 import { SidebarSectionKey } from './sectionKey';
 
 export interface NetworkSectionProps {
   onAddNetworkServer?: () => void;
-  networkServers: Array<{ name: string; desc: string; icon?: any; online: boolean }>;
+  networkServers: NetworkServerEntry[];
   removableDevices: RemovableDevice[];
   onEjectDevice?: (deviceId: string) => void;
   onSelectRemovableDevice?: (device: RemovableDevice) => void;
   selectedRemovableDeviceId?: string | null;
-  onSelectNetworkServer?: (name: string) => void;
-  selectedNetworkServerName?: string | null;
+  onSelectNetworkServer?: (server: NetworkServerEntry) => void;
+  selectedNetworkServerId?: string | null;
   collapsed: Partial<Record<SidebarSectionKey, boolean>>;
   toggleSection: (section: SidebarSectionKey) => void;
   onlineServerCount: number;
   totalServerCount: number;
 }
 
-export const NetworkSection: React.FC<NetworkSectionProps> = ({ onAddNetworkServer, networkServers, removableDevices, onEjectDevice, onSelectRemovableDevice, selectedRemovableDeviceId, onSelectNetworkServer, selectedNetworkServerName, collapsed, toggleSection, onlineServerCount, totalServerCount }) => (
+export const NetworkSection: React.FC<NetworkSectionProps> = ({ onAddNetworkServer, networkServers, removableDevices, onEjectDevice, onSelectRemovableDevice, selectedRemovableDeviceId, onSelectNetworkServer, selectedNetworkServerId, collapsed, toggleSection, onlineServerCount, totalServerCount }) => (
     <div className="space-y-0.5">
       <div 
         onClick={() => toggleSection('network')}
@@ -121,30 +122,32 @@ export const NetworkSection: React.FC<NetworkSectionProps> = ({ onAddNetworkServ
                 {onlineServerCount}/{totalServerCount} Online
               </span>
             </div>
-            {networkServers.map(net => {
-              const Icon = net.icon || Server;
-              return (
+            {networkServers.length === 0 && (
+              <p className="px-2 py-2 text-[10px] text-neutral-500 leading-snug">
+                No mounted shares or saved servers. Use + to connect (SMB/NFS) or mount a share in Finder.
+              </p>
+            )}
+            {networkServers.map(net => (
                 <button
-                  key={net.name}
+                  key={net.id}
                   type="button"
-                  onClick={() => onSelectNetworkServer?.(net.name)}
+                  onClick={() => onSelectNetworkServer?.(net)}
                   className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-colors group text-left ${
-                    selectedNetworkServerName === net.name
+                    selectedNetworkServerId === net.id
                       ? 'bg-orange-500/20 text-orange-200 font-medium shadow-sm'
                       : 'text-neutral-300 hover:bg-white/5 hover:text-white'
                   }`}
                 >
                   <div className="flex items-center gap-2 truncate">
-                    <Icon className="w-4 h-4 text-orange-400 shrink-0" />
+                    <Server className="w-4 h-4 text-orange-400 shrink-0" />
                     <div className="truncate">
                       <div className="truncate font-medium leading-tight">{net.name}</div>
                       <div className="text-[9px] text-neutral-500 truncate font-mono">{net.desc}</div>
                     </div>
                   </div>
-                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${net.online ? 'bg-emerald-400 shadow-sm shadow-emerald-500/50' : 'bg-neutral-600'}`} />
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${net.online ? 'bg-emerald-400 shadow-sm shadow-emerald-500/50' : 'bg-neutral-600'}`} title={net.online ? 'Reachable or mounted' : 'Not reachable'} />
                 </button>
-              );
-            })}
+            ))}
           </div>
         </div>
       )}

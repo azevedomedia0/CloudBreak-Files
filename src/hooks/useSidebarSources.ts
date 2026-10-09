@@ -1,16 +1,27 @@
-import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type {
   CloudProviderId, FavoriteShortcut, FileItem, FolderItem, RemovableDevice,
 } from '../types';
 import { importLocalFolderAtPath, mergeById, pickLocalFolderFromDisk } from '../utils/importLocalFolder';
-import { localFs } from '../services/localFsBridge';
+import {
+  defaultLocalFolderIdForName,
+  mergeLocalFolders,
+} from '../utils/defaultLocalFolders';
+import { localFs, type LocalFolder } from '../services/localFsBridge';
+import {
+  ejectVolume,
+  listSidebarVolumes,
+  loadSavedNetworkServers,
+  mountedVolumeToNetworkServer,
+  openNetworkShare,
+  persistSavedNetworkServers,
+  probeNetworkServer,
+  type NetworkServerEntry,
+  type SavedNetworkServer,
+  volumeToRemovableDevice,
+} from '../services/volumesBridge';
 
-export interface NetworkServer {
-  name: string;
-  desc: string;
-  icon?: any;
-  online: boolean;
-}
+export type { NetworkServerEntry };
 
 interface UseSidebarSourcesOptions {
   folders: FolderItem[];
@@ -30,6 +41,8 @@ interface UseSidebarSourcesOptions {
   showToast: (message: string) => void;
 }
 
+const VOLUME_POLL_MS = 8_000;
+
 /** Sidebar content: local folders, favorites, network servers, removable devices, and what is selected. */
 export function useSidebarSources({
   folders, files, selectedAccountId, selectedFolderId, selectedSourceId, isVaultUnlocked,
@@ -38,8 +51,61 @@ export function useSidebarSources({
 }: UseSidebarSourcesOptions) {
   const [removableDevices, setRemovableDevices] = useState<RemovableDevice[]>([]);
   const [customFavorites, setCustomFavorites] = useState<FavoriteShortcut[]>([]);
-  const [networkServers, setNetworkServers] = useState<NetworkServer[]>([]);
+  const [savedNetworkServers, setSavedNetworkServers] = useState<SavedNetworkServer[]>(() => loadSavedNetworkServers());
+  const [networkServers, setNetworkServers] = useState<NetworkServerEntry[]>([]);
+  const [isRescanningLocal, setIsRescanningLocal] = useState(false);
+  const savedRef = useRef(savedNetworkServers);
+  savedRef.current = savedNetworkServers;
+  const rescanBusyRef = useRef(false);
+
   const selectedFolder = folders.find(f => f.id === selectedFolderId) || null;
+
+  const mergeNetworkLists = useCallback((
+    saved: SavedNetworkServer[],
+    reachability: Map<string, boolean>,
+    mounted: NetworkServerEntry[],
+  ): NetworkServerEntry[] => {
+    const savedEntries: NetworkServerEntry[] = saved.map(s => ({
+      id: s.id,
+      name: s.name,
+      desc: s.address,
+      online: reachability.get(s.id) ?? false,
+      protocol: s.protocol,
+      kind: 'saved',
+    }));
+    const dedupedMounted = mounted.filter(m => {
+      return !savedEntries.some(s => s.name.toLowerCase() === m.name.toLowerCase());
+    });
+    return [...dedupedMounted, ...savedEntries];
+  }, []);
+
+  const refreshVolumesAndServers = useCallback(async () => {
+    const volumes = await listSidebarVolumes().catch(() => []);
+    const mountedNet = volumes.filter(v => v.isNetwork).map(mountedVolumeToNetworkServer);
+    const removable = volumes.filter(v => !v.isNetwork).map(volumeToRemovableDevice);
+    setRemovableDevices(removable);
+
+    const saved = savedRef.current;
+    const reachability = new Map<string, boolean>();
+    await Promise.all(saved.map(async s => {
+      const ok = await probeNetworkServer(s.address, s.protocol).catch(() => false);
+      reachability.set(s.id, ok);
+    }));
+
+    setNetworkServers(mergeNetworkLists(saved, reachability, mountedNet));
+  }, [mergeNetworkLists]);
+
+  useEffect(() => {
+    void refreshVolumesAndServers();
+    if (!localFs.available()) return;
+    const id = window.setInterval(() => { void refreshVolumesAndServers(); }, VOLUME_POLL_MS);
+    return () => window.clearInterval(id);
+  }, [refreshVolumesAndServers]);
+
+  useEffect(() => {
+    persistSavedNetworkServers(savedNetworkServers);
+    void refreshVolumesAndServers();
+  }, [savedNetworkServers, refreshVolumesAndServers]);
 
   const handleCreateFolder = (name: string, category: string) => {
     const newId = `folder-${Date.now()}`;
@@ -59,23 +125,173 @@ export function useSidebarSources({
     showToast(`Created folder "${name}"`);
   };
 
+  const normalizeImported = (imported: Awaited<ReturnType<typeof importLocalFolderAtPath>>) => {
+    const rootId = defaultLocalFolderIdForName(imported.rootFolder.name);
+    const folders = rootId
+      ? imported.folders.map(f => (
+        f.id === imported.rootFolder.id
+          ? { ...f, id: rootId }
+          : f.parentId === imported.rootFolder.id
+            ? { ...f, parentId: rootId }
+            : f
+      ))
+      : imported.folders;
+    const files = rootId
+      ? imported.files.map(f => (
+        f.folderId === imported.rootFolder.id ? { ...f, folderId: rootId } : f
+      ))
+      : imported.files;
+    const rootFolder = rootId
+      ? { ...imported.rootFolder, id: rootId }
+      : imported.rootFolder;
+    return { rootFolder, folders, files };
+  };
+
+  const applyImportedFolder = (imported: Awaited<ReturnType<typeof importLocalFolderAtPath>>) => {
+    const { rootFolder, folders, files } = normalizeImported(imported);
+    setFolders(prev => mergeLocalFolders(prev, folders));
+    if (files.length) {
+      setFiles(prev => mergeById(prev, files));
+    }
+    return rootFolder;
+  };
+
+  /** Descendants of a Local Files root (not including the root itself). */
+  const collectDescendantFolderIds = (all: FolderItem[], rootId: string): Set<string> => {
+    const ids = new Set<string>();
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const f of all) {
+        if (!f.parentId || ids.has(f.id)) continue;
+        if (f.parentId === rootId || ids.has(f.parentId)) {
+          ids.add(f.id);
+          grew = true;
+        }
+      }
+    }
+    return ids;
+  };
+
+  const pathIsUnderRoot = (filePath: string | undefined, rootPath: string): boolean => {
+    if (!filePath) return false;
+    const root = rootPath.replace(/\/+$/, '');
+    return filePath === root || filePath.startsWith(`${root}/`);
+  };
+
+  /**
+   * Rescan one disk folder: replace its sidebar subtree and local files so deletes
+   * on disk disappear and new files show up without a restart.
+   */
+  const applyRescannedFolder = (
+    imported: Awaited<ReturnType<typeof importLocalFolderAtPath>>,
+    diskPath: string,
+  ) => {
+    const { rootFolder, folders: nextFolders, files: nextFiles } = normalizeImported(imported);
+    const rootId = rootFolder.id;
+    const nextFolderIds = new Set(nextFolders.map(f => f.id));
+    const folderScope = new Set<string>([rootId, ...collectDescendantFolderIds(folders, rootId)]);
+
+    setFolders(prev => {
+      const staleKids = collectDescendantFolderIds(prev, rootId);
+      const kept = prev.filter(f => {
+        if (f.id === rootId) return false;
+        if (staleKids.has(f.id) && !nextFolderIds.has(f.id)) return false;
+        return true;
+      });
+      return mergeLocalFolders(kept, nextFolders);
+    });
+
+    setFiles(prev => {
+      const kept = prev.filter(f => {
+        if (pathIsUnderRoot(f.localPath, diskPath)) return false;
+        if (f.localPath && f.folderId && folderScope.has(f.folderId)) return false;
+        if (
+          f.accountId === 'all'
+          && f.folderId
+          && folderScope.has(f.folderId)
+          && f.id.startsWith('file-local-')
+        ) {
+          return false;
+        }
+        return true;
+      });
+      return mergeById(kept, nextFiles);
+    });
+
+    return rootFolder;
+  };
+
+  const handleRescanLocalFolders = async () => {
+    if (!localFs.available()) {
+      showToast('Rescan is available in the desktop app');
+      return;
+    }
+    if (rescanBusyRef.current) return;
+    rescanBusyRef.current = true;
+    setIsRescanningLocal(true);
+    try {
+      const standards = await localFs.ensureStandardFolders().catch(() => [] as LocalFolder[]);
+      const saved = await localFs.listFolders().catch(() => [] as LocalFolder[]);
+      const byPath = new Map<string, LocalFolder>();
+      for (const f of [...standards, ...saved]) byPath.set(f.path, f);
+      const targets = [...byPath.values()];
+      if (!targets.length) {
+        showToast('No local folders to rescan — add a folder first');
+        return;
+      }
+
+      let ok = 0;
+      let fileTotal = 0;
+      let truncated = false;
+      const errors: string[] = [];
+
+      for (const folder of targets) {
+        try {
+          const imported = await importLocalFolderAtPath(folder, {
+            rootId: defaultLocalFolderIdForName(folder.name),
+            displayName: folder.name,
+          });
+          applyRescannedFolder(imported, folder.path);
+          ok += 1;
+          fileTotal += imported.files.length;
+          if (imported.truncated) truncated = true;
+        } catch (err) {
+          errors.push(`${folder.name}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+
+      if (ok === 0 && errors.length) {
+        showToast(`Rescan failed. ${errors[0]}`);
+      } else {
+        const trunc = truncated ? ' (some folders truncated)' : '';
+        const errNote = errors.length ? ` · ${errors.length} folder(s) skipped` : '';
+        showToast(
+          `Rescanned ${ok} folder${ok === 1 ? '' : 's'} · ${fileTotal} file${fileTotal === 1 ? '' : 's'}${trunc}${errNote}`,
+        );
+      }
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err));
+    } finally {
+      rescanBusyRef.current = false;
+      setIsRescanningLocal(false);
+    }
+  };
+
   const handleAddLocalFolderFromDisk = async () => {
     try {
       const imported = await pickLocalFolderFromDisk();
       if (!imported) return;
-      setFolders(prev => mergeById(prev, imported.folders));
-      if (imported.files.length) {
-        setFiles(prev => mergeById(prev, imported.files));
-      }
+      const rootFolder = applyImportedFolder(imported);
       setSelectedAccountId('all');
       setSelectedLibraryId(null);
       setSelectedSourceId(null);
-      setSelectedFolderId(imported.rootFolder.id);
+      setSelectedFolderId(rootFolder.id);
       setSelectedFileId(imported.files[0]?.id ?? null);
       const fileNote = imported.files.length
         ? ` · ${imported.files.length} file${imported.files.length === 1 ? '' : 's'}`
         : '';
-      showToast(`Added “${imported.rootFolder.name}” to Local Files${fileNote}${imported.truncated ? ' (large folder: only the first items were added)' : ''}`);
+      showToast(`Added “${rootFolder.name}” to Local Files${fileNote}${imported.truncated ? ' (large folder: only the first items were added)' : ''}`);
     } catch (err) {
       showToast(err instanceof Error ? err.message : String(err));
     }
@@ -90,42 +306,59 @@ export function useSidebarSources({
   const handleBrowseFavoriteFolder = async (): Promise<boolean> => {
     const imported = await pickLocalFolderFromDisk();
     if (!imported) return false;
-    setFolders(prev => mergeById(prev, imported.folders));
-    if (imported.files.length) {
-      setFiles(prev => mergeById(prev, imported.files));
-    }
+    const rootFolder = applyImportedFolder(imported);
     const fav: FavoriteShortcut = {
       id: `fav-${Date.now()}`,
-      name: imported.rootFolder.name,
+      name: rootFolder.name,
       kind: 'folder',
-      folderId: imported.rootFolder.id,
+      folderId: rootFolder.id,
     };
     setCustomFavorites(prev => [...prev, fav]);
     setSelectedAccountId('all');
     setSelectedLibraryId(null);
     setSelectedSourceId(null);
-    setSelectedFolderId(imported.rootFolder.id);
+    setSelectedFolderId(rootFolder.id);
     setSelectedFileId(imported.files[0]?.id ?? null);
-    showToast(`Added “${imported.rootFolder.name}” to Favorites`);
+    showToast(`Added “${rootFolder.name}” to Favorites`);
     return true;
   };
 
   const handleAddNetworkServer = (name: string, address: string, protocol: string) => {
-    const newServer = {
-      name: `${name} (${protocol})`,
-      desc: address,
-      online: true,
-    };
-    setNetworkServers(prev => [...prev, newServer]);
-    showToast(`Connected to server "${name}"`);
+    void (async () => {
+      const finalAddress = address.trim() || `${protocol.toLowerCase()}://${name.replace(/\s+/g, '-').toLowerCase()}.local`;
+      const id = `server-${Date.now()}`;
+      const entry: SavedNetworkServer = {
+        id,
+        name: name.trim(),
+        address: finalAddress,
+        protocol: protocol.toUpperCase(),
+      };
+
+      if (localFs.available()) {
+        try {
+          await openNetworkShare(entry.protocol, finalAddress);
+        } catch (err) {
+          showToast(err instanceof Error ? err.message : String(err));
+        }
+      }
+
+      const reachable = await probeNetworkServer(finalAddress, entry.protocol).catch(() => false);
+      setSavedNetworkServers(prev => [...prev, entry]);
+      setSelectedSourceId(id);
+      setSelectedLibraryId(null);
+      setSelectedFolderId(null);
+
+      if (reachable) {
+        showToast(`Added “${entry.name}”. The server responded on the network.`);
+      } else {
+        showToast(`Saved “${entry.name}”. It is not reachable yet — check the address or mount the share in Finder.`);
+      }
+    })();
   };
 
-
-  // Picking an account, folder or library leaves any open network share / device.
   const selectAccount = (id: CloudProviderId) => {
     setSelectedSourceId(null);
     setSelectedAccountId(id);
-    // Prompt for passphrase only when entering the private vault while locked.
     if (id === 'vault' && !isVaultUnlocked) {
       setIsVaultSecurityOpen(true);
     }
@@ -141,16 +374,60 @@ export function useSidebarSources({
     if (first) setSelectedFileId(first.id);
   };
 
-  const handleAddFavoriteNetwork = (serverName: string) => {
-    if (favoritedSourceIds.has(serverName)) return;
+  const handleSelectRemovableDevice = (device: RemovableDevice) => {
+    openSource(device.id);
+    if (!localFs.available() || !device.mountPoint) return;
+    void (async () => {
+      try {
+        await localFs.rememberFolder(device.mountPoint);
+        const folder = { path: device.mountPoint, name: device.name };
+        const imported = await importLocalFolderAtPath(folder, {
+          rootId: defaultLocalFolderIdForName(device.name),
+          displayName: device.name,
+        }).catch(() => null);
+        if (!imported) return;
+        const root = applyImportedFolder(imported);
+        setSelectedFolderId(root.id);
+        const tagged = imported.files.map(f => ({ ...f, sourceId: device.id }));
+        setFiles(prev => mergeById(prev, tagged));
+        if (tagged[0]) setSelectedFileId(tagged[0].id);
+      } catch {
+        // Volume may be unreadable until the user grants access in Local Files.
+      }
+    })();
+  };
+
+  const handleSelectNetworkServer = (server: NetworkServerEntry) => {
+    openSource(server.id);
+    if (server.kind === 'mounted' && server.mountPoint && localFs.available()) {
+      void (async () => {
+        await localFs.rememberFolder(server.mountPoint!).catch(() => null);
+        const imported = await importLocalFolderAtPath(
+          { path: server.mountPoint!, name: server.name },
+          { rootId: defaultLocalFolderIdForName(server.name), displayName: server.name },
+        ).catch(() => null);
+        if (!imported) return;
+        const root = applyImportedFolder(imported);
+        setSelectedFolderId(root.id);
+        const tagged = imported.files.map(f => ({ ...f, sourceId: server.id }));
+        setFiles(prev => mergeById(prev, tagged));
+        if (tagged[0]) setSelectedFileId(tagged[0].id);
+      })();
+    }
+  };
+
+  const handleAddFavoriteNetwork = (serverId: string) => {
+    if (favoritedSourceIds.has(serverId)) return;
+    const server = networkServers.find(s => s.id === serverId);
+    if (!server) return;
     setCustomFavorites(prev => [...prev, {
       id: `fav-${Date.now()}`,
-      name: serverName,
+      name: server.name,
       kind: 'network',
-      sourceId: serverName,
+      sourceId: server.id,
     }]);
-    openSource(serverName);
-    showToast(`Added “${serverName}” to Favorites`);
+    openSource(server.id);
+    showToast(`Added “${server.name}” to Favorites`);
   };
 
   const handleAddFavoriteDevice = (deviceId: string) => {
@@ -169,26 +446,49 @@ export function useSidebarSources({
 
   const handleEjectDevice = (deviceId: string) => {
     const device = removableDevices.find(d => d.id === deviceId);
-    setRemovableDevices(prev => prev.filter(d => d.id !== deviceId));
-    if (selectedSourceId === deviceId) setSelectedSourceId(null);
-    if (device) showToast(`Ejected ${device.name}`);
+    if (!device) return;
+    void (async () => {
+      try {
+        if (localFs.available()) {
+          await ejectVolume(device.mountPoint);
+        }
+        setRemovableDevices(prev => prev.filter(d => d.id !== deviceId));
+        if (selectedSourceId === deviceId) setSelectedSourceId(null);
+        showToast(`Ejected ${device.name}`);
+        void refreshVolumesAndServers();
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : String(err));
+      }
+    })();
   };
 
-  // Bring back the folders added in earlier sessions (desktop app only).
   useEffect(() => {
     if (!localFs.available()) return;
     let cancelled = false;
     void (async () => {
       try {
+        const standards = await localFs.ensureStandardFolders().catch(() => []);
         const saved = await localFs.listFolders();
+        const standardPaths = new Set(standards.map(f => f.path));
+
+        for (const folder of standards) {
+          if (cancelled) return;
+          const imported = await importLocalFolderAtPath(folder, {
+            rootId: defaultLocalFolderIdForName(folder.name),
+            displayName: folder.name,
+          }).catch(() => null);
+          if (!imported) continue;
+          applyImportedFolder(imported);
+        }
+
         for (const folder of saved) {
+          if (cancelled || standardPaths.has(folder.path)) continue;
           const imported = await importLocalFolderAtPath(folder).catch(() => null);
-          if (cancelled || !imported) continue;
-          setFolders(prev => mergeById(prev, imported.folders));
-          setFiles(prev => mergeById(prev, imported.files));
+          if (!imported) continue;
+          applyImportedFolder(imported);
         }
       } catch {
-        // The folder list is unavailable; nothing to restore.
+        // empty default stubs stay in the sidebar.
       }
     })();
     return () => { cancelled = true; };
@@ -197,8 +497,11 @@ export function useSidebarSources({
 
   return {
     removableDevices, customFavorites, networkServers, favoritedSourceIds,
+    isRescanningLocal,
     handleCreateFolder, handleAddLocalFolderFromDisk, handleBrowseFavoriteFolder,
+    handleRescanLocalFolders,
     handleAddNetworkServer, selectAccount, selectFolder, selectLibrary, openSource,
     handleAddFavoriteNetwork, handleAddFavoriteDevice, handleEjectDevice,
+    handleSelectRemovableDevice, handleSelectNetworkServer,
   };
 }

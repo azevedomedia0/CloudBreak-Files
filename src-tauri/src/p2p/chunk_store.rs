@@ -4,7 +4,8 @@ use crate::crypto::compute_sha256;
 use crate::p2p::keys::{aead_decrypt, aead_encrypt, LibraryRootKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::fs;
+use std::fs::{self, File};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 pub const CHUNK_SIZE: usize = 1024 * 1024; // 1 MiB
@@ -103,6 +104,86 @@ impl ChunkStore {
             });
         }
         Ok((metas, plaintext_hash))
+    }
+
+    /// Stream-read a file from disk (no full-buffer load). Returns chunk metas, hash, and size.
+    pub fn ingest_path(
+        &self,
+        root_key: &LibraryRootKey,
+        file_id: &str,
+        path: &Path,
+    ) -> Result<(Vec<EncryptedChunkMeta>, String, u64), StoreError> {
+        let file_key = root_key.derive_file_key(file_id);
+        let mut file = File::open(path).map_err(|e| StoreError::Io(e.to_string()))?;
+        let mut hasher = Sha256::new();
+        let mut metas = Vec::new();
+        let mut buf = vec![0u8; CHUNK_SIZE];
+        let mut index: u32 = 0;
+        let mut total: u64 = 0;
+        loop {
+            let n = file.read(&mut buf).map_err(|e| StoreError::Io(e.to_string()))?;
+            if n == 0 {
+                break;
+            }
+            let chunk = &buf[..n];
+            hasher.update(chunk);
+            total += n as u64;
+            let (ct, nonce) =
+                aead_encrypt(&file_key, chunk).map_err(|e| StoreError::Crypto(e.to_string()))?;
+            let cid = self.put_raw(&ct)?;
+            metas.push(EncryptedChunkMeta {
+                cid,
+                nonce_hex: hex::encode(nonce),
+                size: n,
+                index,
+            });
+            index += 1;
+        }
+        if metas.is_empty() {
+            // Empty file: one zero-length encrypted chunk so the manifest is valid.
+            let (ct, nonce) =
+                aead_encrypt(&file_key, &[]).map_err(|e| StoreError::Crypto(e.to_string()))?;
+            let cid = self.put_raw(&ct)?;
+            metas.push(EncryptedChunkMeta {
+                cid,
+                nonce_hex: hex::encode(nonce),
+                size: 0,
+                index: 0,
+            });
+        }
+        Ok((metas, hex::encode(hasher.finalize()), total))
+    }
+
+    /// Decrypt all chunks of a file to `dest` without holding the full plaintext in memory.
+    pub fn materialize_file(
+        &self,
+        root_key: &LibraryRootKey,
+        file_id: &str,
+        metas: &[EncryptedChunkMeta],
+        expected_hash: &str,
+        dest: &Path,
+    ) -> Result<u64, StoreError> {
+        let mut ordered = metas.to_vec();
+        ordered.sort_by_key(|m| m.index);
+        if let Some(parent) = dest.parent() {
+            fs::create_dir_all(parent).map_err(|e| StoreError::Io(e.to_string()))?;
+        }
+        let mut out = File::create(dest).map_err(|e| StoreError::Io(e.to_string()))?;
+        let mut hasher = Sha256::new();
+        let mut total: u64 = 0;
+        for meta in &ordered {
+            let plain = self.decrypt_chunk(root_key, file_id, meta)?;
+            hasher.update(&plain);
+            out.write_all(&plain).map_err(|e| StoreError::Io(e.to_string()))?;
+            total += plain.len() as u64;
+        }
+        out.flush().map_err(|e| StoreError::Io(e.to_string()))?;
+        let hash = hex::encode(hasher.finalize());
+        if hash != expected_hash {
+            let _ = fs::remove_file(dest);
+            return Err(StoreError::Crypto("plaintext hash mismatch".into()));
+        }
+        Ok(total)
     }
 
     pub fn read_file(
