@@ -453,7 +453,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
 
         {/* Item count & icon size zoomer */}
         <div className="flex items-center gap-4 shrink-0">
-          <span>{files.length} items, 1.2 TB available</span>
+          <span>{files.length} {files.length === 1 ? "item" : "items"}</span>
           
           {viewMode === 'icons' && (
             <div className="hidden sm:flex items-center gap-1.5">
