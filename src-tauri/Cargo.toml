@@ -45,6 +45,12 @@ zeroize = { version = "1", features = ["zeroize_derive"] }
 parking_lot = "0.12"
 portable-pty = "0.8"
 
+# Read the native window button positions (used by the debug-only self-test).
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSWindow", "NSButton", "NSControl", "NSView", "NSResponder"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSGeometry"] }
+
 # Debug builds run the PBKDF2 key derivation at full speed, so tests and `tauri dev` stay fast.
 [profile.dev.package.sha2]
 opt-level = 3

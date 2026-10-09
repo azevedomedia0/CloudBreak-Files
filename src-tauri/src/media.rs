@@ -418,7 +418,7 @@ pub fn process_photo_render(
     })
 }
 
-fn find_ffmpeg() -> Result<PathBuf, MediaError> {
+pub(crate) fn find_ffmpeg() -> Result<PathBuf, MediaError> {
     which_ffmpeg().ok_or(MediaError::FfmpegMissing)
 }
 

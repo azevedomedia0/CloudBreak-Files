@@ -328,6 +328,12 @@ fn add_root(app: &AppHandle, state: &LocalRoots, root: PathBuf, remember: bool) 
     Ok(folder_of(&root))
 }
 
+/// For the debug-only self-test: allow a folder exactly as picking it in the dialog would.
+#[cfg(debug_assertions)]
+pub fn allow_folder_for_selftest(app: &AppHandle, state: &LocalRoots, path: PathBuf) -> Result<(), String> {
+    add_root(app, state, path, true).map(|_| ())
+}
+
 /// Show the macOS folder picker and remember the choice. Returns `None` if the user cancels.
 #[tauri::command]
 pub async fn local_pick_folder(app: AppHandle, state: State<'_, LocalRoots>) -> Result<Option<LocalFolder>, String> {
