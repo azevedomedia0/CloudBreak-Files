@@ -11,7 +11,7 @@ Tauri 2 + React 19 + Vite + Tailwind 4 desktop app. It manages many cloud accoun
 - Editor text round-trip (what gets written to local files): `npx tsx scripts/editor-text-roundtrip-test.mts`
 - Desktop app: `npm run tauri dev`
 - In-app self-test (runs inside the real desktop app, debug build only): `npm run test:app`. It checks vault unlock and `vault.json`, the security policy, the asset protocol, local file saves, the path limits, video trim and save, drag permission and toolbar spacing. It uses a throwaway app data folder. Needs port 3000 free and ffmpeg.
-- Release build: `npm run build:mac` (see `docs/notarized-distribution.md`; sets `CARGO_TARGET_DIR` outside OneDrive)
+- Release build: `npm run build:mac` (universal Apple Silicon + Intel; see `docs/notarized-distribution.md`; sets `CARGO_TARGET_DIR` outside OneDrive, `MACOSX_DEPLOYMENT_TARGET=11.0`)
 - Updater keys: `npm run updater:keys` (private key in `~/.tauri/`; see `docs/auto-updates.md`)
 
 ## Notes

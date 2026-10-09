@@ -2,8 +2,14 @@ import { CloudProviderId, FileCategory, FileItem, SharedLibrary } from '../types
 
 export type DateFilter = 'any' | 'today' | '7d' | '30d';
 
-export type FileSortKey = 'name' | 'date' | 'size' | 'kind';
+export type FileSortKey = 'name' | 'date' | 'dateAdded' | 'dateOpened' | 'size' | 'kind';
 export type FileSortDirection = 'asc' | 'desc';
+
+function timeMs(iso: string | undefined): number {
+  if (!iso) return 0;
+  const t = new Date(iso).getTime();
+  return Number.isFinite(t) ? t : 0;
+}
 
 export interface FileFilterOptions {
   selectedLibrary: SharedLibrary | null;
@@ -62,6 +68,7 @@ export function filterFiles(files: FileItem[], opts: FileFilterOptions): FileIte
       selectedCategory === 'files' || selectedCategory === 'photo' || selectedCategory === 'video';
 
     // An open source is the whole scope; otherwise a library, then account and folder.
+    // Folder browse is Finder-style: only files in the selected folder (subfolders are tiles).
     if (!locationBrowse && !selectedSourceId) {
       if (selectedLibraryId) {
         if (!selectedLibrary?.fileIds.includes(file.id)) return false;
@@ -102,12 +109,15 @@ export function sortFiles(
   return [...files].sort((a, b) => {
     let cmp = 0;
     switch (key) {
-      case 'date': {
-        const ta = new Date(a.updatedAt).getTime();
-        const tb = new Date(b.updatedAt).getTime();
-        cmp = (Number.isFinite(ta) ? ta : 0) - (Number.isFinite(tb) ? tb : 0);
+      case 'date':
+        cmp = timeMs(a.updatedAt) - timeMs(b.updatedAt);
         break;
-      }
+      case 'dateAdded':
+        cmp = timeMs(a.addedAt ?? a.updatedAt) - timeMs(b.addedAt ?? b.updatedAt);
+        break;
+      case 'dateOpened':
+        cmp = timeMs(a.lastOpenedAt) - timeMs(b.lastOpenedAt);
+        break;
       case 'size':
         cmp = a.sizeBytes - b.sizeBytes;
         break;

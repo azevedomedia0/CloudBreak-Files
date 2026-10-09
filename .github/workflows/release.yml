@@ -43,7 +43,10 @@ jobs:
 
       - name: Use Cargo target dir outside the workspace
         if: matrix.os == 'macos-latest'
-        run: echo "CARGO_TARGET_DIR=${RUNNER_TEMP}/cloudbreak-cargo-target" >> "$GITHUB_ENV"
+        run: |
+          echo "CARGO_TARGET_DIR=${RUNNER_TEMP}/cloudbreak-cargo-target" >> "$GITHUB_ENV"
+          # Big Sur+ so older Intel Macs can run the universal binary (matches tauri.conf.json).
+          echo "MACOSX_DEPLOYMENT_TARGET=11.0" >> "$GITHUB_ENV"
 
       - run: npm ci
 
@@ -102,3 +105,24 @@ jobs:
           releaseDraft: true
           prerelease: true
           args: ${{ matrix.args }}
+
+      - name: Verify universal macOS binary (Intel + Apple Silicon)
+        if: matrix.os == 'macos-latest'
+        run: |
+          APP="$(find "${CARGO_TARGET_DIR}" -path '*/release/bundle/macos/Cloudbreak Files.app' -type d | head -1)"
+          test -n "$APP"
+          BIN="$APP/Contents/MacOS/Cloudbreak Files"
+          ARCHS="$(lipo -archs "$BIN")"
+          echo "App binary architectures: $ARCHS"
+          echo "$ARCHS" | grep -q 'x86_64'
+          echo "$ARCHS" | grep -q 'arm64'
+          if [[ -x "$APP/Contents/MacOS/ffmpeg" ]]; then
+            FF_ARCHS="$(lipo -archs "$APP/Contents/MacOS/ffmpeg")"
+            echo "Bundled ffmpeg architectures: $FF_ARCHS"
+            echo "$FF_ARCHS" | grep -q 'x86_64'
+            echo "$FF_ARCHS" | grep -q 'arm64'
+          fi
+          # Confirm the app advertises Big Sur+ (covers older Intel Macs).
+          MIN="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$APP/Contents/Info.plist" 2>/dev/null || true)"
+          echo "LSMinimumSystemVersion: ${MIN:-unset}"
+          test "$MIN" = "11.0"

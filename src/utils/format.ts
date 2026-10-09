@@ -9,7 +9,8 @@ export function formatBytes(bytes: number, decimals = 1): string {
 
 export function formatTimecode(seconds: number, includeFrames = false, fps = 30): string {
   if (isNaN(seconds) || seconds < 0) seconds = 0;
-  const mins = Math.floor(seconds / 60);
+  const hrs = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
   const secs = Math.floor(seconds % 60);
   const frac = seconds - Math.floor(seconds);
   const frames = Math.floor(frac * fps);
@@ -18,9 +19,9 @@ export function formatTimecode(seconds: number, includeFrames = false, fps = 30)
   const ss = secs.toString().padStart(2, '0');
   if (includeFrames) {
     const ff = frames.toString().padStart(2, '0');
-    return `${mm}:${ss}:${ff}`;
+    return hrs > 0 ? `${hrs}:${mm}:${ss}:${ff}` : `${mm}:${ss}:${ff}`;
   }
-  return `${mm}:${ss}`;
+  return hrs > 0 ? `${hrs}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
 export function formatDate(dateString: string): string {

@@ -32,17 +32,6 @@ export const FoldersSection: React.FC<FoldersSectionProps> = ({
           <ChevronDown className={`w-3 h-3 text-neutral-500 group-hover:text-neutral-300 transition-transform duration-200 ${collapsed.directories ? '-rotate-90' : ''}`} />
         </div>
         <div className="flex items-center gap-1.5">
-          {selectedFolderId && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onSelectFolder(null);
-              }}
-              className="text-[9px] text-neutral-400 hover:text-sky-300 lowercase mr-0.5"
-            >
-              all
-            </button>
-          )}
           <button
             type="button"
             disabled={isRescanning}

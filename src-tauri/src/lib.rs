@@ -3,6 +3,7 @@ pub mod commands;
 pub mod credentials_store;
 pub mod crypto;
 pub mod local_fs;
+pub mod macos_full_disk_access;
 #[cfg(target_os = "macos")]
 pub mod macos_local_network;
 pub mod mounted_volumes;
@@ -43,14 +44,39 @@ pub fn run() {
                     eprintln!("tray icon failed: {err}");
                 }
             }
-            // macOS 15+: prompt for Local Network (P2P / nearby servers). No public API —
-            // connecting a UDP socket to a link-local address triggers the system alert (TN3179).
+            // macOS privacy: Local Network, Files and Folders prompts, then Full Disk Access Settings.
             #[cfg(target_os = "macos")]
             {
-                std::thread::spawn(|| {
+                let handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    let data_dir = handle.path().app_data_dir().ok();
+                    let write_marker = |name: &str| {
+                        if let Some(dir) = &data_dir {
+                            let _ = std::fs::create_dir_all(dir);
+                            let _ = std::fs::write(dir.join(name), b"1");
+                        }
+                    };
+                    let has_marker = |name: &str| -> bool {
+                        data_dir.as_ref().map(|d| d.join(name).exists()).unwrap_or(false)
+                    };
+
+                    // Files and Folders: Desktop, Documents, Downloads, Movies, Photos, Applications.
+                    if !has_marker("files_folders_nudged.flag") {
+                        macos_full_disk_access::nudge_files_and_folders_prompts();
+                        write_marker("files_folders_nudged.flag");
+                    }
+
                     macos_local_network::request_access();
-                    // Short-lived helpers can miss the alert; linger briefly so it can appear.
+                    // Short-lived helpers can miss the Local Network alert; linger briefly.
                     std::thread::sleep(std::time::Duration::from_secs(2));
+
+                    // Full Disk Access has no system dialog — open Settings once per install if missing.
+                    if !macos_full_disk_access::has_full_disk_access()
+                        && !has_marker("fda_settings_opened.flag")
+                    {
+                        let _ = macos_full_disk_access::open_settings();
+                        write_marker("fda_settings_opened.flag");
+                    }
                 });
             }
             Ok(())
@@ -102,10 +128,12 @@ pub fn run() {
             local_fs::local_write_file,
             local_fs::local_write_text,
             local_fs::local_rename_file,
-            mounted_volumes::list_sidebar_volumes_cmd,
-            mounted_volumes::probe_network_server_cmd,
-            mounted_volumes::open_network_share_cmd,
-            mounted_volumes::eject_volume_cmd,
+            mounted_volumes::list_sidebar_volumes,
+            mounted_volumes::probe_network_server,
+            mounted_volumes::open_network_share,
+            mounted_volumes::eject_volume,
+            macos_full_disk_access::macos_full_disk_access_status,
+            macos_full_disk_access::macos_request_full_disk_access,
             p2p::commands::p2p_get_identity,
             p2p::commands::p2p_create_library,
             p2p::commands::p2p_accept_invite,

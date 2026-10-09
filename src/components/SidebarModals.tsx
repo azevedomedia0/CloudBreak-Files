@@ -259,7 +259,7 @@ export const NewSharedLibraryModal: React.FC<NewSharedLibraryModalProps> = ({
               <Radio className="w-4 h-4 animate-pulse" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-white">Seed Media Library to P2P Users</h3>
+              <h3 className="text-sm font-semibold text-purple-300">Seed Media Library to P2P Users</h3>
               <p className="text-[10px] text-neutral-400">Publish and seed encrypted media to specified P2P recipients</p>
             </div>
           </div>

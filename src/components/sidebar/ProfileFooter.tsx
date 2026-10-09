@@ -25,7 +25,6 @@ export const ProfileFooter: React.FC<ProfileFooterProps> = ({
   swarmStatus = null,
 }) => {
   const connectedPeers = swarmStatus?.peers.filter(p => p.connected).length ?? 0;
-  const listening = swarmStatus?.listening ?? false;
   const serversOnline = onlineServerCount > 0;
 
   return (
@@ -61,16 +60,6 @@ export const ProfileFooter: React.FC<ProfileFooterProps> = ({
           <span className="text-neutral-300 font-medium text-[10px]">P2P Protocol</span>
         </div>
         <div className="flex items-center gap-1.5 text-[9px] font-mono">
-          <span
-            className={`px-1 py-0.2 rounded border ${
-              listening
-                ? 'text-sky-300 bg-sky-500/10 border-sky-500/20'
-                : 'text-neutral-500 bg-white/5 border-white/10'
-            }`}
-            title={listening ? 'Swarm is listening for peers' : 'Swarm not listening'}
-          >
-            {listening ? 'Listening' : 'Idle'}
-          </span>
           <span className="text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1 py-0.2 rounded" title="Incoming P2P libraries">
             {incomingLibraries.length} In
           </span>
@@ -94,8 +83,12 @@ export const ProfileFooter: React.FC<ProfileFooterProps> = ({
     >
       <div className="flex items-center gap-2.5 min-w-0">
         <div className="relative shrink-0">
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center text-[11px] font-bold text-white shadow-sm shadow-sky-500/20">
-            {userProfile?.name ? userProfile.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : 'SA'}
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center text-[11px] font-bold text-white shadow-sm shadow-sky-500/20 overflow-hidden">
+            {userProfile?.avatarUrl ? (
+              <img src={userProfile.avatarUrl} alt="" className="w-full h-full object-cover" />
+            ) : (
+              userProfile?.name ? userProfile.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : 'SA'
+            )}
           </div>
           <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 border border-neutral-900" title="Active Session" />
         </div>

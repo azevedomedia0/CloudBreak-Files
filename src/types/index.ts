@@ -69,6 +69,10 @@ export interface FileItem {
   category: FileCategory;
   mimeType: string;
   updatedAt: string;
+  /** When the item was first added to Cloudbreak (ISO). Used for “Date Added” sort. */
+  addedAt?: string;
+  /** When the user last opened/selected the item (ISO). Used for “Date Last Opened” sort. */
+  lastOpenedAt?: string;
   thumbnailUrl?: string;
   url: string;
   starred?: boolean;

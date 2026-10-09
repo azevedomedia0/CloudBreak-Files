@@ -46,12 +46,13 @@ function createTab(title?: string): TerminalTab {
 }
 
 const XTERM_THEME_DARK = {
-  background: '#0c0c0e',
+  // Transparent so the glass panel shows through (no solid black layer).
+  background: '#00000000',
   foreground: '#c0c0c8',
   cursor: '#a3e635',
-  cursorAccent: '#0c0c0e',
+  cursorAccent: '#121214',
   selectionBackground: '#a3e63555',
-  black: '#0c0c0e',
+  black: '#1a1a1e',
   red: '#f87171',
   green: '#a3e635',
   yellow: '#fbbf24',
@@ -343,7 +344,7 @@ export const SystemTerminal: React.FC<SystemTerminalProps> = ({ width = 320, con
   return (
     <aside
       style={{ width }}
-      className={`system-terminal-panel relative h-full shrink-0 flex flex-col border-l border-white/10 bg-[#0c0c0e] select-text ${
+      className={`system-terminal-panel macos-sidebar-glass relative h-full shrink-0 flex flex-col border-l border-white/10 select-text ${
         dragOver ? 'ring-1 ring-inset ring-[#a3e635]/50' : ''
       }`}
       onDragEnter={onDragEnter}
@@ -351,18 +352,18 @@ export const SystemTerminal: React.FC<SystemTerminalProps> = ({ width = 320, con
       onDragOver={onDragOver}
       onDrop={onDrop}
     >
-      <div className="terminal-panel-header h-10 px-2 flex items-center gap-1.5 border-b border-[#2a2a2e] bg-[#1B1B1B] shrink-0 select-none">
-        <TerminalIcon className="w-3.5 h-3.5 text-[#a3e635] shrink-0 ml-1" />
-        <span className="text-[11px] font-semibold text-[#ececef] tracking-tight shrink-0">
+      <div className="terminal-panel-header h-7 px-1.5 flex items-center gap-1 border-b border-white/8 macos-toolbar-glass shrink-0 select-none">
+        <TerminalIcon className="w-3 h-3 text-[#a3e635] shrink-0 ml-0.5" />
+        <span className="text-[10px] font-semibold text-[#ececef] tracking-tight shrink-0">
           Terminal
         </span>
         {!terminalAvailable() && (
-          <span className="text-[9px] text-[#fbbf24] font-medium shrink-0 hidden sm:inline">
+          <span className="text-[8px] text-[#fbbf24] font-medium shrink-0 hidden sm:inline">
             preview
           </span>
         )}
 
-        <div className="flex-1 min-w-0 flex items-center gap-0.5 overflow-x-auto mx-1">
+        <div className="flex-1 min-w-0 flex items-center gap-px overflow-x-auto mx-0.5">
           {tabs.map(tab => {
             const selected = tab.id === activeId;
             return (
@@ -373,7 +374,7 @@ export const SystemTerminal: React.FC<SystemTerminalProps> = ({ width = 320, con
                   e.stopPropagation();
                   setActiveId(tab.id);
                 }}
-                className={`group flex items-center gap-1 max-w-[7.5rem] h-7 px-2 rounded-md text-[10px] font-mono transition-colors shrink-0 ${
+                className={`group flex items-center gap-0.5 max-w-[5.5rem] h-5 px-1.5 rounded text-[9px] font-mono leading-none transition-colors shrink-0 ${
                   selected
                     ? 'bg-[#a3e635]/15 text-[#a3e635] border border-[#a3e635]/35'
                     : 'text-[#a1a1aa] hover:text-[#ececef] hover:bg-white/5 border border-transparent'
@@ -389,10 +390,10 @@ export const SystemTerminal: React.FC<SystemTerminalProps> = ({ width = 320, con
                     onKeyDown={e => {
                       if (e.key === 'Enter' || e.key === ' ') closeTab(tab.id);
                     }}
-                    className="p-0.5 rounded opacity-60 hover:opacity-100 hover:bg-white/10"
+                    className="p-px rounded opacity-50 hover:opacity-100 hover:bg-white/10"
                     aria-label={`Close ${tab.title}`}
                   >
-                    <X className="w-2.5 h-2.5" />
+                    <X className="w-2 h-2" />
                   </span>
                 )}
               </button>
@@ -406,12 +407,11 @@ export const SystemTerminal: React.FC<SystemTerminalProps> = ({ width = 320, con
             e.stopPropagation();
             addTab();
           }}
-          className="shrink-0 h-7 px-2 rounded-md text-[10px] font-medium text-[#a3e635] hover:text-[#bef264] bg-[#a3e635]/10 hover:bg-[#a3e635]/20 border border-[#a3e635]/30 flex items-center gap-1 transition-colors"
+          className="shrink-0 h-5 w-5 rounded text-[#a3e635] hover:text-[#bef264] bg-[#a3e635]/10 hover:bg-[#a3e635]/20 border border-[#a3e635]/30 flex items-center justify-center transition-colors"
           title="New terminal tab"
           aria-label="New terminal tab"
         >
-          <Plus className="w-3 h-3" />
-          New Tab
+          <Plus className="w-2.5 h-2.5" />
         </button>
       </div>
 

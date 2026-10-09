@@ -17,8 +17,10 @@ use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 
 pub const ROOTS_FILE: &str = "local_roots.json";
-const MAX_DEPTH: usize = 6;
-const MAX_ENTRIES: usize = 2000;
+const MAX_DEPTH: usize = 12;
+/// Cap on files+folders returned per scan. Package dirs (.app) are opaque so they
+/// do not burn this budget walking Contents/.
+const MAX_ENTRIES: usize = 25_000;
 const MAX_READ_BYTES: u64 = 64 * 1024 * 1024;
 
 #[derive(Default)]
@@ -33,6 +35,9 @@ pub struct LocalRoots {
 pub struct LocalFolder {
     pub path: String,
     pub name: String,
+    /// Extra roots merged into this sidebar folder (e.g. iCloud Documents twin).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub extra_paths: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -74,6 +79,23 @@ fn folder_of(path: &Path) -> LocalFolder {
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| path.to_string_lossy().into_owned()),
+        extra_paths: Vec::new(),
+    }
+}
+
+/// When Desktop & Documents were unlinked from iCloud, Finder still keeps a twin under CloudDocs.
+fn icloud_drive_twin(home: &Path, relative: &str) -> Option<PathBuf> {
+    let twin = home
+        .join("Library/Mobile Documents/com~apple~CloudDocs")
+        .join(relative);
+    if !twin.is_dir() {
+        return None;
+    }
+    let primary = home.join(relative);
+    match (fs::canonicalize(&primary), fs::canonicalize(&twin)) {
+        (Ok(a), Ok(b)) if a != b => Some(twin),
+        (Err(_), Ok(_)) => Some(twin),
+        _ => None,
     }
 }
 
@@ -134,10 +156,44 @@ fn valid_file_name(name: &str) -> Result<&str, String> {
 }
 
 pub fn scan_dir(root: &Path) -> Result<LocalScan, String> {
+    scan_dir_limited(root, MAX_ENTRIES)
+}
+
+fn scan_dir_limited(root: &Path, max_entries: usize) -> Result<LocalScan, String> {
     let mut entries = Vec::new();
     let mut truncated = false;
-    walk(root, root, 0, &mut entries, &mut truncated)?;
+    walk(root, root, 0, &mut entries, &mut truncated, max_entries)?;
     Ok(LocalScan { entries, truncated })
+}
+
+/// macOS/iOS bundles and other package directories — list as one folder, do not recurse.
+fn is_opaque_package_dir(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    lower.ends_with(".app")
+        || lower.ends_with(".bundle")
+        || lower.ends_with(".framework")
+        || lower.ends_with(".plugin")
+        || lower.ends_with(".kext")
+        || lower.ends_with(".scptd")
+        || lower.ends_with(".xcodeproj")
+        || lower.ends_with(".xcworkspace")
+        || lower.ends_with(".playground")
+        // Apple TV / Music library database packages (media lives beside them).
+        || lower.ends_with(".tvlibrary")
+        || lower.ends_with(".musiclibrary")
+}
+
+/// Apple Photos library packages — list the bundle, then only walk `originals/` for media.
+fn is_photos_library_dir(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    lower.ends_with(".photoslibrary") || lower.ends_with(".photolibrary")
+}
+
+fn should_skip_dir_name(name: &str) -> bool {
+    matches!(
+        name,
+        "node_modules" | "Pods" | "DerivedData" | "Carthage" | "__pycache__" | "venv" | ".venv"
+    )
 }
 
 fn walk(
@@ -146,24 +202,30 @@ fn walk(
     depth: usize,
     out: &mut Vec<LocalEntry>,
     truncated: &mut bool,
+    max_entries: usize,
 ) -> Result<(), String> {
     if depth > MAX_DEPTH {
+        // Mark truncated but keep scanning siblings of the deep folder.
+        *truncated = true;
         return Ok(());
     }
     let read = fs::read_dir(dir).map_err(|e| format!("Could not open {}: {e}", dir.display()))?;
     let mut children: Vec<_> = read.filter_map(Result::ok).collect();
     children.sort_by_key(|e| e.file_name());
+
+    // List every sibling at this level before recursing. Otherwise a huge early
+    // subfolder (common in Downloads) burns MAX_ENTRIES and hides later files.
+    let mut recurse: Vec<PathBuf> = Vec::new();
+    let mut photos_libraries: Vec<PathBuf> = Vec::new();
     for child in children {
         let name = child.file_name().to_string_lossy().into_owned();
         if name.starts_with('.') {
             continue;
         }
-        // `symlink_metadata` does not follow links, so a link is skipped instead of walked.
+        // `symlink_metadata` does not follow links. Symlinks are listed (e.g. Safari.app
+        // in /Applications) but never recursed into, so they cannot escape the root.
         let Ok(meta) = fs::symlink_metadata(child.path()) else { continue };
-        if meta.file_type().is_symlink() {
-            continue;
-        }
-        if out.len() >= MAX_ENTRIES {
+        if out.len() >= max_entries {
             *truncated = true;
             return Ok(());
         }
@@ -172,19 +234,73 @@ fn walk(
             .strip_prefix(root)
             .map(|p| p.to_string_lossy().replace('\\', "/"))
             .unwrap_or_else(|_| name.clone());
+        let is_symlink = meta.file_type().is_symlink();
+        let is_dir = if is_symlink {
+            let lower = name.to_ascii_lowercase();
+            lower.ends_with(".app")
+                || lower.ends_with(".bundle")
+                || is_photos_library_dir(&name)
+                || is_opaque_package_dir(&name)
+                || fs::metadata(&path).map(|m| m.is_dir()).unwrap_or(false)
+        } else {
+            meta.is_dir()
+        };
         out.push(LocalEntry {
-            name,
+            name: name.clone(),
             path: path.to_string_lossy().into_owned(),
             relative_path: relative,
-            is_dir: meta.is_dir(),
-            size_bytes: if meta.is_dir() { 0 } else { meta.len() },
+            is_dir,
+            size_bytes: if is_dir || is_symlink { 0 } else { meta.len() },
             modified_ms: modified_ms(&meta),
         });
-        if meta.is_dir() {
-            walk(root, &path, depth + 1, out, truncated)?;
-            if *truncated {
-                return Ok(());
-            }
+        if is_symlink {
+            continue;
+        }
+        if is_dir && is_photos_library_dir(&name) {
+            photos_libraries.push(path);
+        } else if is_dir && !is_opaque_package_dir(&name) && !should_skip_dir_name(&name) {
+            recurse.push(path);
+        }
+    }
+
+    for path in recurse {
+        if out.len() >= max_entries {
+            *truncated = true;
+            return Ok(());
+        }
+        walk(root, &path, depth + 1, out, truncated, max_entries)?;
+        if *truncated && out.len() >= max_entries {
+            return Ok(());
+        }
+    }
+
+    // Photos libraries: only walk originals/ (skip database/, resources/, etc.).
+    for library in photos_libraries {
+        if out.len() >= max_entries {
+            *truncated = true;
+            return Ok(());
+        }
+        let originals = library.join("originals");
+        let Ok(meta) = fs::symlink_metadata(&originals) else { continue };
+        if !meta.is_dir() {
+            continue;
+        }
+        let relative = originals
+            .strip_prefix(root)
+            .map(|p| p.to_string_lossy().replace('\\', "/"))
+            .unwrap_or_else(|_| "originals".into());
+        out.push(LocalEntry {
+            name: "originals".into(),
+            path: originals.to_string_lossy().into_owned(),
+            relative_path: relative,
+            is_dir: true,
+            size_bytes: 0,
+            modified_ms: modified_ms(&meta),
+        });
+        // Permission denied (TCC) while walking is fine — keep the library folder entry.
+        let _ = walk(root, &originals, depth + 1, out, truncated, max_entries);
+        if *truncated && out.len() >= max_entries {
+            return Ok(());
         }
     }
     Ok(())
@@ -406,16 +522,57 @@ fn standard_folder_candidates() -> Vec<(String, PathBuf)> {
 /// Returns each folder with its sidebar display name. Skips missing paths quietly.
 #[tauri::command]
 pub fn local_ensure_standard_folders(app: AppHandle, state: State<'_, LocalRoots>) -> Vec<LocalFolder> {
+    // Re-touch protected locations so Files and Folders prompts can appear if still undetermined.
+    #[cfg(target_os = "macos")]
+    crate::macos_full_disk_access::nudge_files_and_folders_prompts();
+
+    let home = std::env::var("HOME").ok().map(PathBuf::from);
     let mut added = Vec::new();
     for (display_name, path) in standard_folder_candidates() {
         if !path.is_dir() {
             continue;
         }
-        match add_root(&app, &state, path, true) {
-            Ok(folder) => added.push(LocalFolder {
-                path: folder.path,
-                name: display_name,
-            }),
+        match add_root(&app, &state, path.clone(), true) {
+            Ok(folder) => {
+                let mut extra_paths = Vec::new();
+                // Merge the iCloud Drive twin when it is a separate folder.
+                if matches!(
+                    display_name.as_str(),
+                    "Desktop" | "Documents" | "Downloads" | "Photos" | "Videos" | "Music"
+                ) {
+                    if let Some(home) = home.as_ref() {
+                        let relative = path
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or(display_name.as_str());
+                        if let Some(twin) = icloud_drive_twin(home, relative) {
+                            if add_root(&app, &state, twin.clone(), true).is_ok() {
+                                extra_paths.push(twin.to_string_lossy().into_owned());
+                            }
+                        }
+                    }
+                }
+                // Finder also shows ~/Applications alongside /Applications.
+                if display_name == "Applications" {
+                    if let Some(home) = home.as_ref() {
+                        let user_apps = home.join("Applications");
+                        if user_apps.is_dir() {
+                            if let Ok(canon) = fs::canonicalize(&user_apps) {
+                                if canon != PathBuf::from(&folder.path)
+                                    && add_root(&app, &state, user_apps.clone(), true).is_ok()
+                                {
+                                    extra_paths.push(canon.to_string_lossy().into_owned());
+                                }
+                            }
+                        }
+                    }
+                }
+                added.push(LocalFolder {
+                    path: folder.path,
+                    name: display_name,
+                    extra_paths,
+                });
+            }
             Err(_) => {
                 // Permission denied or unreadable — keep the empty sidebar stub.
             }
@@ -586,16 +743,130 @@ mod tests {
         assert!(!scan.truncated);
     }
 
+    #[test]
+    fn scan_lists_app_bundle_but_does_not_recurse() {
+        let t = Tmp::new();
+        let app = t.0.join("Demo.app");
+        fs::create_dir_all(app.join("Contents/MacOS")).unwrap();
+        fs::write(app.join("Contents/Info.plist"), "plist").unwrap();
+        fs::write(t.0.join("readme.txt"), "hi").unwrap();
+        let scan = scan_dir(&t.0).unwrap();
+        let names: Vec<_> = scan.entries.iter().map(|e| e.relative_path.as_str()).collect();
+        assert!(names.contains(&"Demo.app"));
+        assert!(names.contains(&"readme.txt"));
+        assert!(!names.iter().any(|n| n.contains("Contents")));
+        assert!(!scan.truncated);
+    }
+
+    #[test]
+    fn scan_lists_tvlibrary_but_does_not_recurse() {
+        let t = Tmp::new();
+        let lib = t.0.join("TV Library.tvlibrary");
+        fs::create_dir_all(&lib).unwrap();
+        fs::write(lib.join("Library.tvdb"), "db").unwrap();
+        fs::write(t.0.join("clip.mp4"), "vid").unwrap();
+        let scan = scan_dir(&t.0).unwrap();
+        let names: Vec<_> = scan.entries.iter().map(|e| e.relative_path.as_str()).collect();
+        assert!(names.contains(&"TV Library.tvlibrary"));
+        assert!(names.contains(&"clip.mp4"));
+        assert!(!names.iter().any(|n| n.contains("Library.tvdb")));
+        assert!(!scan.truncated);
+    }
+
+    #[test]
+    fn scan_lists_musiclibrary_but_walks_sibling_media() {
+        let t = Tmp::new();
+        let lib = t.0.join("Music Library.musiclibrary");
+        fs::create_dir_all(&lib).unwrap();
+        fs::write(lib.join("Library.musicdb"), "db").unwrap();
+        let media = t.0.join("Media.localized/Music/Artist");
+        fs::create_dir_all(&media).unwrap();
+        fs::write(media.join("track.m4a"), "audio").unwrap();
+        let scan = scan_dir(&t.0).unwrap();
+        let names: Vec<_> = scan.entries.iter().map(|e| e.relative_path.as_str()).collect();
+        assert!(names.contains(&"Music Library.musiclibrary"));
+        assert!(names.contains(&"Media.localized/Music/Artist/track.m4a"));
+        assert!(!names.iter().any(|n| n.contains("Library.musicdb")));
+        assert!(!scan.truncated);
+    }
+
+    #[test]
+    fn scan_photos_library_walks_originals_only() {
+        let t = Tmp::new();
+        let library = t.0.join("Photos Library.photoslibrary");
+        fs::create_dir_all(library.join("originals/0A")).unwrap();
+        fs::create_dir_all(library.join("database")).unwrap();
+        fs::write(library.join("originals/0A/shot.jpg"), "img").unwrap();
+        fs::write(library.join("database/Photos.sqlite"), "db").unwrap();
+        fs::write(t.0.join("loose.png"), "p").unwrap();
+
+        let scan = scan_dir(&t.0).unwrap();
+        let names: Vec<_> = scan.entries.iter().map(|e| e.relative_path.as_str()).collect();
+        assert!(names.contains(&"Photos Library.photoslibrary"));
+        assert!(names.contains(&"Photos Library.photoslibrary/originals"));
+        assert!(names.contains(&"Photos Library.photoslibrary/originals/0A"));
+        assert!(names.contains(&"Photos Library.photoslibrary/originals/0A/shot.jpg"));
+        assert!(names.contains(&"loose.png"));
+        assert!(!names.iter().any(|n| n.contains("database")));
+        assert!(!scan.truncated);
+    }
+
+    #[test]
+    fn scan_continues_after_max_depth_in_one_branch() {
+        let t = Tmp::new();
+        // Deep tree sorts before "zebra.txt", so a depth abort must not skip the sibling file.
+        let mut deep = t.0.join("deep");
+        for _ in 0..=MAX_DEPTH + 2 {
+            deep = deep.join("d");
+        }
+        fs::create_dir_all(&deep).unwrap();
+        fs::write(deep.join("buried.txt"), "x").unwrap();
+        fs::write(t.0.join("zebra.txt"), "z").unwrap();
+        let scan = scan_dir(&t.0).unwrap();
+        let names: Vec<_> = scan.entries.iter().map(|e| e.name.as_str()).collect();
+        assert!(names.contains(&"zebra.txt"), "sibling after a deep folder must still be listed");
+        assert!(scan.truncated);
+    }
+
+    #[test]
+    fn scan_lists_all_top_level_before_filling_deep_budget() {
+        let t = Tmp::new();
+        // Early bulky folder sorts before zebra.txt; with a tight budget, depth-first
+        // would never reach zebra. Sibling-first must still list it.
+        let bulky = t.0.join("aadir");
+        fs::create_dir_all(&bulky).unwrap();
+        for i in 0..80 {
+            fs::write(bulky.join(format!("f{i:04}.txt")), "x").unwrap();
+        }
+        fs::write(t.0.join("zebra.txt"), "z").unwrap();
+
+        let scan = scan_dir_limited(&t.0, 40).unwrap();
+        let top: Vec<_> = scan
+            .entries
+            .iter()
+            .filter(|e| !e.relative_path.contains('/'))
+            .map(|e| e.name.as_str())
+            .collect();
+        assert!(top.contains(&"zebra.txt"), "top-level sibling must survive entry budget");
+        assert!(top.contains(&"aadir"));
+        assert!(scan.truncated);
+        assert!(scan.entries.len() <= 40);
+    }
+
     #[cfg(unix)]
     #[test]
-    fn scan_does_not_follow_symlinks() {
+    fn scan_lists_symlinks_but_does_not_follow_them() {
         let t = Tmp::new();
         let outside = Tmp::new();
         fs::write(outside.0.join("secret.txt"), "nope").unwrap();
         sample_tree(&t.0);
         std::os::unix::fs::symlink(&outside.0, t.0.join("link")).unwrap();
+        // Application symlinks (e.g. Safari.app → system) must appear in listings.
+        std::os::unix::fs::symlink(&outside.0, t.0.join("Safari.app")).unwrap();
         let scan = scan_dir(&t.0).unwrap();
-        assert!(!scan.entries.iter().any(|e| e.relative_path.contains("secret.txt") || e.name == "link"));
+        assert!(scan.entries.iter().any(|e| e.name == "link"));
+        assert!(scan.entries.iter().any(|e| e.name == "Safari.app" && e.is_dir));
+        assert!(!scan.entries.iter().any(|e| e.relative_path.contains("secret.txt")));
     }
 
     #[test]

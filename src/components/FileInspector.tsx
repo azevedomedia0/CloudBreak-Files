@@ -5,7 +5,7 @@ import {
   Share2, Info, HardDrive, Sparkles, Key,
   ChevronDown, ChevronUp, ChevronRight, Minimize2, Maximize2,
   PanelRightClose, PanelRight, Play, Pause, RotateCcw, Volume2, VolumeX,
-  Copy, ClipboardPaste, Pencil, FolderInput, FileArchive, FolderPlus,
+  Copy, ClipboardPaste, TextCursorInput, FolderInput, FileArchive, FolderPlus,
 } from 'lucide-react';
 import { FileItem, CloudAccount, FolderItem } from '../types';
 import { isEditableDocument } from '../utils/documentKind';
@@ -37,6 +37,8 @@ interface FileInspectorProps {
   onNewFolder?: () => void;
   canPaste?: boolean;
   width?: number;
+  /** Grow to fill leftover horizontal space (e.g. Columns view). */
+  expand?: boolean;
   photoNav?: PhotoNav | null;
 }
 
@@ -61,6 +63,7 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
   onNewFolder,
   canPaste = false,
   width = 320,
+  expand = false,
   photoNav,
 }) => {
   const [isBodyCollapsed, setIsBodyCollapsed] = useState<boolean>(false);
@@ -144,7 +147,39 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
     }));
   };
 
-  if (!isOpen || !file) return null;
+  if (!isOpen) return null;
+
+  const panelStyle = expand ? undefined : { width: `${width}px` };
+  const panelClass = expand
+    ? 'macos-sidebar-glass border-l border-white/8 flex flex-col h-full overflow-y-auto select-none flex-1 min-w-[260px] transition-all duration-300'
+    : 'macos-sidebar-glass border-l border-white/8 flex flex-col h-full overflow-y-auto select-none shrink-0 transition-all duration-300';
+
+  if (!file) {
+    return (
+      <div
+        style={panelStyle}
+        className={panelClass}
+      >
+        <div className="flex items-center px-3.5 py-2.5 macos-toolbar-glass border-b border-white/8 shrink-0">
+          <div className="flex items-center gap-2">
+            <Info className="w-4 h-4 text-sky-400" />
+            <span className="text-xs font-semibold text-neutral-200">File Inspector</span>
+          </div>
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6 text-center">
+          <div className="p-3 rounded-2xl bg-white/5 border border-white/10 text-neutral-400">
+            <PanelRight className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-neutral-200">No file selected</p>
+            <p className="text-[11px] text-neutral-500 mt-1 leading-relaxed">
+              Select a file in the browser to preview details, encryption, and actions here.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const account = accounts.find(a => a.id === file.accountId);
 
@@ -157,8 +192,8 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
 
   return (
     <div 
-      style={{ width: `${width}px` }}
-      className="macos-sidebar-glass border-l border-white/8 flex flex-col h-full overflow-y-auto select-none shrink-0 transition-all duration-300"
+      style={panelStyle}
+      className={panelClass}
     >
       
       {/* Inspector Header */}
@@ -546,7 +581,7 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
               type="button"
               onClick={() => onNewFolder?.()}
               disabled={!onNewFolder}
-              className="h-9 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 hover:border-cyan-400/30 text-neutral-200 hover:text-cyan-200 flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              className="h-9 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 hover:border-yellow-400/40 text-neutral-200 hover:text-yellow-300 flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               title="New Folder"
               aria-label="New Folder"
             >
@@ -586,7 +621,7 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
               title="Rename"
               aria-label="Rename"
             >
-              <Pencil className="w-4 h-4" />
+              <TextCursorInput className="w-4 h-4" />
             </button>
             <div className="relative">
               <button

@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# Signed / notarized macOS release build. See docs/notarized-distribution.md.
+# Signed / notarized macOS release build (Apple Silicon + Intel). See docs/notarized-distribution.md.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/tmp/cloudbreak-cargo-target}"
+# Match tauri.conf.json bundle.macOS.minimumSystemVersion so Intel Macs on Big Sur+ can run the binary.
+export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-11.0}"
 
 # Updater signing (creates .app.tar.gz + .sig). Private key must never be committed.
 UPDATER_KEY_DEFAULT="${HOME}/.tauri/cloudbreak-files.key"
@@ -23,7 +25,16 @@ pkill -x actool 2>/dev/null || true
 
 TARGET="${1:-universal-apple-darwin}"
 
-# Embed ffmpeg so end-user Macs do not need Homebrew.
+# Universal builds need both Rust targets (Apple Silicon host still cross-compiles x86_64).
+if [[ "$TARGET" == "universal-apple-darwin" ]]; then
+  if command -v rustup >/dev/null 2>&1; then
+    rustup target add aarch64-apple-darwin x86_64-apple-darwin
+  else
+    echo "warn: rustup not found — ensure aarch64-apple-darwin and x86_64-apple-darwin are installed." >&2
+  fi
+fi
+
+# Embed ffmpeg so end-user Macs do not need Homebrew (arm64 + x86_64 → lipo universal).
 echo "Fetching ffmpeg sidecars…"
 if bash "$ROOT/scripts/fetch-ffmpeg.sh"; then
   BUNDLE_FFMPEG=1
@@ -32,17 +43,50 @@ else
   BUNDLE_FFMPEG=0
 fi
 
+if [[ "$TARGET" == "universal-apple-darwin" && "$BUNDLE_FFMPEG" -eq 1 ]]; then
+  if [[ ! -x "$ROOT/src-tauri/binaries/ffmpeg-x86_64-apple-darwin" ]]; then
+    echo "error: Intel ffmpeg sidecar missing; universal builds need both architectures." >&2
+    exit 1
+  fi
+  if [[ ! -x "$ROOT/src-tauri/binaries/ffmpeg-aarch64-apple-darwin" ]]; then
+    echo "error: Apple Silicon ffmpeg sidecar missing; universal builds need both architectures." >&2
+    exit 1
+  fi
+fi
+
 EXTRA_CONFIG=()
 if [[ "$BUNDLE_FFMPEG" -eq 1 ]]; then
   # Only enable externalBin when the binaries exist so `tauri build` does not fail.
   EXTRA_CONFIG+=(--config '{"bundle":{"externalBin":["binaries/ffmpeg"]}}')
 fi
 
-echo "Building for ${TARGET} (CARGO_TARGET_DIR=${CARGO_TARGET_DIR})"
+echo "Building for ${TARGET} (MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET}, CARGO_TARGET_DIR=${CARGO_TARGET_DIR})"
 npm run tauri build -- --target "$TARGET" "${EXTRA_CONFIG[@]}"
 
 APP="$(find "${CARGO_TARGET_DIR}" -path '*/release/bundle/macos/Cloudbreak Files.app' -type d 2>/dev/null | head -1)"
 if [[ -n "$APP" && -d "$APP" ]]; then
+  BIN="$APP/Contents/MacOS/Cloudbreak Files"
+  if [[ "$TARGET" == "universal-apple-darwin" && -x "$BIN" ]]; then
+    ARCHS="$(lipo -archs "$BIN" 2>/dev/null || true)"
+    echo "App binary architectures: ${ARCHS:-unknown}"
+    if ! echo "$ARCHS" | grep -q 'x86_64'; then
+      echo "error: release binary is missing x86_64 (Intel). Refusing to ship an Apple Silicon–only build." >&2
+      exit 1
+    fi
+    if ! echo "$ARCHS" | grep -q 'arm64'; then
+      echo "error: release binary is missing arm64 (Apple Silicon)." >&2
+      exit 1
+    fi
+    if [[ -x "$APP/Contents/MacOS/ffmpeg" ]]; then
+      FF_ARCHS="$(lipo -archs "$APP/Contents/MacOS/ffmpeg" 2>/dev/null || true)"
+      echo "Bundled ffmpeg architectures: ${FF_ARCHS:-unknown}"
+      if ! echo "$FF_ARCHS" | grep -q 'x86_64' || ! echo "$FF_ARCHS" | grep -q 'arm64'; then
+        echo "error: bundled ffmpeg must be universal (arm64 + x86_64)." >&2
+        exit 1
+      fi
+    fi
+  fi
+
   echo ""
   echo "Verify before shipping:"
   echo "  codesign --verify --deep --strict --verbose=2 \"${APP}\""

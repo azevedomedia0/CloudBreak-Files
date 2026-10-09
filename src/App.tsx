@@ -48,6 +48,8 @@ import {
   saveProfile,
 } from './utils/appPreferences';
 import { p2pBridge } from './services/p2pBridge';
+import { localFs } from './services/localFsBridge';
+import { isEditableDocument, isPlainTextDocument, TEXT_UPLOAD_MAX_BYTES } from './utils/documentKind';
 
 export default function App() {
   // Accounts & Navigation States
@@ -114,6 +116,9 @@ export default function App() {
     useResizablePanel({ initial: 240, min: 180, max: 380, grow: 'right' });
   const { width: inspectorWidth, isResizing: isResizingInspector, startResize: startResizeInspector, reset: resetInspectorWidth } =
     useResizablePanel({ initial: 320, min: 260, max: () => Math.max(480, Math.round(window.innerWidth * 0.65)), grow: 'left' });
+  /** Columns view: equal-width columns hug content; inspector fills the leftover space. */
+  const columnsInspectorFill =
+    viewMode === 'columns' && isInspectorOpen && sidePanelMode === 'inspector' && !editingDocumentFile;
 
   const { toast: toastNotification, showToast } = useToast();
 
@@ -165,6 +170,28 @@ export default function App() {
         localStorage.setItem(key, '1');
       } catch { /* ignore */ }
     });
+    return () => { cancelled = true; };
+  }, [showToast]);
+
+  // Remind when Full Disk Access is still off (native side opens Settings once on first launch).
+  useEffect(() => {
+    if (!isTauri()) return;
+    let cancelled = false;
+    const key = 'cloudbreak.fdaReminderDismissed';
+    void (async () => {
+      try {
+        if (localStorage.getItem(key) === '1') return;
+        const { fullDiskAccessGranted } = await import('./services/permissionsBridge');
+        const granted = await fullDiskAccessGranted();
+        if (cancelled || granted) return;
+        showToast('Turn on Cloudbreak Files under System Settings → Privacy & Security → Full Disk Access');
+        try {
+          localStorage.setItem(key, '1');
+        } catch { /* ignore */ }
+      } catch {
+        // Browser or older build without the command.
+      }
+    })();
     return () => { cancelled = true; };
   }, [showToast]);
 
@@ -247,6 +274,40 @@ export default function App() {
   const selectedFile = files.find(f => f.id === selectedFileId) || null;
   const selectedFolder = folders.find(f => f.id === selectedFolderId) || null;
   const selectedLibrary = sharedLibraries.find(lib => lib.id === selectedLibraryId) || null;
+
+  const markFileOpened = (fileId: string) => {
+    const now = new Date().toISOString();
+    setFiles(prev => prev.map(f => (f.id === fileId ? { ...f, lastOpenedAt: now } : f)));
+  };
+
+  const openFileSelection = (file: FileItem) => {
+    setSelectedFileId(file.id);
+    markFileOpened(file.id);
+  };
+
+  /** Load local text into documentBody when the scan skipped nested sources. */
+  const openDocumentFile = async (file: FileItem) => {
+    openFileSelection(file);
+    if (
+      file.documentBody == null
+      && file.localPath
+      && localFs.available()
+      && isEditableDocument(file)
+      && file.sizeBytes <= TEXT_UPLOAD_MAX_BYTES
+      && (isPlainTextDocument(file) || /\.html?$/i.test(file.name))
+    ) {
+      try {
+        const documentBody = await localFs.readText(file.localPath);
+        const withBody = { ...file, documentBody };
+        setFiles(prev => prev.map(f => (f.id === file.id ? { ...f, documentBody } : f)));
+        setEditingDocumentFile(withBody);
+        return;
+      } catch {
+        // Fall through and open with empty/default body.
+      }
+    }
+    setEditingDocumentFile(file);
+  };
 
   // Filter files
   const filteredFiles = sortFiles(
@@ -495,7 +556,7 @@ export default function App() {
               </div>
             )}
 
-            {/* Central File Explorer — document editor replaces this pane when open */}
+            {/* Central File Explorer — document editor replaces the browser pane when open */}
             {editingDocumentFile ? (
               <DocumentEditorModal
                 key={editingDocumentFile.id}
@@ -509,141 +570,153 @@ export default function App() {
                 }}
               />
             ) : (
-              <>
-                <FileBrowser
-                  files={filteredFiles}
-                  selectedSourceId={selectedSourceId}
-                  accounts={accounts}
-                  selectedAccountId={selectedAccountId}
-                  selectedFolder={selectedFolder}
-                  selectedLibrary={selectedLibrary}
-                  selectedCategory={selectedCategory}
-                  selectedFileId={selectedFileId}
-                  viewMode={viewMode}
-                  playingAudioFile={playingAudioFile}
-                  audioPlaylist={files.filter(f => f.category === 'audio')}
-                  onSelectFile={file => setSelectedFileId(file.id)}
-                  onEditPhoto={file => setEditingPhotoFile(file)}
-                  onOpenDocument={file => setEditingDocumentFile(file)}
-                  onOpenVideo={async file => {
-                    setPlayingAudioFile(null);
-                    if (file.tags.includes('P2P') && file.encryption?.algorithm === 'AES-256-GCM') {
-                      const lib = sharedLibraries.find(l => l.fileIds.includes(file.id));
-                      if (lib) {
-                        try {
-                          showToast('Decrypting P2P stream…');
-                          const blob = await p2pBridge.assembleFileBlob(lib.id, file.id, file.mimeType);
-                          const url = URL.createObjectURL(blob);
-                          setPlayingVideoFile({ ...file, url });
-                          return;
-                        } catch (err) {
-                          showToast(err instanceof Error ? err.message : String(err));
-                        }
+              <FileBrowser
+                files={filteredFiles}
+                selectedSourceId={selectedSourceId}
+                accounts={accounts}
+                selectedAccountId={selectedAccountId}
+                selectedFolder={selectedFolder}
+                selectedLibrary={selectedLibrary}
+                selectedCategory={selectedCategory}
+                selectedFileId={selectedFileId}
+                viewMode={viewMode}
+                playingAudioFile={playingAudioFile}
+                audioPlaylist={files.filter(f => f.category === 'audio')}
+                onSelectFile={file => openFileSelection(file)}
+                onEditPhoto={file => {
+                  openFileSelection(file);
+                  setEditingPhotoFile(file);
+                }}
+                onOpenDocument={file => { void openDocumentFile(file); }}
+                onOpenVideo={async file => {
+                  openFileSelection(file);
+                  setPlayingAudioFile(null);
+                  if (file.tags.includes('P2P') && file.encryption?.algorithm === 'AES-256-GCM') {
+                    const lib = sharedLibraries.find(l => l.fileIds.includes(file.id));
+                    if (lib) {
+                      try {
+                        showToast('Decrypting P2P stream…');
+                        const blob = await p2pBridge.assembleFileBlob(lib.id, file.id, file.mimeType);
+                        const url = URL.createObjectURL(blob);
+                        setPlayingVideoFile({ ...file, url });
+                        return;
+                      } catch (err) {
+                        showToast(err instanceof Error ? err.message : String(err));
                       }
                     }
-                    setPlayingVideoFile(file);
-                  }}
-                  onOpenAudio={file => {
-                    setPlayingVideoFile(null);
-                    setSelectedFileId(file.id);
-                    setPlayingAudioFile(file);
-                  }}
-                  onCloseAudio={() => setPlayingAudioFile(null)}
-                  onShareFile={file => {
-                    const firstLib = sharedLibraries[0];
-                    if (firstLib) setSharingLibrary(firstLib);
-                  }}
-                  onToggleEncrypt={handleToggleEncrypt}
-                  onDeleteFile={handleDeleteFile}
-                  onBatchRestore={handleBatchRestore}
-                  onBatchDelete={handleBatchDelete}
-                  onRenameFile={handleRenameFile}
-                  onDuplicateFiles={handleDuplicateFiles}
-                  onCopyFiles={handleCopyFileNames}
-                  onToggleTag={handleToggleTag}
-                  onUnzipFile={file => { void handleUnzipFile(file); }}
-                  onOpenQuickLook={() => setIsQuickLookOpen(true)}
-                  folders={folders}
-                  onSelectFolder={id => {
-                    if (selectedCategory === 'files' || selectedCategory === 'photo' || selectedCategory === 'video') {
-                      setSelectedCategory('all');
-                    }
-                    selectFolder(id);
-                  }}
-                  swarmStatus={swarmStatus}
-                  onCopyLibraryInvite={() => { void copyLibraryInvite(); }}
-                  onRefreshSwarm={() => { void refreshSwarm(); }}
-                />
+                  }
+                  setPlayingVideoFile(file);
+                }}
+                onOpenAudio={file => {
+                  setPlayingVideoFile(null);
+                  openFileSelection(file);
+                  setPlayingAudioFile(file);
+                }}
+                onCloseAudio={() => setPlayingAudioFile(null)}
+                onShareFile={file => {
+                  const firstLib = sharedLibraries[0];
+                  if (firstLib) setSharingLibrary(firstLib);
+                }}
+                onToggleEncrypt={handleToggleEncrypt}
+                onDeleteFile={handleDeleteFile}
+                onBatchRestore={handleBatchRestore}
+                onBatchDelete={handleBatchDelete}
+                onRenameFile={handleRenameFile}
+                onDuplicateFiles={handleDuplicateFiles}
+                onCopyFiles={handleCopyFileNames}
+                onToggleTag={handleToggleTag}
+                onUnzipFile={file => { void handleUnzipFile(file); }}
+                onOpenQuickLook={() => setIsQuickLookOpen(true)}
+                folders={folders}
+                onSelectFolder={id => {
+                  if (selectedCategory === 'files' || selectedCategory === 'photo' || selectedCategory === 'video') {
+                    setSelectedCategory('all');
+                  }
+                  selectFolder(id);
+                }}
+                swarmStatus={swarmStatus}
+                onCopyLibraryInvite={() => { void copyLibraryInvite(); }}
+                onRefreshSwarm={() => { void refreshSwarm(); }}
+                hugContent={columnsInspectorFill}
+              />
+            )}
 
-                {/* Right panel: File Inspector or System Terminal */}
-                {isInspectorOpen && (sidePanelMode === 'terminal' || selectedFile) && (
-                  <div
-                    onMouseDown={startResizeInspector}
-                    onDoubleClick={resetInspectorWidth}
-                    className={`w-1.5 -mr-1 z-30 cursor-col-resize hover:bg-sky-400/60 transition-colors select-none shrink-0 group ${
-                      isResizingInspector ? 'bg-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.8)]' : 'bg-transparent'
-                    }`}
-                    title="Drag to resize side panel (Double-click to reset)"
-                  >
-                    <div className="w-0.5 h-6 mx-auto mt-2 rounded bg-white/20 group-hover:bg-sky-300 transition-colors" />
-                  </div>
-                )}
+            {/* Right panel stays visible on every file screen (browser + document editor) */}
+            {isInspectorOpen && !columnsInspectorFill && (
+              <div
+                onMouseDown={startResizeInspector}
+                onDoubleClick={resetInspectorWidth}
+                className={`w-1.5 -mr-1 z-30 cursor-col-resize hover:bg-sky-400/60 transition-colors select-none shrink-0 group ${
+                  isResizingInspector ? 'bg-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.8)]' : 'bg-transparent'
+                }`}
+                title="Drag to resize side panel (Double-click to reset)"
+              >
+                <div className="w-0.5 h-6 mx-auto mt-2 rounded bg-white/20 group-hover:bg-sky-300 transition-colors" />
+              </div>
+            )}
 
-                {isInspectorOpen && sidePanelMode === 'terminal' && (
-                  <SystemTerminal
-                    width={inspectorWidth}
-                    context={{
-                      cwdLabel: activePathTitle || 'All Files',
-                      userName: userProfile.name,
-                      isVaultUnlocked,
-                      peerId: swarmStatus?.peerId ?? null,
-                      fileNames: filteredFiles.map(f => f.name),
-                      libraryNames: sharedLibraries.map(l => l.name),
-                    }}
-                  />
-                )}
+            {isInspectorOpen && sidePanelMode === 'terminal' && (
+              <SystemTerminal
+                width={inspectorWidth}
+                context={{
+                  cwdLabel: activePathTitle || 'All Files',
+                  userName: userProfile.name,
+                  isVaultUnlocked,
+                  peerId: swarmStatus?.peerId ?? null,
+                  fileNames: filteredFiles.map(f => f.name),
+                  libraryNames: sharedLibraries.map(l => l.name),
+                }}
+              />
+            )}
 
-                {isInspectorOpen && sidePanelMode === 'inspector' && selectedFile && (
-                  <FileInspector
-                    file={selectedFile}
-                    photoNav={photoNav}
-                    accounts={accounts}
-                    folders={folders}
-                    isOpen={true}
-                    onEditPhoto={file => setEditingPhotoFile(file)}
-                    onOpenDocument={file => setEditingDocumentFile(file)}
-                    onOpenVideo={(file, tab) => {
-                      setPlayingAudioFile(null);
-                      setPlayingVideoFile(file);
-                      if (tab) setVideoPlayerInitialTab(tab);
-                    }}
-                    onOpenAudio={file => {
-                      setPlayingVideoFile(null);
-                      setSelectedFileId(file.id);
-                      setPlayingAudioFile(file);
-                    }}
-                    onShare={file => {
-                      const firstLib = sharedLibraries[0];
-                      if (firstLib) setSharingLibrary(firstLib);
-                    }}
-                    onToggleEncrypt={handleToggleEncrypt}
-                    onDeleteFile={handleDeleteFile}
-                    onUnzipFile={file => { void handleUnzipFile(file); }}
-                    onCopyFile={file => { void handleCopyFileNames([file]); }}
-                    onPasteFiles={() => handlePasteFiles({
-                      folderId: selectedFile.folderId,
-                      folderPath: selectedFile.folderPath,
-                      accountId: selectedFile.accountId,
-                    })}
-                    onRenameFile={handleRenameFile}
-                    onMoveFile={handleMoveFile}
-                    onCompressFile={handleCompressFile}
-                    onNewFolder={() => setIsNewFolderOpen(true)}
-                    canPaste={clipboardFileIds.length > 0}
-                    width={inspectorWidth}
-                  />
-                )}
-              </>
+            {isInspectorOpen && sidePanelMode === 'inspector' && (
+              <FileInspector
+                file={selectedFile ?? editingDocumentFile}
+                photoNav={photoNav}
+                accounts={accounts}
+                folders={folders}
+                isOpen={true}
+                onEditPhoto={file => {
+                  openFileSelection(file);
+                  setEditingPhotoFile(file);
+                }}
+                onOpenDocument={file => { void openDocumentFile(file); }}
+                onOpenVideo={(file, tab) => {
+                  openFileSelection(file);
+                  setPlayingAudioFile(null);
+                  setPlayingVideoFile(file);
+                  if (tab) setVideoPlayerInitialTab(tab);
+                }}
+                onOpenAudio={file => {
+                  setPlayingVideoFile(null);
+                  openFileSelection(file);
+                  setPlayingAudioFile(file);
+                }}
+                onShare={file => {
+                  const firstLib = sharedLibraries[0];
+                  if (firstLib) setSharingLibrary(firstLib);
+                }}
+                onToggleEncrypt={handleToggleEncrypt}
+                onDeleteFile={handleDeleteFile}
+                onUnzipFile={file => { void handleUnzipFile(file); }}
+                onCopyFile={file => { void handleCopyFileNames([file]); }}
+                onPasteFiles={() => {
+                  const target = selectedFile ?? editingDocumentFile;
+                  if (!target) return;
+                  handlePasteFiles({
+                    folderId: target.folderId,
+                    folderPath: target.folderPath,
+                    accountId: target.accountId,
+                  });
+                }}
+                onRenameFile={handleRenameFile}
+                onMoveFile={handleMoveFile}
+                onCompressFile={handleCompressFile}
+                onNewFolder={() => setIsNewFolderOpen(true)}
+                canPaste={clipboardFileIds.length > 0}
+                width={inspectorWidth}
+                expand={columnsInspectorFill}
+              />
             )}
           </div>
 
@@ -663,7 +736,7 @@ export default function App() {
         sharedLibraries={sharedLibraries}
         setSharingLibrary={setSharingLibrary}
         editingPhotoFile={editingPhotoFile}
-        onOpenDocument={file => setEditingDocumentFile(file)}
+        onOpenDocument={file => { void openDocumentFile(file); }}
         handleSavePhotoVersion={handleSavePhotoVersion}
         playingVideoFile={playingVideoFile}
         handleSaveTrimmedVideo={handleSaveTrimmedVideo}

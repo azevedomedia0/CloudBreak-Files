@@ -54,6 +54,8 @@ interface FileBrowserProps {
   swarmStatus?: SwarmStatus | null;
   onCopyLibraryInvite?: () => void;
   onRefreshSwarm?: () => void;
+  /** Columns mode: size to the equal-width columns so the inspector can fill leftover space. */
+  hugContent?: boolean;
 }
 
 export const FileBrowser: React.FC<FileBrowserProps> = ({
@@ -90,6 +92,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   swarmStatus = null,
   onCopyLibraryInvite,
   onRefreshSwarm,
+  hugContent = false,
 }) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [iconScale, setIconScale] = useState<number>(100); // 75 to 150%
@@ -291,7 +294,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
       ref={rootRef}
       tabIndex={0}
       onKeyDown={onBrowserKeyDown}
-      className="flex-1 flex flex-col h-full overflow-hidden select-none relative outline-none"
+      className={`${hugContent ? 'shrink-0 w-auto' : 'flex-1 min-w-0'} flex flex-col h-full overflow-hidden select-none relative outline-none`}
     >
       
       {/* Batch Selection Banner */}
@@ -339,7 +342,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
       )}
 
       {/* Main Viewport Content based on macOS View Mode */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 relative">
+      <div className={`flex-1 overflow-y-auto p-4 relative ${viewMode === 'columns' ? 'overflow-x-auto' : 'overflow-x-hidden'}`}>
         
         {files.length === 0 && browseSubfolders.length === 0 && !groupByLocation && (
           <div className="h-full flex flex-col items-center justify-center text-center p-8 text-neutral-400">

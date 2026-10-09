@@ -1,12 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  X, User, Settings, ShieldCheck, HardDrive, Bell,
+  X, User, Settings, ShieldCheck, Bell,
   Sliders, Lock, Unlock, Radio, Copy, Check, Info,
-  Eye, EyeOff, Trash2, Gauge, PanelRight,
+  Eye, EyeOff, Trash2, PanelRight,
   Cpu, Fingerprint, RefreshCw, Globe, Moon, Sun,
+  Camera, ImagePlus, FolderLock, FolderOpen, Network,
 } from 'lucide-react';
+import { isTauri } from '@tauri-apps/api/core';
 import { CloudAccount } from '../types';
-import { formatBytes } from '../utils/format';
 import {
   AppPreferences,
   AppTheme,
@@ -16,12 +17,42 @@ import {
   savePreferences,
   saveProfile,
 } from '../utils/appPreferences';
+import { fullDiskAccessGranted, requestFullDiskAccess } from '../services/permissionsBridge';
 
 export interface UserProfile {
   name: string;
   email: string;
   role: string;
   avatarUrl?: string;
+}
+
+const AVATAR_MAX_EDGE = 256;
+const AVATAR_MAX_INPUT_BYTES = 8 * 1024 * 1024;
+
+/** Resize and JPEG-encode a picked image for localStorage-friendly profile photos. */
+async function fileToAvatarDataUrl(file: File): Promise<string> {
+  if (!file.type.startsWith('image/')) {
+    throw new Error('Choose an image file (JPEG, PNG, WebP, or HEIC).');
+  }
+  if (file.size > AVATAR_MAX_INPUT_BYTES) {
+    throw new Error('Image is too large (max 8 MB). Try a smaller photo.');
+  }
+
+  const bitmap = await createImageBitmap(file);
+  try {
+    const scale = Math.min(1, AVATAR_MAX_EDGE / Math.max(bitmap.width, bitmap.height));
+    const w = Math.max(1, Math.round(bitmap.width * scale));
+    const h = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Could not process that image.');
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    return canvas.toDataURL('image/jpeg', 0.88);
+  } finally {
+    bitmap.close();
+  }
 }
 
 interface ProfileSettingsModalProps {
@@ -43,7 +74,17 @@ interface ProfileSettingsModalProps {
   appVersion?: string | null;
 }
 
-type SettingsTab = 'profile' | 'preferences' | 'notifications' | 'security' | 'storage' | 'network';
+type SettingsTab = 'profile' | 'preferences' | 'notifications' | 'security' | 'permissions' | 'network';
+
+const FILES_AND_FOLDERS = [
+  { name: 'Desktop', detail: '~/Desktop' },
+  { name: 'Documents', detail: '~/Documents' },
+  { name: 'Downloads', detail: '~/Downloads' },
+  { name: 'Movies', detail: '~/Movies (Videos)' },
+  { name: 'Music', detail: '~/Music' },
+  { name: 'Pictures', detail: '~/Pictures (Photos)' },
+  { name: 'Applications', detail: '/Applications' },
+] as const;
 
 const TAB_ACTIVE = 'bg-sky-500/20 text-sky-200 border border-sky-400/30 shadow-xs';
 const TAB_IDLE = 'text-neutral-400 hover:text-neutral-200 hover:bg-white/5';
@@ -122,20 +163,33 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
   const [name, setName] = useState(userProfile.name);
   const [email, setEmail] = useState(userProfile.email);
   const [role, setRole] = useState(userProfile.role);
+  const [avatarUrl, setAvatarUrl] = useState<string | undefined>(userProfile.avatarUrl);
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
   const [prefs, setPrefs] = useState<AppPreferences>(() => preferencesProp ?? loadPreferences());
   const [passphrase, setPassphrase] = useState('');
   const [showPassphrase, setShowPassphrase] = useState(false);
   const [copiedPeer, setCopiedPeer] = useState(false);
   const [vaultBusy, setVaultBusy] = useState(false);
+  const [fdaGranted, setFdaGranted] = useState<boolean | null>(null);
+  const [fdaBusy, setFdaBusy] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
     setName(userProfile.name);
     setEmail(userProfile.email);
     setRole(userProfile.role);
+    setAvatarUrl(userProfile.avatarUrl);
     setPrefs(preferencesProp ?? loadPreferences());
     setPassphrase('');
     setShowPassphrase(false);
+    setAvatarBusy(false);
+    setFdaBusy(false);
+    if (isTauri()) {
+      void fullDiskAccessGranted().then(setFdaGranted);
+    } else {
+      setFdaGranted(null);
+    }
   }, [isOpen, userProfile, preferencesProp]);
 
   if (!isOpen) return null;
@@ -156,7 +210,12 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
 
   const handleSave = (e?: React.FormEvent) => {
     e?.preventDefault();
-    const profile: UserProfile = { name: name.trim() || userProfile.name, email: email.trim(), role: role.trim() };
+    const profile: UserProfile = {
+      name: name.trim() || userProfile.name,
+      email: email.trim(),
+      role: role.trim(),
+      avatarUrl: avatarUrl || undefined,
+    };
     saveProfile(profile);
     savePreferences(prefs);
     applyTheme(prefs.theme);
@@ -164,6 +223,21 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     onUpdatePreferences?.(prefs);
     onShowToast?.('Settings saved');
     onClose();
+  };
+
+  const handleAvatarPick = async (file: File | undefined) => {
+    if (!file) return;
+    setAvatarBusy(true);
+    try {
+      const dataUrl = await fileToAvatarDataUrl(file);
+      setAvatarUrl(dataUrl);
+      onShowToast?.('Photo updated — click Save & Apply to keep it');
+    } catch (err) {
+      onShowToast?.(err instanceof Error ? err.message : 'Could not use that image');
+    } finally {
+      setAvatarBusy(false);
+      if (avatarInputRef.current) avatarInputRef.current.value = '';
+    }
   };
 
   const handleResetPrefs = () => {
@@ -183,8 +257,6 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     }
   };
 
-  const totalUsed = accounts.reduce((sum, a) => sum + a.usedBytes, 0);
-  const totalQuota = accounts.reduce((sum, a) => sum + a.totalBytes, 0) || 1;
   const initials = name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'CB';
 
   const tabs: Array<{ id: SettingsTab; label: string; icon: React.ReactNode }> = [
@@ -192,7 +264,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     { id: 'preferences', label: 'General', icon: <Sliders className="w-3.5 h-3.5" /> },
     { id: 'notifications', label: 'Alerts', icon: <Bell className="w-3.5 h-3.5" /> },
     { id: 'security', label: 'Security', icon: <ShieldCheck className="w-3.5 h-3.5" /> },
-    { id: 'storage', label: 'Storage', icon: <HardDrive className="w-3.5 h-3.5" /> },
+    { id: 'permissions', label: 'Permissions', icon: <FolderLock className="w-3.5 h-3.5" /> },
     { id: 'network', label: 'Network', icon: <Radio className="w-3.5 h-3.5" /> },
   ];
 
@@ -238,20 +310,67 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
           {activeTab === 'profile' && (
             <div className="space-y-5">
               <div className="flex items-center gap-4 p-4 rounded-xl bg-white/5 border border-white/5">
-                <div className="relative">
-                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-sky-500 via-indigo-500 to-purple-500 flex items-center justify-center text-xl font-bold text-white shadow-lg shadow-sky-500/20">
-                    {initials}
-                  </div>
+                <div className="relative shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => avatarInputRef.current?.click()}
+                    disabled={avatarBusy}
+                    className="group relative w-16 h-16 rounded-2xl overflow-hidden bg-gradient-to-tr from-sky-500 via-indigo-500 to-purple-500 flex items-center justify-center text-xl font-bold text-white shadow-lg shadow-sky-500/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/60 disabled:opacity-60"
+                    title="Change profile photo"
+                    aria-label="Change profile photo"
+                  >
+                    {avatarUrl ? (
+                      <img src={avatarUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                    ) : (
+                      <span className="relative z-10">{initials}</span>
+                    )}
+                    <span className="absolute inset-0 z-20 flex items-center justify-center bg-black/55 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+                      {avatarBusy ? (
+                        <RefreshCw className="w-5 h-5 animate-spin text-white" />
+                      ) : (
+                        <Camera className="w-5 h-5 text-white" />
+                      )}
+                    </span>
+                  </button>
                   <div
                     className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-neutral-900 ${
                       isVaultUnlocked ? 'bg-emerald-500' : 'bg-amber-500'
                     }`}
                     title={isVaultUnlocked ? 'Vault unlocked' : 'Vault locked'}
                   />
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.gif,.heic"
+                    className="hidden"
+                    onChange={e => { void handleAvatarPick(e.target.files?.[0]); }}
+                  />
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="text-base font-semibold text-white truncate">{name || 'Unnamed'}</h3>
                   <p className="text-xs text-neutral-400 truncate">{email || 'No email'}</p>
+                  <div className="mt-2 flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => avatarInputRef.current?.click()}
+                      disabled={avatarBusy}
+                      className="inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-1 rounded-md bg-sky-500/15 text-sky-200 border border-sky-400/25 hover:bg-sky-500/25 disabled:opacity-50 transition-colors"
+                    >
+                      <ImagePlus className="w-3 h-3" />
+                      {avatarUrl ? 'Change photo' : 'Add photo'}
+                    </button>
+                    {avatarUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setAvatarUrl(undefined)}
+                        disabled={avatarBusy}
+                        className="inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-1 rounded-md bg-white/5 text-neutral-300 border border-white/10 hover:bg-white/10 disabled:opacity-50 transition-colors"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        Remove
+                      </button>
+                    )}
+                  </div>
                   <div className="mt-1.5 flex items-center gap-2 flex-wrap">
                     <span className="text-[10px] px-2 py-0.5 rounded-md bg-sky-500/15 text-sky-300 border border-sky-400/20 font-medium">
                       {role || 'Member'}
@@ -295,7 +414,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
               </div>
               <p className="text-[11px] text-neutral-500 flex items-start gap-1.5">
                 <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                Profile is stored locally on this device. Display name is used for P2P peer identity.
+                Profile and photo are stored locally on this device. Display name is used for P2P peer identity.
               </p>
             </div>
           )}
@@ -555,77 +674,106 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
             </div>
           )}
 
-          {activeTab === 'storage' && (
-            <div className="space-y-4">
-              <div className="p-4 rounded-xl bg-white/5 border border-white/5 space-y-2.5">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-neutral-300 flex items-center gap-1.5">
-                    <Gauge className="w-3.5 h-3.5 text-sky-400" />
-                    Unified cloud quota
-                  </span>
-                  <span className="font-mono text-white font-medium">
-                    {formatBytes(totalUsed)} / {formatBytes(totalQuota)}
-                  </span>
-                </div>
-                <div className="w-full h-2 rounded-full bg-neutral-800 overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-sky-500 via-indigo-500 to-emerald-400"
-                    style={{ width: `${Math.min(100, Math.round((totalUsed / totalQuota) * 100))}%` }}
-                  />
-                </div>
-                <p className="text-[10px] text-neutral-500">
-                  {Math.round((totalUsed / totalQuota) * 100)}% of connected account capacity in use
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                {accounts.length === 0 && (
-                  <p className="text-xs text-neutral-500 text-center py-6">No cloud accounts mounted yet.</p>
-                )}
-                {accounts.map(acc => {
-                  const pct = acc.totalBytes > 0 ? Math.min(100, Math.round((acc.usedBytes / acc.totalBytes) * 100)) : 0;
-                  return (
-                    <div key={acc.id} className="p-3 rounded-xl bg-black/40 border border-white/5 space-y-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-sky-400 font-bold text-xs shrink-0">
-                            {acc.provider[0]?.toUpperCase() ?? '?'}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="text-xs font-semibold text-neutral-200 truncate">{acc.name}</div>
-                            <div className="text-[10px] text-neutral-400 truncate">{acc.email}</div>
-                          </div>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <div className="text-xs font-mono text-neutral-300">
-                            {formatBytes(acc.usedBytes)} / {formatBytes(acc.totalBytes)}
-                          </div>
-                          <div className="text-[10px] text-neutral-500">{pct}%</div>
-                        </div>
+          {activeTab === 'permissions' && (
+            <div className="space-y-3">
+              {isTauri() ? (
+                <>
+                  <div className="p-4 rounded-xl bg-white/5 border border-white/5 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`p-2.5 rounded-xl shrink-0 ${
+                        fdaGranted ? 'bg-emerald-500/15 text-emerald-400' : 'bg-sky-500/15 text-sky-400'
+                      }`}>
+                        <FolderLock className="w-5 h-5" />
                       </div>
-                      <div className="w-full h-1 rounded-full bg-neutral-800 overflow-hidden">
-                        <div
-                          className={`h-full rounded-full ${pct > 90 ? 'bg-amber-500' : 'bg-sky-500/80'}`}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                      <div className="flex items-center gap-2 text-[10px] text-neutral-500">
-                        <span className="px-1.5 py-0.5 rounded bg-white/5 border border-white/5">{acc.encryptionLevel}</span>
-                        {acc.liveConnected && (
-                          <span className="text-emerald-400/90">Live API</span>
-                        )}
+                      <div className="min-w-0">
+                        <h4 className="text-xs font-semibold text-white">Full Disk Access</h4>
+                        <p className="text-[11px] text-neutral-400">
+                          {fdaGranted
+                            ? 'Granted — Cloudbreak can browse protected folders and Photos library originals when available.'
+                            : 'Required for some protected locations. macOS cannot prompt for this — enable it in System Settings, then restart the app.'}
+                        </p>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
+                    <button
+                      type="button"
+                      disabled={fdaBusy || fdaGranted === true}
+                      onClick={async () => {
+                        setFdaBusy(true);
+                        try {
+                          const ok = await requestFullDiskAccess();
+                          setFdaGranted(ok);
+                          onShowToast?.(
+                            ok
+                              ? 'Full Disk Access is already granted'
+                              : 'Enable Cloudbreak Files in Full Disk Access, then restart the app',
+                          );
+                          window.setTimeout(() => {
+                            void fullDiskAccessGranted().then(setFdaGranted);
+                          }, 2500);
+                        } catch (err) {
+                          onShowToast?.(err instanceof Error ? err.message : String(err));
+                        } finally {
+                          setFdaBusy(false);
+                        }
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all shrink-0 disabled:opacity-40 ${
+                        fdaGranted
+                          ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/25'
+                          : 'bg-sky-500/20 text-sky-200 border border-sky-400/30 hover:bg-sky-500/30'
+                      }`}
+                    >
+                      {fdaBusy ? 'Opening…' : fdaGranted ? 'Granted' : 'Open Settings'}
+                    </button>
+                  </div>
 
-              <div className="p-3 rounded-xl bg-black/40 border border-white/5 text-[11px] text-neutral-400 flex gap-2">
-                <Trash2 className="w-3.5 h-3.5 text-neutral-500 shrink-0 mt-0.5" />
-                <span>
-                  Local preview uploads and P2P chunk caches stay on this machine. Clearing cache from settings is not implemented yet.
-                </span>
-              </div>
+                  <div className="p-4 rounded-xl bg-white/5 border border-white/5 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <FolderOpen className="w-4 h-4 text-sky-400 shrink-0" />
+                      <div>
+                        <h4 className="text-xs font-semibold text-white">Files and Folders</h4>
+                        <p className="text-[11px] text-neutral-400">
+                          macOS asks for these on first browse. Grant access when prompted so Local Files can list each folder.
+                        </p>
+                      </div>
+                    </div>
+                    <ul className="space-y-1.5">
+                      {FILES_AND_FOLDERS.map(item => (
+                        <li
+                          key={item.name}
+                          className="flex items-center justify-between gap-3 px-2.5 py-1.5 rounded-lg bg-black/30 border border-white/5"
+                        >
+                          <span className="text-xs font-medium text-neutral-200">{item.name}</span>
+                          <span className="text-[10px] font-mono text-neutral-500 truncate">{item.detail}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-white/5 border border-white/5 flex items-start gap-2.5">
+                    <Network className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+                    <div>
+                      <div className="text-xs font-semibold text-white">Local Network</div>
+                      <p className="text-[11px] text-neutral-400 mt-0.5">
+                        Used for P2P library sharing and discovering nearby servers. macOS may prompt the first time a peer or share is contacted.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-black/40 border border-white/5 text-[11px] text-neutral-400 flex gap-2">
+                    <Info className="w-3.5 h-3.5 text-sky-400 shrink-0 mt-0.5" />
+                    <span>
+                      Manage grants anytime in System Settings → Privacy &amp; Security → Files and Folders, Full Disk Access, and Local Network.
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <div className="p-4 rounded-xl bg-white/5 border border-white/5 text-[11px] text-neutral-400 flex gap-2">
+                  <Info className="w-3.5 h-3.5 text-sky-400 shrink-0 mt-0.5" />
+                  <span>
+                    Folder and disk permissions apply in the Cloudbreak desktop app on macOS. The browser preview cannot request them.
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
@@ -654,7 +802,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                 <div>
                   <div className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-1.5">Peer ID</div>
                   <div className="flex items-center gap-2">
-                    <code className="flex-1 text-[11px] font-mono text-purple-200/90 bg-black/50 border border-white/10 rounded-lg px-2.5 py-2 truncate">
+                    <code className="flex-1 text-[11px] font-mono text-purple-200/90 bg-transparent border border-white/10 rounded-lg px-2.5 py-2 truncate">
                       {peerId || 'Not created yet — seed or join a library first'}
                     </code>
                     <button

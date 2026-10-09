@@ -2,7 +2,7 @@
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
-Open-source desktop file explorer for macOS (Windows/Linux builds planned).  
+Open-source desktop file explorer for macOS — universal builds for Apple Silicon and Intel (macOS 11 Big Sur or newer). Windows/Linux builds planned.  
 **Tauri 2 · React 19 · Vite · Tailwind 4**
 
 Manage local folders, multiple cloud accounts, a client-side encrypted vault, media tools, and private P2P libraries — without sample/demo data on a fresh launch.

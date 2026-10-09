@@ -4,7 +4,8 @@ Ship a signed, notarized `.dmg` from our own site instead of the Mac App Store.
 
 ## Current state
 
-- **Release config** is in `src-tauri/tauri.conf.json`: `hardenedRuntime`, `minimumSystemVersion` 12.0, `Entitlements.plist`, productivity category, `.app` + `.dmg` targets.
+- **Release config** is in `src-tauri/tauri.conf.json`: `hardenedRuntime`, `minimumSystemVersion` 11.0 (Big Sur+), `Entitlements.plist`, productivity category, `.app` + `.dmg` targets.
+- **Architectures**: `npm run build:mac` and CI build `universal-apple-darwin` (Apple Silicon **and** Intel x86_64), including a universal `ffmpeg` sidecar. The build script fails if either arch is missing from the app binary.
 - **Icon Composer source** lives at `src-tauri/icons/CloudBreak-icon.icon` for regenerating `icon.icns` / PNGs. It is **not** listed in `bundle.icon` because Tauri 2.12 invokes `actool` with flags that fail on glass Icon Studio documents (`Bad file descriptor`). The shipped app uses `icon.icns` until Tauri or `actool` fixes that path.
 - **Local build**: `npm run build:mac` (wrapper around `scripts/build-macos-release.sh`). Uses `CARGO_TARGET_DIR=/tmp/cloudbreak-cargo-target` by default so OneDrive does not sync Rust artifacts.
 - **CI**: `.github/workflows/release.yml` on `v*` tags — universal macOS (signed + notarized when secrets are set) and Windows. Builds upload to a **draft** prerelease.
@@ -50,8 +51,10 @@ Never commit or paste these values.
 ## 4. Build
 
 ```bash
-rustup target add aarch64-apple-darwin x86_64-apple-darwin   # once
-npm run build:mac
+rustup target add aarch64-apple-darwin x86_64-apple-darwin   # once (build script also installs these)
+MACOSX_DEPLOYMENT_TARGET=11.0 npm run build:mac
+# Confirm Intel + Apple Silicon slices:
+#   lipo -archs "/tmp/cloudbreak-cargo-target/.../Cloudbreak Files.app/Contents/MacOS/Cloudbreak Files"
 ```
 
 Equivalent: `npm run tauri build -- --target universal-apple-darwin` with `CARGO_TARGET_DIR` set as above.

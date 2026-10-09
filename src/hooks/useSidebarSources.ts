@@ -80,9 +80,21 @@ export function useSidebarSources({
   }, []);
 
   const refreshVolumesAndServers = useCallback(async () => {
-    const volumes = await listSidebarVolumes().catch(() => []);
+    let volumes: Awaited<ReturnType<typeof listSidebarVolumes>> = [];
+    try {
+      volumes = await listSidebarVolumes();
+    } catch (err) {
+      console.warn('list_sidebar_volumes failed', err);
+    }
     const mountedNet = volumes.filter(v => v.isNetwork).map(mountedVolumeToNetworkServer);
-    const removable = volumes.filter(v => !v.isNetwork).map(volumeToRemovableDevice);
+    // Skip recovery / installer volumes that clutter the sidebar.
+    const removable = volumes
+      .filter(v => !v.isNetwork)
+      .filter(v => {
+        const n = v.name.toLowerCase();
+        return n !== 'recovery' && !n.includes('installer') && n !== 'com.apple.timestate';
+      })
+      .map(volumeToRemovableDevice);
     setRemovableDevices(removable);
 
     const saved = savedRef.current;
@@ -185,8 +197,9 @@ export function useSidebarSources({
    */
   const applyRescannedFolder = (
     imported: Awaited<ReturnType<typeof importLocalFolderAtPath>>,
-    diskPath: string,
+    diskPaths: string | string[],
   ) => {
+    const roots = (Array.isArray(diskPaths) ? diskPaths : [diskPaths]).filter(Boolean);
     const { rootFolder, folders: nextFolders, files: nextFiles } = normalizeImported(imported);
     const rootId = rootFolder.id;
     const nextFolderIds = new Set(nextFolders.map(f => f.id));
@@ -204,7 +217,7 @@ export function useSidebarSources({
 
     setFiles(prev => {
       const kept = prev.filter(f => {
-        if (pathIsUnderRoot(f.localPath, diskPath)) return false;
+        if (roots.some(root => pathIsUnderRoot(f.localPath, root))) return false;
         if (f.localPath && f.folderId && folderScope.has(f.folderId)) return false;
         if (
           f.accountId === 'all'
@@ -222,6 +235,10 @@ export function useSidebarSources({
     return rootFolder;
   };
 
+  const diskPathsFor = (folder: LocalFolder): string[] => (
+    [folder.path, ...(folder.extraPaths ?? [])].filter(Boolean)
+  );
+
   const handleRescanLocalFolders = async () => {
     if (!localFs.available()) {
       showToast('Rescan is available in the desktop app');
@@ -234,7 +251,13 @@ export function useSidebarSources({
       const standards = await localFs.ensureStandardFolders().catch(() => [] as LocalFolder[]);
       const saved = await localFs.listFolders().catch(() => [] as LocalFolder[]);
       const byPath = new Map<string, LocalFolder>();
-      for (const f of [...standards, ...saved]) byPath.set(f.path, f);
+      const covered = new Set(standards.flatMap(diskPathsFor));
+      // Standards win (they carry iCloud extraPaths); skip twins already merged in.
+      for (const f of saved) {
+        if (covered.has(f.path)) continue;
+        byPath.set(f.path, f);
+      }
+      for (const f of standards) byPath.set(f.path, f);
       const targets = [...byPath.values()];
       if (!targets.length) {
         showToast('No local folders to rescan — add a folder first');
@@ -246,20 +269,21 @@ export function useSidebarSources({
       let truncated = false;
       const errors: string[] = [];
 
-      for (const folder of targets) {
+      // Import in parallel so a huge Desktop tree cannot block Documents / Downloads.
+      await Promise.all(targets.map(async folder => {
         try {
           const imported = await importLocalFolderAtPath(folder, {
             rootId: defaultLocalFolderIdForName(folder.name),
             displayName: folder.name,
           });
-          applyRescannedFolder(imported, folder.path);
+          applyRescannedFolder(imported, diskPathsFor(folder));
           ok += 1;
           fileTotal += imported.files.length;
           if (imported.truncated) truncated = true;
         } catch (err) {
           errors.push(`${folder.name}: ${err instanceof Error ? err.message : String(err)}`);
         }
-      }
+      }));
 
       if (ok === 0 && errors.length) {
         showToast(`Rescan failed. ${errors[0]}`);
@@ -469,24 +493,25 @@ export function useSidebarSources({
       try {
         const standards = await localFs.ensureStandardFolders().catch(() => []);
         const saved = await localFs.listFolders();
-        const standardPaths = new Set(standards.map(f => f.path));
+        const standardPaths = new Set(standards.flatMap(f => diskPathsFor(f)));
 
-        for (const folder of standards) {
+        // Parallel imports — Documents must not wait on a large Desktop scan.
+        await Promise.all(standards.map(async folder => {
           if (cancelled) return;
           const imported = await importLocalFolderAtPath(folder, {
             rootId: defaultLocalFolderIdForName(folder.name),
             displayName: folder.name,
           }).catch(() => null);
-          if (!imported) continue;
+          if (!imported || cancelled) return;
           applyImportedFolder(imported);
-        }
+        }));
 
-        for (const folder of saved) {
-          if (cancelled || standardPaths.has(folder.path)) continue;
+        await Promise.all(saved.map(async folder => {
+          if (cancelled || standardPaths.has(folder.path)) return;
           const imported = await importLocalFolderAtPath(folder).catch(() => null);
-          if (!imported) continue;
+          if (!imported || cancelled) return;
           applyImportedFolder(imported);
-        }
+        }));
       } catch {
         // empty default stubs stay in the sidebar.
       }

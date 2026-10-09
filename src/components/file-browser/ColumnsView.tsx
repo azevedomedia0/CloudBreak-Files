@@ -24,13 +24,16 @@ export interface ColumnsViewProps {
   onSelectFolder: (folderId: string | null) => void;
 }
 
+/** Shared width so every Columns view pane stays equal (Finder-style). */
+const COLUMN_WIDTH_CLASS = 'w-64';
+
 export const ColumnsView: React.FC<ColumnsViewProps> = ({
   accent, files, selectedFolder, selectedFileId, folders, totalSize,
   onSelectFile, onEditPhoto, onOpenDocument, onOpenVideo, onOpenAudio, onOpenQuickLook, onFileContextMenu, onSelectFolder,
 }) => (
-    <div className="h-full flex gap-3 overflow-x-auto min-h-[480px]">
+    <div className="h-full flex gap-3 overflow-x-auto min-h-[480px] w-max max-w-full">
       {/* Col 1: Local Files & Folders */}
-      <div className="w-64 macos-glass-card rounded-xl flex flex-col shrink-0 overflow-hidden">
+      <div className={`${COLUMN_WIDTH_CLASS} macos-glass-card rounded-xl flex flex-col shrink-0 overflow-hidden`}>
         <div className="px-3 py-2 border-b border-white/8 text-[11px] font-semibold text-neutral-400 uppercase tracking-wider">
           Local Files
         </div>
@@ -83,7 +86,7 @@ export const ColumnsView: React.FC<ColumnsViewProps> = ({
       </div>
 
       {/* Col 2: Files in Folder */}
-      <div className="flex-1 min-w-72 macos-glass-card rounded-xl flex flex-col overflow-hidden">
+      <div className={`${COLUMN_WIDTH_CLASS} macos-glass-card rounded-xl flex flex-col shrink-0 overflow-hidden`}>
         <div className="px-3 py-2 border-b border-white/8 text-[11px] font-semibold text-neutral-400 uppercase tracking-wider flex justify-between">
           <span>Items ({files.length})</span>
           <span className="font-mono text-neutral-400">{formatBytes(totalSize)}</span>

@@ -549,6 +549,7 @@ export function useFileActions({
         category,
         mimeType,
         updatedAt: new Date().toISOString(),
+        addedAt: new Date().toISOString(),
         url,
         thumbnailUrl,
         version: 1,

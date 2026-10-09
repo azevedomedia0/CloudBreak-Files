@@ -26,12 +26,12 @@ pub struct SidebarVolume {
 }
 
 #[cfg(target_os = "macos")]
-pub fn list_sidebar_volumes() -> Vec<SidebarVolume> {
+fn collect_sidebar_volumes() -> Vec<SidebarVolume> {
     list_macos_volumes()
 }
 
 #[cfg(not(target_os = "macos"))]
-pub fn list_sidebar_volumes() -> Vec<SidebarVolume> {
+fn collect_sidebar_volumes() -> Vec<SidebarVolume> {
     Vec::new()
 }
 
@@ -186,7 +186,8 @@ pub fn parse_host(address: &str) -> Option<String> {
     let without_scheme = trimmed
         .split("://")
         .nth(1)
-        .unwrap_or(trimmed);
+        .unwrap_or(trimmed)
+        .trim_start_matches('/');
     let host_part = without_scheme.split('/').next()?.split('@').last()?;
     let host = host_part.split(':').next()?.trim();
     if host.is_empty() {
@@ -196,7 +197,7 @@ pub fn parse_host(address: &str) -> Option<String> {
     }
 }
 
-pub fn probe_network_server(address: &str, protocol: &str, timeout_ms: u64) -> bool {
+fn probe_network_server_addr(address: &str, protocol: &str, timeout_ms: u64) -> bool {
     let Some(host) = parse_host(address) else {
         return false;
     };
@@ -232,7 +233,7 @@ pub fn probe_tcp(host: &str, port: u16, timeout_ms: u64) -> bool {
 }
 
 #[cfg(target_os = "macos")]
-pub fn open_network_share(protocol: &str, address: &str) -> Result<(), String> {
+fn open_network_share_addr(protocol: &str, address: &str) -> Result<(), String> {
     let url = share_url(protocol, address)?;
     std::process::Command::new("open")
         .arg(&url)
@@ -242,7 +243,7 @@ pub fn open_network_share(protocol: &str, address: &str) -> Result<(), String> {
 }
 
 #[cfg(not(target_os = "macos"))]
-pub fn open_network_share(_protocol: &str, _address: &str) -> Result<(), String> {
+fn open_network_share_addr(_protocol: &str, _address: &str) -> Result<(), String> {
     Err("Opening network shares is only supported on macOS".into())
 }
 
@@ -272,7 +273,7 @@ fn share_url(protocol: &str, address: &str) -> Result<String, String> {
 }
 
 #[cfg(target_os = "macos")]
-pub fn eject_volume(mount_point: &str) -> Result<(), String> {
+fn eject_volume_at(mount_point: &str) -> Result<(), String> {
     let mount = Path::new(mount_point);
     if !mount.is_absolute() {
         return Err("Invalid mount point".into());
@@ -288,28 +289,29 @@ pub fn eject_volume(mount_point: &str) -> Result<(), String> {
 }
 
 #[cfg(not(target_os = "macos"))]
-pub fn eject_volume(_mount_point: &str) -> Result<(), String> {
+fn eject_volume_at(_mount_point: &str) -> Result<(), String> {
     Err("Eject is only supported on macOS".into())
 }
 
+/// Names match `volumesBridge.ts` invoke strings (no `_cmd` suffix).
 #[tauri::command]
-pub fn list_sidebar_volumes_cmd() -> Vec<SidebarVolume> {
-    list_sidebar_volumes()
+pub fn list_sidebar_volumes() -> Vec<SidebarVolume> {
+    collect_sidebar_volumes()
 }
 
 #[tauri::command]
-pub fn probe_network_server_cmd(address: String, protocol: String) -> bool {
-    probe_network_server(&address, &protocol, 2_000)
+pub fn probe_network_server(address: String, protocol: String) -> bool {
+    probe_network_server_addr(&address, &protocol, 2_000)
 }
 
 #[tauri::command]
-pub fn open_network_share_cmd(protocol: String, address: String) -> Result<(), String> {
-    open_network_share(&protocol, &address)
+pub fn open_network_share(protocol: String, address: String) -> Result<(), String> {
+    open_network_share_addr(&protocol, &address)
 }
 
 #[tauri::command]
-pub fn eject_volume_cmd(mount_point: String) -> Result<(), String> {
-    eject_volume(&mount_point)
+pub fn eject_volume(mount_point: String) -> Result<(), String> {
+    eject_volume_at(&mount_point)
 }
 
 #[cfg(test)]

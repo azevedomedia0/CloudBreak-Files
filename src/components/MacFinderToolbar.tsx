@@ -55,6 +55,8 @@ interface MacFinderToolbarProps {
 const SORT_OPTIONS: { id: FileSortKey; label: string }[] = [
   { id: 'name', label: 'Name' },
   { id: 'date', label: 'Date modified' },
+  { id: 'dateAdded', label: 'Date Added' },
+  { id: 'dateOpened', label: 'Date Last Opened' },
   { id: 'size', label: 'Size' },
   { id: 'kind', label: 'Kind' },
 ];
@@ -153,6 +155,13 @@ export const MacFinderToolbar: React.FC<MacFinderToolbarProps> = ({
       <div data-tauri-drag-region className="flex items-center gap-2.5 sm:gap-3 shrink-0">
         {/* The desktop app's native macOS window buttons overlay this corner. */}
         {isTauri() && <div data-tauri-drag-region className="w-[52px] self-stretch shrink-0" aria-hidden="true" />}
+
+        <span
+          data-tauri-drag-region
+          className="pointer-events-none select-none text-sm font-semibold tracking-tight text-white shrink-0"
+        >
+          CloudBreak
+        </span>
 
         <div className="flex items-center gap-0.5 text-neutral-300">
           <button className="p-1 rounded-md hover:bg-white/10 hover:text-white transition-colors" title="Back">

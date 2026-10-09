@@ -1,12 +1,26 @@
 import React from 'react';
-import { Edit3, Scissors, Play, CheckSquare, Square, Music2 } from 'lucide-react';
+import { Play, CheckSquare, Square, Music2 } from 'lucide-react';
 import { FileItem, FolderItem } from '../../types';
 import { isEditableDocument } from '../../utils/documentKind';
 import { FileThumbnail } from './FileThumbnail';
 import { FolderTile } from './FolderTile';
 import { SelectionAccent, SELECTION_CLASSES } from '../../utils/selectionAccent';
-import { formatBytes, formatTimecode } from '../../utils/format';
+import { formatTimecode } from '../../utils/format';
 import { setFileDragData } from '../../utils/fileDrag';
+import { useMediaDuration } from '../../hooks/useMediaDuration';
+
+const MediaDurationBadge: React.FC<{ file: FileItem }> = ({ file }) => {
+  const duration = useMediaDuration(file.url, file.videoMeta?.durationSeconds);
+  if (!(duration > 0)) return null;
+  return (
+    <div className="absolute bottom-1.5 left-1.5 flex items-center gap-1 text-[10px] font-mono text-white bg-black/75 px-1.5 py-0.5 rounded-md">
+      {file.category === 'audio'
+        ? <Music2 className="w-2.5 h-2.5" />
+        : <Play className="w-2.5 h-2.5 fill-current" />}
+      <span>{formatTimecode(duration)}</span>
+    </div>
+  );
+};
 
 export interface IconsViewProps {
   accent: SelectionAccent;
@@ -30,10 +44,10 @@ export const IconsView: React.FC<IconsViewProps> = ({
   accent, files, folders = [], selectedFileId, selectedIds, iconScale,
   onSelectFile, onOpenFolder, onEditPhoto, onOpenDocument, onOpenVideo, onOpenAudio, onOpenQuickLook, onFileContextMenu, toggleSelectOne,
 }) => (
-    <div 
-      className="grid gap-4"
+    <div
+      className="grid gap-x-3 gap-y-5"
       style={{
-        gridTemplateColumns: `repeat(auto-fill, minmax(${Math.round(200 * (iconScale / 100))}px, 1fr))`,
+        gridTemplateColumns: `repeat(auto-fill, minmax(${Math.round(140 * (iconScale / 100))}px, 1fr))`,
       }}
     >
       {onOpenFolder && folders.map(folder => (
@@ -42,6 +56,7 @@ export const IconsView: React.FC<IconsViewProps> = ({
       {files.map(file => {
         const isSelected = selectedIds.has(file.id);
         const isCurrent = selectedFileId === file.id;
+        const isPhoto = file.category === 'photo';
 
         return (
           <div
@@ -57,7 +72,7 @@ export const IconsView: React.FC<IconsViewProps> = ({
               else if (isEditableDocument(file)) onOpenDocument(file);
               else onOpenQuickLook();
             }}
-            className={`group relative rounded-xl p-2 transition-all cursor-pointer ${
+            className={`group relative rounded-xl px-2 pt-3 pb-2 transition-all cursor-pointer ${
               isCurrent
                 ? SELECTION_CLASSES[accent].card
                 : isSelected
@@ -65,91 +80,43 @@ export const IconsView: React.FC<IconsViewProps> = ({
                 : 'hover:bg-white/5'
             }`}
           >
-            {/* Thumbnail / Glass Card */}
-            <div className="aspect-[4/3] rounded-lg overflow-hidden relative bg-black/40 border border-white/8 group-hover:border-white/15 transition-all shadow-md">
-              <FileThumbnail file={file} hoverZoom onContextMenu={event => onFileContextMenu(file, event)} />
-
-              {/* Checkbox */}
-              <button
-                onClick={e => toggleSelectOne(file.id, e)}
-                className={`absolute top-2 left-2 p-1 rounded backdrop-blur-md transition-opacity ${
-                  isSelected ? `${SELECTION_CLASSES[accent].checkIcon} bg-black/70 opacity-100` : 'text-neutral-400 bg-black/50 opacity-0 group-hover:opacity-100'
-                }`}
+            {/* Finder-style thumbnail: rounded preview, no glass card chrome */}
+            <div className="aspect-[4/3] flex items-center justify-center relative">
+              <div
+                className={`relative overflow-hidden shadow-md shadow-black/40 ${
+                  isPhoto
+                    ? 'w-[78%] aspect-square rounded-2xl'
+                    : 'w-[82%] aspect-[4/3] rounded-xl'
+                } ${isPhoto ? 'bg-neutral-800' : 'bg-black/50 border border-white/8'}`}
               >
-                {isSelected ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
-              </button>
+                <FileThumbnail
+                  file={file}
+                  hoverZoom={isPhoto}
+                  className="w-full h-full"
+                  onContextMenu={event => onFileContextMenu(file, event)}
+                />
 
-              {/* Duration badge */}
-              {file.videoMeta && (file.category === 'video' || file.category === 'audio') && (
-                <div className="absolute bottom-2 left-2 flex items-center gap-1 text-[10px] font-mono text-white bg-black/80 px-1.5 py-0.5 rounded backdrop-blur-sm">
-                  {file.category === 'audio'
-                    ? <Music2 className="w-2.5 h-2.5" />
-                    : <Play className="w-2.5 h-2.5 fill-current" />}
-                  <span>{formatTimecode(file.videoMeta.durationSeconds)}</span>
-                </div>
-              )}
+                <button
+                  onClick={e => toggleSelectOne(file.id, e)}
+                  className={`absolute top-1.5 left-1.5 p-0.5 rounded-md backdrop-blur-md transition-opacity ${
+                    isSelected
+                      ? `${SELECTION_CLASSES[accent].checkIcon} bg-black/70 opacity-100`
+                      : 'text-neutral-300 bg-black/45 opacity-0 group-hover:opacity-100'
+                  }`}
+                >
+                  {isSelected ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
+                </button>
 
-              {/* Quick Action Floating Pill */}
-              <div className="absolute bottom-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                {file.category === 'photo' && (
-                  <button
-                    onClick={e => {
-                      e.stopPropagation();
-                      onEditPhoto(file);
-                    }}
-                    className="p-1 rounded-md bg-cyan-400 hover:bg-cyan-300 text-neutral-950 shadow-md font-bold"
-                    title="Open Photo Studio"
-                  >
-                    <Edit3 className="w-3 h-3" />
-                  </button>
-                )}
-                {isEditableDocument(file) && (
-                  <button
-                    onClick={e => {
-                      e.stopPropagation();
-                      onOpenDocument(file);
-                    }}
-                    className="p-1 rounded-md bg-[#0060df] hover:bg-[#0250bb] text-white shadow-md font-bold"
-                    title="Edit document"
-                  >
-                    <Edit3 className="w-3 h-3" />
-                  </button>
-                )}
-                {file.category === 'video' && (
-                  <button
-                    onClick={e => {
-                      e.stopPropagation();
-                      onOpenVideo(file);
-                    }}
-                    className="p-1 rounded-md bg-amber-400 hover:bg-amber-300 text-neutral-950 shadow-md font-bold"
-                    title="Open Cinema Suite"
-                  >
-                    <Scissors className="w-3 h-3" />
-                  </button>
-                )}
-                {file.category === 'audio' && (
-                  <button
-                    onClick={e => {
-                      e.stopPropagation();
-                      onOpenAudio(file);
-                    }}
-                    className="p-1 rounded-md bg-violet-400 hover:bg-violet-300 text-neutral-950 shadow-md font-bold"
-                    title="Play audio"
-                  >
-                    <Play className="w-3 h-3 fill-current" />
-                  </button>
+                {(file.category === 'video' || file.category === 'audio') && (
+                  <MediaDurationBadge file={file} />
                 )}
               </div>
             </div>
 
-            {/* Title & Metadata */}
-            <div className="pt-2 px-1 text-center">
-              <p className="text-xs font-medium text-neutral-200 truncate group-hover:text-white">
+            <div className="pt-1.5 px-1 text-center">
+              <p className="text-xs font-medium text-neutral-200 truncate group-hover:text-white leading-snug break-words">
                 {file.name}
               </p>
-              <div className="flex items-center justify-center gap-1.5 text-[11px] text-neutral-400 mt-0.5 font-mono">
-                <span>{formatBytes(file.sizeBytes)}</span>
-              </div>
             </div>
           </div>
         );

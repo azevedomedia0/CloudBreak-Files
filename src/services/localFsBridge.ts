@@ -9,6 +9,8 @@ import { convertFileSrc, invoke, isTauri } from '@tauri-apps/api/core';
 export interface LocalFolder {
   path: string;
   name: string;
+  /** Extra roots merged into this sidebar folder (e.g. iCloud Documents twin). */
+  extraPaths?: string[];
 }
 
 export interface LocalEntry {

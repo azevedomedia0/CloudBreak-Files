@@ -92,11 +92,13 @@ export const FileThumbnail: React.FC<FileThumbnailProps> = ({
       }
     : undefined;
 
+  const posterSrc = file.thumbnailUrl || (file.category === 'photo' && hasRealUrl ? file.url : undefined);
+
   let content: React.ReactNode;
-  if (file.thumbnailUrl && !posterFailed) {
+  if (posterSrc && !posterFailed) {
     content = (
       <img
-        src={file.thumbnailUrl}
+        src={posterSrc}
         alt={file.name}
         className={mediaClass}
         onError={() => setPosterFailed(true)}

@@ -8,8 +8,8 @@ import {
   TEXT_UPLOAD_MAX_BYTES,
 } from './documentKind';
 
-const MAX_DEPTH = 6;
-const MAX_FILES = 400;
+const MAX_DEPTH = 12;
+const MAX_FILES = 25_000;
 
 type DirHandle = {
   kind: 'directory';
@@ -40,8 +40,18 @@ function guessMime(name: string): string {
 
 /** Merge into an existing list, replacing items that have the same id (so adding a folder twice is harmless). */
 export function mergeById<T extends { id: string }>(existing: T[], incoming: T[]): T[] {
-  const ids = new Set(incoming.map(item => item.id));
-  return [...incoming, ...existing.filter(item => !ids.has(item.id))];
+  const prevById = new Map(existing.map(item => [item.id, item]));
+  const mergedIncoming = incoming.map(item => {
+    const prev = prevById.get(item.id) as (T & { addedAt?: string; lastOpenedAt?: string }) | undefined;
+    if (!prev) return item;
+    const next = { ...item } as T & { addedAt?: string; lastOpenedAt?: string };
+    // Keep library metadata across rescans / re-imports of the same id.
+    if (prev.addedAt && !next.addedAt) next.addedAt = prev.addedAt;
+    if (prev.lastOpenedAt) next.lastOpenedAt = prev.lastOpenedAt;
+    return next as T;
+  });
+  const ids = new Set(mergedIncoming.map(item => item.id));
+  return [...mergedIncoming, ...existing.filter(item => !ids.has(item.id))];
 }
 
 function folderPathFor(rootName: string, relativeSegments: string[]): string {
@@ -81,6 +91,7 @@ async function fileToItem(
     category,
     mimeType,
     updatedAt: new Date(file.lastModified || Date.now()).toISOString(),
+    addedAt: new Date().toISOString(),
     url: blobUrl,
     thumbnailUrl: category === 'photo' ? blobUrl : undefined,
     starred: false,
@@ -140,12 +151,39 @@ async function walkDirectory(
         itemCount: 0,
         color: 'sky',
       });
-      await walkDirectory(entry as DirHandle, {
-        ...opts,
-        parentFolderId: folderId,
-        relativeSegments: segments,
-        depth: opts.depth + 1,
-      });
+      const lower = entry.name.toLowerCase();
+      const isPhotosLibrary = lower.endsWith('.photoslibrary') || lower.endsWith('.photolibrary');
+      const opaque =
+        lower.endsWith('.app')
+        || lower.endsWith('.bundle')
+        || lower.endsWith('.framework')
+        || lower.endsWith('.tvlibrary')
+        || lower.endsWith('.musiclibrary')
+        || entry.name === 'node_modules';
+      if (isPhotosLibrary) {
+        // Mirror Rust: only walk originals/ inside Apple Photos libraries.
+        try {
+          for await (const [childName, child] of entry.entries()) {
+            if (childName === 'originals' && child.kind === 'directory' && child.entries) {
+              await walkDirectory(child as DirHandle, {
+                ...opts,
+                parentFolderId: folderId,
+                relativeSegments: [...segments, 'originals'],
+                depth: opts.depth + 1,
+              });
+            }
+          }
+        } catch {
+          // TCC / permission — keep the library folder tile.
+        }
+      } else if (!opaque) {
+        await walkDirectory(entry as DirHandle, {
+          ...opts,
+          parentFolderId: folderId,
+          relativeSegments: segments,
+          depth: opts.depth + 1,
+        });
+      }
       continue;
     }
 
@@ -184,9 +222,13 @@ async function diskEntryToItem(entry: LocalEntry, folderId: string, folderPath: 
   const url = localFs.assetUrl(entry.path);
   const probe = { name: entry.name, mimeType, category };
 
+  // Only preload text for top-level files. Nested project trees (e.g. on Desktop)
+  // can contain thousands of sources — those load on open via localPath.
   let documentBody: string | undefined;
+  const isTopLevel = !entry.relativePath.includes('/');
   if (
-    isEditableDocument(probe)
+    isTopLevel
+    && isEditableDocument(probe)
     && entry.sizeBytes <= TEXT_UPLOAD_MAX_BYTES
     && (isPlainTextDocument(probe) || /\.html?$/i.test(entry.name))
   ) {
@@ -207,6 +249,7 @@ async function diskEntryToItem(entry: LocalEntry, folderId: string, folderPath: 
     category,
     mimeType,
     updatedAt: new Date(entry.modifiedMs || Date.now()).toISOString(),
+    addedAt: new Date().toISOString(),
     url,
     thumbnailUrl: category === 'photo' ? url : undefined,
     starred: false,
@@ -249,29 +292,46 @@ export async function importLocalFolderAtPath(
   folder: LocalFolder,
   options: ImportLocalFolderOptions = {},
 ): Promise<LocalFolderImport> {
-  const scan = await localFs.scanFolder(folder.path);
+  const roots = [folder.path, ...(folder.extraPaths ?? [])].filter(Boolean);
+  const uniqueRoots = [...new Set(roots)];
+  const scans = await Promise.all(
+    uniqueRoots.map(async path => {
+      try {
+        return await localFs.scanFolder(path);
+      } catch {
+        return { entries: [] as LocalEntry[], truncated: false };
+      }
+    }),
+  );
+
   const displayName = options.displayName ?? folder.name;
   const rootId = options.rootId ?? `folder-local-${folder.path}`;
   const rootFolder: FolderItem = { id: rootId, name: displayName, accountId: 'all', itemCount: 0, color: 'sky' };
   const folders: FolderItem[] = [rootFolder];
   const folderIds = new Map<string, string>([['', rootId]]);
   const pending: Array<{ entry: LocalEntry; folderId: string; folderPath: string }> = [];
+  let truncated = false;
 
-  // Entries arrive folder-first, so a parent is always known before its children.
-  for (const entry of scan.entries) {
-    const cut = entry.relativePath.lastIndexOf('/');
-    const parentRel = cut >= 0 ? entry.relativePath.slice(0, cut) : '';
-    const parentId = folderIds.get(parentRel) ?? rootId;
-    if (entry.isDir) {
-      const id = `folder-local-${entry.path}`;
-      folders.push({ id, name: entry.name, accountId: 'all', parentId, itemCount: 0, color: 'sky' });
-      folderIds.set(entry.relativePath, id);
-    } else {
-      pending.push({
-        entry,
-        folderId: parentId,
-        folderPath: folderPathFor(displayName, parentRel ? parentRel.split('/') : []),
-      });
+  // Merge every root (e.g. ~/Documents + iCloud Documents) into one sidebar tree.
+  // Same relative paths reuse the first folder id so twins do not duplicate.
+  for (const scan of scans) {
+    if (scan.truncated) truncated = true;
+    for (const entry of scan.entries) {
+      const cut = entry.relativePath.lastIndexOf('/');
+      const parentRel = cut >= 0 ? entry.relativePath.slice(0, cut) : '';
+      const parentId = folderIds.get(parentRel) ?? rootId;
+      if (entry.isDir) {
+        if (folderIds.has(entry.relativePath)) continue;
+        const id = `folder-local-${entry.path}`;
+        folders.push({ id, name: entry.name, accountId: 'all', parentId, itemCount: 0, color: 'sky' });
+        folderIds.set(entry.relativePath, id);
+      } else {
+        pending.push({
+          entry,
+          folderId: parentId,
+          folderPath: folderPathFor(displayName, parentRel ? parentRel.split('/') : []),
+        });
+      }
     }
   }
 
@@ -282,7 +342,7 @@ export async function importLocalFolderAtPath(
   }
 
   recountFolderItems(folders, files);
-  return { rootFolder, folders, files, truncated: scan.truncated };
+  return { rootFolder, folders, files, truncated };
 }
 
 /** Open the system folder picker and import the tree into Local Files. */

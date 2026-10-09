@@ -13,6 +13,14 @@
   height: 100%;
 }
 
+/* Dark mode terminal — no solid black fill; glass panel shows through */
+.system-terminal-panel .xterm,
+.system-terminal-panel .xterm-viewport,
+.system-terminal-panel .xterm-screen,
+.system-terminal-panel .xterm-helpers {
+  background-color: transparent !important;
+}
+
 @theme {
   --color-neutral-700: #36363a;
   --color-neutral-750: #2a2a2e;
@@ -363,6 +371,15 @@ input[type="range"] {
 
 .custom-range::-webkit-slider-thumb:hover {
   transform: scale(1.2);
+}
+
+html[data-theme="light"] .custom-range {
+  background: #525252;
+}
+
+html[data-theme="light"] .custom-range::-webkit-slider-runnable-track,
+html[data-theme="light"] .custom-range::-moz-range-track {
+  background: #525252;
 }
 
 

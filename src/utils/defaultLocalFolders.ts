@@ -15,9 +15,12 @@ const DEFAULT_ORDER = new Map(
   DEFAULT_LOCAL_FOLDER_DEFS.map((def, index) => [def.name.toLowerCase(), index]),
 );
 
-const DEFAULT_ID_BY_NAME = new Map(
-  DEFAULT_LOCAL_FOLDER_DEFS.map(def => [def.name.toLowerCase(), def.id]),
-);
+const DEFAULT_ID_BY_NAME = new Map<string, string>([
+  ...DEFAULT_LOCAL_FOLDER_DEFS.map(def => [def.name.toLowerCase(), def.id] as const),
+  // Disk folder names for sidebar aliases (Pictures → Photos, Movies → Videos).
+  ['pictures', 'folder-local-photos'],
+  ['movies', 'folder-local-videos'],
+]);
 
 /** Empty Local Files roots for the sidebar until a real folder is imported. */
 export function createDefaultLocalFolders(): FolderItem[] {
