@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AppWindow } from 'lucide-react';
+import { AppWindow } from '@/src/icons';
 import { FolderItem } from '../../types';
 import { previewBridge } from '../../services/previewBridge';
 import { useNearViewport } from '../../hooks/useNearViewport';

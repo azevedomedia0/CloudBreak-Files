@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, ChevronDown, Database, Server, Usb, Disc } from 'lucide-react';
+import { Plus, ChevronDown, Database, Server, Usb, Disc } from '@/src/icons';
 import { RemovableDevice } from '../../types';
 import type { NetworkServerEntry } from '../../services/volumesBridge';
 import { formatBytes } from '../../utils/format';

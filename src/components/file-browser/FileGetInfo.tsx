@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X } from '@/src/icons';
 import { FileItem } from '../../types';
 import { fileExtension } from '../../utils/documentKind';
 import { formatBytes, formatDate } from '../../utils/format';

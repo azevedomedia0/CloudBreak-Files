@@ -1,5 +1,5 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown } from '@/src/icons';
 import {
   DEFAULT_DOC_FONT,
   ensureGoogleFontLoaded,

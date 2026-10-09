@@ -1,7 +1,8 @@
 import React from 'react';
-import { X, Scissors, RefreshCw, ShieldCheck, Film, Play } from 'lucide-react';
+import { X, RefreshCw, ShieldCheck, Film, Play } from '@/src/icons';
 import { FileItem } from '../../types';
 import { formatTimecode } from '../../utils/format';
+import { VideoTrimIcon } from './VideoTrimIcon';
 
 export interface PlayerHeaderProps {
   file: FileItem;
@@ -61,7 +62,7 @@ export const PlayerHeader: React.FC<PlayerHeaderProps> = ({ file, duration, acti
                 : 'text-neutral-400 hover:text-neutral-200'
             }`}
           >
-            <Scissors className="w-3.5 h-3.5" />
+            <VideoTrimIcon className="w-3.5 h-3.5" title="Trim" />
           </button>
           <button
             type="button"

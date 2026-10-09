@@ -1,14 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ChevronLeft, ChevronRight, LayoutGrid, List, Columns,
-  GalleryVertical, Search, HardDrive, PanelLeft, PanelRight, Bell,
+  GalleryVertical, Search, HardDrive, PanelLeft, Bell,
   ArrowUpDown, ArrowUpAZ, ArrowDownAZ, Check, ListFilter,
   FileText, Image as ImageIcon, Video, Music, Archive, Star, SquareTerminal,
-} from 'lucide-react';
+} from '@/src/icons';
 import { isTauri } from '@tauri-apps/api/core';
 import { CloudAccount, AppNotification, FileCategory } from '../types';
 import { DateFilter, FileSortDirection, FileSortKey } from '../utils/filterFiles';
 import { NotificationPanel } from './NotificationPanel';
+import { FileInspectorIcon } from './file-browser/FileInspectorIcon';
 
 export type MacViewMode = 'icons' | 'list' | 'columns' | 'gallery';
 
@@ -157,9 +158,8 @@ export const MacFinderToolbar: React.FC<MacFinderToolbarProps> = ({
   return (
     <div data-tauri-drag-region className="h-10 px-3 flex items-center justify-between gap-2 sm:gap-3 macos-toolbar-glass select-none shrink-0 z-30">
 
-      {/* Left Section: Navigation */}
+      {/* Left Section: Navigation — native traffic lights sit in this row (see trafficLightPosition). */}
       <div data-tauri-drag-region className="flex items-center gap-2.5 sm:gap-3 shrink-0">
-        {/* The desktop app's native macOS window buttons overlay this corner. */}
         {isTauri() && <div data-tauri-drag-region className="w-[52px] self-stretch shrink-0" aria-hidden="true" />}
 
         <span
@@ -534,10 +534,8 @@ export const MacFinderToolbar: React.FC<MacFinderToolbarProps> = ({
               onClick={onToggleInspector}
               className={`p-1.5 rounded-lg transition-all ${
                 isInspectorOpen && sidePanelMode === 'inspector'
-                  ? 'text-neutral-200 hover:text-white hover:bg-white/10'
-                  : !isInspectorOpen
-                    ? 'text-sky-300 hover:bg-white/10'
-                    : 'text-neutral-400 hover:text-white hover:bg-white/10'
+                  ? 'text-sky-300 bg-sky-400/15 hover:bg-sky-400/25 border border-sky-400/30'
+                  : 'text-neutral-400 hover:text-white hover:bg-white/10'
               }`}
               title={
                 isInspectorOpen && sidePanelMode === 'inspector'
@@ -551,7 +549,7 @@ export const MacFinderToolbar: React.FC<MacFinderToolbarProps> = ({
               }
               aria-pressed={isInspectorOpen && sidePanelMode === 'inspector'}
             >
-              <PanelRight className="w-[18px] h-[18px]" />
+              <FileInspectorIcon className="w-[18px] h-[18px]" />
             </button>
           )}
         </div>

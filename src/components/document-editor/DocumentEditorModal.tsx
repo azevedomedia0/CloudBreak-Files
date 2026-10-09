@@ -4,7 +4,7 @@ import {
   Download, FileText, Highlighter, ImagePlus, Italic, Link, List, ListOrdered, Minus,
   PanelLeft, Plus, Printer, Redo2, Save, Search, ShieldAlert, Table2,
   Underline, Undo2, X, ZoomIn, ZoomOut,
-} from 'lucide-react';
+} from '@/src/icons';
 import { FileItem } from '../../types';
 import {
   countWords, editorHtmlFromFile, fileExtension, formatBadgeClasses, htmlWithoutFindMarks, isPlainTextDocument,

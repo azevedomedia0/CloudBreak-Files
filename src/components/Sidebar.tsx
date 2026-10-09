@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Settings } from 'lucide-react';
+import { Settings } from '@/src/icons';
 import type { NetworkServerEntry } from '../services/volumesBridge';
 import type { SwarmStatus } from '../services/p2pBridge';
 import { CloudAccount, FolderItem, SharedLibrary, CloudProviderId, RemovableDevice, FavoriteShortcut } from '../types';

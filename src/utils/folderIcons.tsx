@@ -1,7 +1,10 @@
 import React from 'react';
 import {
-  Download, FileText, Folder, Image as ImageIcon, LayoutGrid, Monitor, Music2, Trash2, Video,
-} from 'lucide-react';
+  Download, FileText, Folder, Monitor, Music2, Trash2,
+} from '@/src/icons';
+import { ApplicationsIcon } from '../components/file-browser/ApplicationsIcon';
+import { PhotosIcon } from '../components/file-browser/PhotosIcon';
+import { VideosIcon } from '../components/file-browser/VideosIcon';
 
 /** Same icons as the Local Files sidebar, keyed by folder display name. */
 export function getFolderIcon(name: string, isSelected = false, sizeClass = 'w-4 h-4'): React.ReactNode {
@@ -12,15 +15,15 @@ export function getFolderIcon(name: string, isSelected = false, sizeClass = 'w-4
     case 'documents':
       return <FileText className={iconClass} />;
     case 'photos':
-      return <ImageIcon className={iconClass} />;
+      return <PhotosIcon className={iconClass} title="Photos" />;
     case 'videos':
-      return <Video className={iconClass} />;
+      return <VideosIcon className={iconClass} title="Videos" />;
     case 'music':
       return <Music2 className={iconClass} />;
     case 'downloads':
       return <Download className={iconClass} />;
     case 'applications':
-      return <LayoutGrid className={iconClass} />;
+      return <ApplicationsIcon className={iconClass} title="Applications" />;
     case 'trash':
       return (
         <Trash2

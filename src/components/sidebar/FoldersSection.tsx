@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, RefreshCw, ChevronDown } from 'lucide-react';
+import { Plus, RefreshCw, ChevronDown } from '@/src/icons';
 import { FolderItem, CloudProviderId } from '../../types';
 import { SidebarSectionKey } from './sectionKey';
 

@@ -1,5 +1,6 @@
 import React from 'react';
-import { RefreshCw, Check, Sparkles, HardDrive, Monitor, Scissors, FolderOpen } from 'lucide-react';
+import { RefreshCw, Check, Sparkles, HardDrive, Monitor, FolderOpen } from '@/src/icons';
+import { VideoTrimIcon } from './VideoTrimIcon';
 import { VideoConvertOptions, FileItem, CloudAccount, CloudProviderId, FolderItem, isAudioConvertFormat } from '../../types';
 import { formatTimecode } from '../../utils/format';
 
@@ -75,7 +76,7 @@ export const ConvertPanel: React.FC<ConvertPanelProps> = ({
       {/* Clip being converted */}
       <div className="p-3 rounded-lg bg-neutral-950/70 border border-neutral-800 flex items-center gap-3">
         <div className="w-8 h-8 shrink-0 rounded-md bg-amber-400/15 text-amber-300 flex items-center justify-center">
-          <Scissors className="w-4 h-4" />
+          <VideoTrimIcon className="w-4 h-4" title="Trim" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-xs font-medium text-neutral-100 truncate">{file.name}</div>

@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Play, Pause, Rewind, FastForward, Volume2, Volume1, VolumeX, Repeat,
   StepBack, StepForward, Shuffle, Maximize, Minimize, Cast, Check,
-} from 'lucide-react';
+} from '@/src/icons';
 import { formatTimecode } from '../../utils/format';
 
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];

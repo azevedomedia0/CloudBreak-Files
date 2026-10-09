@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   SkipBack, SkipForward, Pause, Play, Shuffle, Repeat, MoreHorizontal, X,
   Volume2, VolumeX, ListMusic,
-} from 'lucide-react';
+} from '@/src/icons';
 import { FileItem } from '../types';
 import { formatTimecode } from '../utils/format';
 

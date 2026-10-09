@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Bell, X, Check, Trash2, ShieldCheck, FolderDown, FolderUp,
   HardDrive, CheckCheck, ArrowRight,
-} from 'lucide-react';
+} from '@/src/icons';
 import { AppNotification } from '../types';
 import { formatBytes } from '../utils/format';
 

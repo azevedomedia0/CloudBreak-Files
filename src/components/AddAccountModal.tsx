@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { X, Cloud, Loader2, KeyRound, Link2, User } from 'lucide-react';
+import { X, Cloud, Loader2, KeyRound, Link2, User } from '@/src/icons';
 import { CloudAccount, FileItem, FolderItem } from '../types';
 import { PROVIDER_LOGOS } from '../assets/providerLogos';
 import {

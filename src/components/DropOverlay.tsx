@@ -1,5 +1,5 @@
 import React from 'react';
-import { UploadCloud } from 'lucide-react';
+import { UploadCloud } from '@/src/icons';
 
 export const DropOverlay: React.FC = () => (
   <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-2xl border-2 border-dashed border-cyan-400 flex flex-col items-center justify-center p-6 text-center select-none pointer-events-none animate-fadeIn">

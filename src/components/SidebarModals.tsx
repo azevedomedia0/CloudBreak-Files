@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   X, Folder, FolderPlus, Server, Star,
   HardDrive, Radio, Shield, FolderDown, RefreshCw,
-} from 'lucide-react';
+} from '@/src/icons';
 import type { RemovableDevice } from '../types';
 
 function generateInvitePassphrase(length = 20): string {

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Image as ImageIcon, Video, FileText, Archive, Music2, AppWindow } from 'lucide-react';
+import { Image as ImageIcon, Video, FileText, Archive, Music2, AppWindow } from '@/src/icons';
 import { FileItem } from '../../types';
 import { DocumentPreview } from '../document-editor/DocumentPreview';
 import {
@@ -11,6 +11,8 @@ import {
 import { isZipArchive } from '../../utils/unzipArchive';
 import { previewBridge } from '../../services/previewBridge';
 import { useNearViewport } from '../../hooks/useNearViewport';
+import { emitFileContextMenu } from '../../utils/fileContextMenuBus';
+import { ZipFileIcon } from './ZipFileIcon';
 
 interface FileThumbnailProps {
   file: FileItem;
@@ -18,6 +20,7 @@ interface FileThumbnailProps {
   iconClassName?: string;
   hoverZoom?: boolean;
   compact?: boolean;
+  /** Override; by default every thumbnail opens the shared file context menu. */
   onContextMenu?: (event: React.MouseEvent) => void;
 }
 
@@ -112,13 +115,15 @@ export const FileThumbnail: React.FC<FileThumbnailProps> = ({
 
   const mediaClass = `w-full h-full ${isApp ? 'object-contain p-[6%]' : 'object-cover'} ${hoverZoom ? 'transition-transform duration-300 group-hover:scale-105' : ''}`;
 
-  const handleContextMenu = onContextMenu
-    ? (event: React.MouseEvent) => {
-        event.preventDefault();
-        event.stopPropagation();
-        onContextMenu(event);
-      }
-    : undefined;
+  const handleContextMenu = (event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (onContextMenu) {
+      onContextMenu(event);
+      return;
+    }
+    emitFileContextMenu(file, event.clientX, event.clientY);
+  };
 
   // Prefer native Quick Look / sips JPEG for HEIC, PDF, Office, .app icons, etc.
   const posterSrc =
@@ -167,7 +172,7 @@ export const FileThumbnail: React.FC<FileThumbnailProps> = ({
   } else if (isZipArchive(file) || file.category === 'archive') {
     content = (
       <div className="w-full h-full flex items-center justify-center bg-gradient-to-b from-pink-950/40 to-neutral-950/80">
-        <Archive className={`${iconClassName} text-pink-400`} />
+        <ZipFileIcon className={`${iconClassName} text-pink-400`} title="ZIP archive" />
       </div>
     );
   } else if (isEditableDocument(file)) {

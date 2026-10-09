@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Plus, Terminal as TerminalIcon, X } from 'lucide-react';
+import { Plus, Terminal as TerminalIcon, X } from '@/src/icons';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';

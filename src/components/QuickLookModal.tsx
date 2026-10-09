@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
-  X, Edit3, Scissors, Share2, ShieldCheck,
+  X, Edit3, Share2, ShieldCheck,
   FileText, ExternalLink,
-} from 'lucide-react';
+} from '@/src/icons';
 import { FileItem, CloudAccount } from '../types';
 import {
   fileExtension,
@@ -14,6 +14,8 @@ import { formatBytes, formatTimecode } from '../utils/format';
 import { PhotoNav, PhotoNavArrows } from './PhotoNavArrows';
 import { previewBridge, withNativeRaster } from '../services/previewBridge';
 import { FileThumbnail } from './file-browser/FileThumbnail';
+import { VideoTrimIcon } from './video-player/VideoTrimIcon';
+import { emitFileContextMenu } from '../utils/fileContextMenuBus';
 
 interface QuickLookModalProps {
   file: FileItem | null;
@@ -165,7 +167,7 @@ export const QuickLookModal: React.FC<QuickLookModalProps> = ({
                 }}
                 className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-neutral-950 font-semibold text-xs transition-colors shadow-sm"
               >
-                <Scissors className="w-3.5 h-3.5" />
+                <VideoTrimIcon className="w-3.5 h-3.5" title="Trim" />
                 <span>Open in Cinema Suite</span>
               </button>
             )}
@@ -183,13 +185,23 @@ export const QuickLookModal: React.FC<QuickLookModalProps> = ({
           </div>
         </div>
 
-        <div className="flex-1 min-h-[420px] bg-black/40 flex items-center justify-center p-6 relative overflow-hidden">
+        <div
+          className="flex-1 min-h-[420px] bg-black/40 flex items-center justify-center p-6 relative overflow-hidden"
+          onContextMenu={event => {
+            event.preventDefault();
+            emitFileContextMenu(file, event.clientX, event.clientY);
+          }}
+        >
           {file.category === 'photo' && photoNav && <PhotoNavArrows nav={photoNav} />}
           {file.category === 'photo' && (
             <img
               src={previewFile.url}
               alt={file.name}
               className="max-h-[60vh] max-w-full object-contain rounded-lg shadow-2xl"
+              onContextMenu={event => {
+                event.preventDefault();
+                emitFileContextMenu(file, event.clientX, event.clientY);
+              }}
             />
           )}
 
@@ -199,6 +211,10 @@ export const QuickLookModal: React.FC<QuickLookModalProps> = ({
               controls
               autoPlay
               className="max-h-[60vh] max-w-full rounded-lg shadow-2xl"
+              onContextMenu={event => {
+                event.preventDefault();
+                emitFileContextMenu(file, event.clientX, event.clientY);
+              }}
             />
           )}
 
@@ -218,6 +234,10 @@ export const QuickLookModal: React.FC<QuickLookModalProps> = ({
               src={docThumb || file.thumbnailUrl}
               alt={file.name}
               className="max-h-[60vh] max-w-full object-contain rounded-lg shadow-2xl bg-white"
+              onContextMenu={event => {
+                event.preventDefault();
+                emitFileContextMenu(file, event.clientX, event.clientY);
+              }}
             />
           )}
 

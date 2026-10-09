@@ -3,7 +3,7 @@ import {
   X, Share2, Users, Shield, Copy, Check, Lock, UserPlus,
   Mail, Clock, Key, Globe, Eye, Sparkles, ChevronDown, Trash2,
   Radio, Wifi, ArrowUpRight, ArrowDownLeft, ShieldCheck, Play, Pause, FolderDown, Unlink,
-} from 'lucide-react';
+} from '@/src/icons';
 import { SharedLibrary, SharedMember, P2PPeer } from '../types';
 import { peerStatusLabel, shortPeerId } from '../utils/p2pPeers';
 

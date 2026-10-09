@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   X, Check, Key, Globe,
   RefreshCw, CheckCircle2, AlertCircle, Unlink, Loader2
-} from 'lucide-react';
+} from '@/src/icons';
 import { CloudAccount, FileItem, FolderItem } from '../types';
 import { formatBytes } from '../utils/format';
 import {

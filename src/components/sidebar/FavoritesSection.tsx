@@ -1,5 +1,5 @@
 import React from 'react';
-import { Star, Plus, ShieldCheck, ChevronDown, Folder, Server, HardDrive } from 'lucide-react';
+import { Star, Plus, ShieldCheck, ChevronDown, Folder, Server, HardDrive } from '@/src/icons';
 import { CloudProviderId, FavoriteShortcut } from '../../types';
 import { SidebarSectionKey } from './sectionKey';
 

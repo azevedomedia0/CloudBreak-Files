@@ -1,10 +1,11 @@
 import React from 'react';
-import { Play, CheckSquare, Square, Music2 } from 'lucide-react';
+import { Play, Music2 } from '@/src/icons';
 import { FileItem, FolderItem } from '../../types';
 import { isEditableDocument, isMacAppBundle } from '../../utils/documentKind';
 import { previewBridge } from '../../services/previewBridge';
 import { FileThumbnail } from './FileThumbnail';
 import { FolderTile } from './FolderTile';
+import { HoverSelectCheckbox } from './HoverSelectCheckbox';
 import { SelectionAccent, SELECTION_CLASSES } from '../../utils/selectionAccent';
 import { formatTimecode } from '../../utils/format';
 import { setFileDragData } from '../../utils/fileDrag';
@@ -86,6 +87,11 @@ export const IconsView: React.FC<IconsViewProps> = ({
           >
             {/* Finder-style thumbnail: rounded preview, no glass card chrome */}
             <div className="aspect-[4/3] flex items-center justify-center relative">
+              <HoverSelectCheckbox
+                accent={accent}
+                selected={isSelected}
+                onToggle={e => toggleSelectOne(file.id, e)}
+              />
               <div
                 className={`relative overflow-hidden shadow-md shadow-black/40 ${
                   isApp
@@ -107,17 +113,6 @@ export const IconsView: React.FC<IconsViewProps> = ({
                   className="w-full h-full"
                   onContextMenu={event => onFileContextMenu(file, event)}
                 />
-
-                <button
-                  onClick={e => toggleSelectOne(file.id, e)}
-                  className={`absolute top-1.5 left-1.5 p-0.5 rounded-md backdrop-blur-md transition-opacity ${
-                    isSelected
-                      ? `${SELECTION_CLASSES[accent].checkIcon} bg-black/70 opacity-100`
-                      : 'text-neutral-300 bg-black/45 opacity-0 group-hover:opacity-100'
-                  }`}
-                >
-                  {isSelected ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
-                </button>
 
                 {(file.category === 'video' || file.category === 'audio') && (
                   <MediaDurationBadge file={file} />

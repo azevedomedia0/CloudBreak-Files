@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   X, Shield, ShieldCheck, Key, Lock, Unlock, RefreshCw, 
   Check, Copy, AlertTriangle, FileCode, Cpu, Fingerprint
-} from 'lucide-react';
+} from '@/src/icons';
 import { formatFingerprint } from '../utils/crypto';
 
 interface VaultSecurityModalProps {

@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ChevronRight, Check } from 'lucide-react';
+import { ChevronRight, Check } from '@/src/icons';
 import { FileItem } from '../../types';
 import { isEditableDocument } from '../../utils/documentKind';
 import { isZipArchive } from '../../utils/unzipArchive';

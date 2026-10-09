@@ -1,12 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Image as ImageIcon, Video, FileText, Lock, 
-  Unlock, Download, Trash2, Edit3, Scissors, Archive,
-  Share2, Info, HardDrive, Sparkles, Key,
+  Unlock, Download, Trash2, Edit3, Archive,
+  Share2, HardDrive, Sparkles, Key,
   ChevronDown, ChevronUp, ChevronRight, Minimize2, Maximize2,
-  PanelRightClose, PanelRight, Play, Pause, RotateCcw, Volume2, VolumeX,
+  Play, Pause, RotateCcw, Volume2, VolumeX,
   Copy, ClipboardPaste, TextCursorInput, FolderInput, FileArchive, FolderPlus,
-} from 'lucide-react';
+} from '@/src/icons';
 import { FileItem, CloudAccount, FolderItem } from '../types';
 import {
   isEditableDocument,
@@ -20,6 +20,8 @@ import { DocumentPreview } from './document-editor/DocumentPreview';
 import { emitFileContextMenu } from '../utils/fileContextMenuBus';
 import { previewBridge } from '../services/previewBridge';
 import { FileThumbnail } from './file-browser/FileThumbnail';
+import { FileInspectorIcon } from './file-browser/FileInspectorIcon';
+import { VideoTrimIcon } from './video-player/VideoTrimIcon';
 
 import { PhotoNav, PhotoNavArrows } from './PhotoNavArrows';
 
@@ -179,13 +181,13 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
       >
         <div className="flex items-center px-3.5 py-2.5 macos-toolbar-glass border-b border-white/8 shrink-0">
           <div className="flex items-center gap-2">
-            <Info className="w-4 h-4 text-sky-400" />
+            <FileInspectorIcon className="w-4 h-4 text-sky-400" title="File Inspector" />
             <span className="text-xs font-semibold text-neutral-200">File Inspector</span>
           </div>
         </div>
         <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6 text-center">
           <div className="p-3 rounded-2xl bg-white/5 border border-white/10 text-neutral-400">
-            <PanelRight className="w-6 h-6" />
+            <FileInspectorIcon className="w-6 h-6" title="File Inspector" />
           </div>
           <div>
             <p className="text-xs font-semibold text-neutral-200">No file selected</p>
@@ -216,7 +218,7 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
       {/* Inspector Header */}
       <div className="flex items-center px-3.5 py-2.5 macos-toolbar-glass border-b border-white/8 shrink-0">
         <div className="flex items-center gap-2">
-          <Info className="w-4 h-4 text-sky-400" />
+          <FileInspectorIcon className="w-4 h-4 text-sky-400" title="File Inspector" />
           <span className="text-xs font-semibold text-neutral-200">File Inspector</span>
         </div>
       </div>
@@ -433,10 +435,22 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                       }}
                     />
                   ) : (
-                    <FileThumbnail file={file} className="w-full h-full" />
+                    <FileThumbnail
+                      file={file}
+                      className="w-full h-full"
+                      onContextMenu={event => emitFileContextMenu(file, event.clientX, event.clientY)}
+                    />
                   )
                 ) : (
-                  <DocumentPreview file={file} />
+                  <div
+                    className="w-full h-full"
+                    onContextMenu={event => {
+                      event.preventDefault();
+                      emitFileContextMenu(file, event.clientX, event.clientY);
+                    }}
+                  >
+                    <DocumentPreview file={file} />
+                  </div>
                 )
               )}
               </>
@@ -514,7 +528,7 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                   title="Edit Video"
                   aria-label="Edit Video"
                 >
-                  <Scissors className="w-3.5 h-3.5" />
+                  <VideoTrimIcon className="w-3.5 h-3.5" title="Trim" />
                   <span>Edit Video</span>
                 </button>
               ) : file.category === 'photo' ? (

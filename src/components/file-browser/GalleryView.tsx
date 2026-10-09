@@ -1,25 +1,28 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Edit3 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Edit3 } from '@/src/icons';
 import { FileItem } from '../../types';
 import { isEditableDocument } from '../../utils/documentKind';
 import { SelectionAccent, SELECTION_CLASSES } from '../../utils/selectionAccent';
 import { setFileDragData } from '../../utils/fileDrag';
 import { FileThumbnail } from './FileThumbnail';
+import { HoverSelectCheckbox } from './HoverSelectCheckbox';
 
 export interface GalleryViewProps {
   accent: SelectionAccent;
   files: FileItem[];
   selectedFile: FileItem;
+  selectedIds: Set<string>;
   onSelectFile: (file: FileItem) => void;
   onEditPhoto: (file: FileItem) => void;
   onOpenDocument: (file: FileItem) => void;
   onFileContextMenu: (file: FileItem, event: React.MouseEvent) => void;
+  toggleSelectOne: (id: string, e: React.MouseEvent) => void;
 }
 
 const SCROLL_STEP = 280;
 
 export const GalleryView: React.FC<GalleryViewProps> = ({
-  accent, files, selectedFile, onSelectFile, onEditPhoto, onOpenDocument, onFileContextMenu,
+  accent, files, selectedFile, selectedIds, onSelectFile, onEditPhoto, onOpenDocument, onFileContextMenu, toggleSelectOne,
 }) => {
   const reelRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -150,6 +153,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
         >
           {files.map(file => {
             const isActive = selectedFile.id === file.id;
+            const isSelected = selectedIds.has(file.id);
             return (
               <div
                 key={file.id}
@@ -158,9 +162,11 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
                 onDragStart={e => setFileDragData(e.dataTransfer, file)}
                 onClick={() => onSelectFile(file)}
                 onContextMenu={event => onFileContextMenu(file, event)}
-                className={`h-[calc(100%-6px)] aspect-video rounded-lg overflow-hidden border shrink-0 cursor-pointer relative transition-all ${
+                className={`group h-[calc(100%-6px)] aspect-video rounded-lg border shrink-0 cursor-pointer relative transition-all overflow-hidden ${
                   isActive
                     ? SELECTION_CLASSES[accent].galleryRing
+                    : isSelected
+                    ? 'border-white/25 opacity-100'
                     : 'border-white/10 opacity-60 hover:opacity-100 hover:border-white/20'
                 }`}
               >
@@ -169,6 +175,12 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
                   compact
                   iconClassName="w-5 h-5"
                   onContextMenu={event => onFileContextMenu(file, event)}
+                />
+                <HoverSelectCheckbox
+                  accent={accent}
+                  selected={isSelected}
+                  compact
+                  onToggle={e => toggleSelectOne(file.id, e)}
                 />
               </div>
             );

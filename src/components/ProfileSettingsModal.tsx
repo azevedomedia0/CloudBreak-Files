@@ -5,7 +5,7 @@ import {
   Eye, EyeOff, Trash2, PanelRight,
   Cpu, Fingerprint, RefreshCw, Globe, Moon, Sun,
   Camera, ImagePlus, FolderLock, FolderOpen, Network,
-} from 'lucide-react';
+} from '@/src/icons';
 import { isTauri } from '@tauri-apps/api/core';
 import { CloudAccount } from '../types';
 import {

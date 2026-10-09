@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { ShieldAlert, ShieldOff, FileWarning, X } from 'lucide-react';
+import { ShieldAlert, ShieldOff, FileWarning, X } from '@/src/icons';
 import type { ContentSafetyReport } from '../utils/contentSafety';
 
 export interface UntrustedContentGateProps {

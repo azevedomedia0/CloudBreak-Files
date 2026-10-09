@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { FileText } from 'lucide-react';
+import { FileText } from '@/src/icons';
 import { FileItem } from '../../types';
 import { editorHtmlFromFile, isEditableDocument } from '../../utils/documentKind';
 

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import { Play, Pause, Scissors, ChevronLeft, ChevronRight, MapPin, RotateCcw, Repeat } from 'lucide-react';
+import { Play, Pause, ChevronLeft, ChevronRight, MapPin, RotateCcw, Repeat } from '@/src/icons';
+import { VideoTrimIcon } from './VideoTrimIcon';
 import { formatTimecode } from '../../utils/format';
 
 const MIN_CLIP_SECONDS = 0.1;
@@ -216,7 +217,7 @@ export const TrimPanel: React.FC<TrimPanelProps> = ({
               className="h-9 px-3 rounded-lg bg-amber-300 hover:bg-amber-200 text-neutral-950 text-xs font-bold flex items-center gap-1.5 transition-colors"
               title="Next: choose a format and where to save"
             >
-              <Scissors className="w-3.5 h-3.5" />
+              <VideoTrimIcon className="w-3.5 h-3.5" title="Trim" />
               <span>Save clip</span>
               <ChevronRight className="w-3.5 h-3.5" />
             </button>

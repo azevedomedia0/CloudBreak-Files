@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Folder, RotateCcw, Trash2, ChevronRight, HardDrive, Search } from 'lucide-react';
+import { Folder, RotateCcw, Trash2, ChevronRight, HardDrive, Search } from '@/src/icons';
 import { FileItem, CloudAccount, FolderItem, SharedLibrary, CloudProviderId, FileCategory } from '../types';
 import { MacViewMode } from './MacFinderToolbar';
 import { LibraryBanner } from './file-browser/LibraryBanner';
@@ -16,6 +16,7 @@ import { childFoldersOf, groupFilesByLocalFolders } from '../utils/groupFilesByL
 import { accentForSelection } from '../utils/selectionAccent';
 import { isZipArchive } from '../utils/unzipArchive';
 import { FILE_CONTEXT_MENU_EVENT, FileContextMenuDetail } from '../utils/fileContextMenuBus';
+import { FILE_MENU_ACTION_EVENT, FileMenuActionDetail } from '../utils/fileMenuBus';
 import { previewBridge } from '../services/previewBridge';
 import type { SwarmStatus } from '../services/p2pBridge';
 import { AudioPlayerBar } from './AudioPlayerBar';
@@ -231,6 +232,65 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     return () => window.removeEventListener(FILE_CONTEXT_MENU_EVENT, onExternalMenu);
   }, [onSelectFile]);
 
+  useEffect(() => {
+    const onFileMenu = (event: Event) => {
+      const action = (event as CustomEvent<FileMenuActionDetail>).detail?.action;
+      if (!action) return;
+
+      if (action === 'select-all') {
+        toggleSelectAll();
+        return;
+      }
+      if (action === 'new-folder' || action === 'upload') return;
+
+      const file = files.find(item => item.id === selectedFileId);
+      if (!file) return;
+      const targets = targetsFor(file);
+
+      switch (action) {
+        case 'open':
+          openFile(file);
+          break;
+        case 'quick-look':
+          quickLook(file);
+          break;
+        case 'get-info':
+          setInfoFileId(file.id);
+          setContextMenu(null);
+          break;
+        case 'rename': {
+          const rect = rootRef.current?.getBoundingClientRect();
+          setRenaming({ file, x: (rect?.left ?? 80) + 48, y: (rect?.top ?? 80) + 48 });
+          setContextMenu(null);
+          break;
+        }
+        case 'duplicate':
+          duplicateFiles(targets);
+          break;
+        case 'copy':
+          onCopyFiles(targets);
+          break;
+        case 'share':
+          onShareFile(file);
+          break;
+        case 'encrypt':
+          onToggleEncrypt(file);
+          break;
+        case 'trash':
+          trashFiles(targets);
+          break;
+        default:
+          break;
+      }
+    };
+    window.addEventListener(FILE_MENU_ACTION_EVENT, onFileMenu);
+    return () => window.removeEventListener(FILE_MENU_ACTION_EVENT, onFileMenu);
+  }, [
+    files, selectedFileId, selectedIds,
+    onCopyFiles, onShareFile, onToggleEncrypt, onBatchDelete, onDeleteFile, onDuplicateFiles, onOpenQuickLook,
+    onEditPhoto, onOpenDocument, onOpenVideo, onOpenAudio, onUnzipFile, onSelectFile,
+  ]);
+
   const renderSectionViews = (sectionFiles: FileItem[], sectionFolders: FolderItem[] = []) => {
     const hasItems = sectionFiles.length > 0 || sectionFolders.length > 0;
     if (!hasItems) return null;
@@ -316,12 +376,12 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
       
       {/* Batch Selection Banner */}
       {selectedIds.size > 0 && (
-        <div className="px-4 py-2 bg-sky-950/60 border-b border-sky-500/30 backdrop-blur-md flex items-center justify-between text-xs text-sky-200 z-20">
+        <div className="px-4 py-2 bg-sky-950/60 border-b border-sky-500/30 backdrop-blur-md flex items-center justify-between text-xs text-white z-20">
           <div className="flex items-center gap-3">
             <span className="font-semibold">{selectedIds.size} assets selected</span>
             <button
               onClick={() => setSelectedIds(new Set())}
-              className="text-[11px] underline text-sky-400 hover:text-sky-100"
+              className="text-[11px] underline text-white/80 hover:text-white"
             >
               Clear
             </button>
@@ -329,9 +389,9 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
           <div className="flex items-center gap-2">
             <button
               onClick={() => onBatchRestore(Array.from(selectedIds))}
-              className="px-2.5 py-1 rounded-md bg-white/10 hover:bg-white/20 border border-white/10 text-xs flex items-center gap-1.5 transition-colors"
+              className="px-2.5 py-1 rounded-md bg-white/10 hover:bg-white/20 border border-white/10 text-xs text-white flex items-center gap-1.5 transition-colors"
             >
-              <RotateCcw className="w-3 h-3 text-cyan-400" />
+              <RotateCcw className="w-3 h-3 text-white" />
               <span>Restore</span>
             </button>
             <button
@@ -433,11 +493,11 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
               <ListView accent={accent} files={files} folders={browseSubfolders} selectedFileId={selectedFileId} selectedIds={selectedIds} scrollParentRef={browseScrollRef} onSelectFile={selectFile} onOpenFolder={onSelectFolder} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenAudio={onOpenAudio} onShareFile={onShareFile} onOpenQuickLook={onOpenQuickLook} onFileContextMenu={openContextMenu} toggleSelectOne={toggleSelectOne} toggleSelectAll={toggleSelectAll} getAccount={getAccount} />
             )}
             {viewMode === 'columns' && (
-              <ColumnsView accent={accent} files={files} selectedFolder={selectedFolder} selectedFileId={selectedFileId} folders={folders.filter(f => f.accountId === 'all' ? !f.parentId : true)} totalSize={totalSize} onSelectFile={selectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenAudio={onOpenAudio} onOpenQuickLook={onOpenQuickLook} onFileContextMenu={openContextMenu} onSelectFolder={onSelectFolder} />
-            )}
-            {viewMode === 'gallery' && selectedFile && (
-              <GalleryView accent={accent} files={files} selectedFile={selectedFile} onSelectFile={selectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onFileContextMenu={openContextMenu} />
-            )}
+              <ColumnsView accent={accent} files={files} selectedFolder={selectedFolder} selectedFileId={selectedFileId} selectedIds={selectedIds} folders={folders.filter(f => f.accountId === 'all' ? !f.parentId : true)} totalSize={totalSize} onSelectFile={selectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenAudio={onOpenAudio} onOpenQuickLook={onOpenQuickLook} onFileContextMenu={openContextMenu} onSelectFolder={onSelectFolder} toggleSelectOne={toggleSelectOne} />
+              )}
+              {viewMode === 'gallery' && selectedFile && (
+              <GalleryView accent={accent} files={files} selectedFile={selectedFile} selectedIds={selectedIds} onSelectFile={selectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onFileContextMenu={openContextMenu} toggleSelectOne={toggleSelectOne} />
+              )}
           </>
         )}
 

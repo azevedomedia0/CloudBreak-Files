@@ -3,13 +3,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { MacFinderToolbar, MacViewMode } from './components/MacFinderToolbar';
+import { MacMenuBar } from './components/MacMenuBar';
 import { Sidebar } from './components/Sidebar';
 import { useResizablePanel } from './hooks/useResizablePanel';
 import { DateFilter, FileSortDirection, FileSortKey, filterFiles, sortFiles } from './utils/filterFiles';
 import { useToast } from './hooks/useToast';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
+import { useNativeAppMenu } from './hooks/useNativeAppMenu';
 import { useFileActions } from './hooks/useFileActions';
 import { useVault } from './hooks/useVault';
 import { useP2pLibraries } from './hooks/useP2pLibraries';
@@ -17,6 +19,7 @@ import { useCloudAccounts } from './hooks/useCloudAccounts';
 import { useNotifications } from './hooks/useNotifications';
 import { useSidebarSources } from './hooks/useSidebarSources';
 import { useSystemSearch } from './hooks/useSystemSearch';
+import { FILE_MENU_ACTION_EVENT, type FileMenuActionDetail } from './utils/fileMenuBus';
 import { mergeSystemSearchResults, systemSearchBridge } from './services/systemSearchBridge';
 import { AppModals } from './components/AppModals';
 import { PhotoNav } from './components/PhotoNavArrows';
@@ -279,6 +282,25 @@ export default function App() {
     onToggleSidebar: () => setIsSidebarCollapsed(prev => !prev),
     onToggleQuickLook: () => setIsQuickLookOpen(prev => !prev),
   });
+
+  const uploadInputRef = useRef<HTMLInputElement>(null);
+  const selectedFileForMenu =
+    files.find(f => f.id === selectedFileId)
+    || null;
+  useNativeAppMenu({
+    hasSelection: !!selectedFileId,
+    isEncrypted: !!selectedFileForMenu?.encryption?.isEncrypted,
+  });
+
+  useEffect(() => {
+    const onFileMenu = (event: Event) => {
+      const action = (event as CustomEvent<FileMenuActionDetail>).detail?.action;
+      if (action === 'new-folder') setIsNewFolderOpen(true);
+      if (action === 'upload') uploadInputRef.current?.click();
+    };
+    window.addEventListener(FILE_MENU_ACTION_EVENT, onFileMenu);
+    return () => window.removeEventListener(FILE_MENU_ACTION_EVENT, onFileMenu);
+  }, []);
 
   const {
     removableDevices, customFavorites, networkServers, favoritedSourceIds,
@@ -560,9 +582,31 @@ export default function App() {
 
       {toastNotification && <Toast message={toastNotification} />}
 
+      <input
+        ref={uploadInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={e => {
+          if (e.target.files?.length) handleUploadFiles(e.target.files);
+          e.target.value = '';
+        }}
+      />
+
       {/* Full App Window Panel */}
       <div className="flex-1 p-0 overflow-hidden flex flex-col z-10 w-full h-full">
         <div className="relative w-full h-full max-w-none rounded-none border-x-0 border-b-0 overflow-hidden flex flex-col macos-window">
+
+          <MacMenuBar
+            onOpenVaultSecurity={() => setIsVaultSecurityOpen(true)}
+            isVaultUnlocked={isVaultUnlocked}
+            activeAccountName={
+              activeAccount?.name
+              || (selectedAccountId === 'vault' ? 'Private Vault' : 'Local Files')
+            }
+            hasSelection={!!selectedFileId}
+            isEncrypted={!!selectedFileForMenu?.encryption?.isEncrypted}
+          />
           
           {/* macOS Finder Toolbar & Titlebar */}
           <MacFinderToolbar

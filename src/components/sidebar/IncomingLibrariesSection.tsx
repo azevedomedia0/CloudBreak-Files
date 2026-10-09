@@ -1,7 +1,8 @@
 import React from 'react';
-import { Plus, ChevronDown, FolderDown } from 'lucide-react';
+import { Plus, ChevronDown } from '@/src/icons';
 import { SharedLibrary } from '../../types';
 import { SidebarSectionKey } from './sectionKey';
+import { IncomingLibraryIcon } from './IncomingLibraryIcon';
 
 export interface IncomingLibrariesSectionProps {
   onSelectFolder: (folderId: string | null) => void;
@@ -63,7 +64,10 @@ export const IncomingLibrariesSection: React.FC<IncomingLibrariesSectionProps> =
                   title={`Incoming via Encrypted P2P from ${senderName} (${lib.senderPeerEmail || lib.ownerEmail})\nProtocol: ${lib.p2pProtocol || 'AES-256-GCM Direct P2P'}`}
                 >
                   <div className="flex items-center gap-2 truncate min-w-0">
-                    <FolderDown className={`w-4 h-4 shrink-0 ${isSelected ? 'text-emerald-400' : 'text-emerald-400/80'}`} />
+                    <IncomingLibraryIcon
+                      className={`w-4 h-4 shrink-0 ${isSelected ? 'text-emerald-400' : 'text-emerald-400/80'}`}
+                      title="Incoming library"
+                    />
                     <div className="truncate min-w-0">
                       <div className="truncate text-[11px] leading-tight">{lib.name}</div>
                       <div className="text-[9px] text-emerald-400/80 truncate flex items-center gap-1 font-mono">

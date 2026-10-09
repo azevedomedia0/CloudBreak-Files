@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Play } from 'lucide-react';
+import { Play } from '@/src/icons';
 import { FileItem, VideoConvertOptions, CloudAccount, FolderItem, isAudioConvertFormat, convertFormatMime } from '../types';
 import { discardTempOutput, getFfmpegStatus, trimAndTranscode, type FfmpegStatus } from '../services/mediaBridge';
 import { localFs } from '../services/localFsBridge';

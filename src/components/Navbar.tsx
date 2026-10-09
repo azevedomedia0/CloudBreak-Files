@@ -2,7 +2,7 @@ import React, { useRef } from 'react';
 import {
   Search, Upload, ShieldCheck, Plus, Sparkles, Filter, 
   Image as ImageIcon, Video, FileText, Lock, Layers, CheckCircle2
-} from 'lucide-react';
+} from '@/src/icons';
 import { FileCategory, CloudAccount } from '../types';
 
 interface NavbarProps {

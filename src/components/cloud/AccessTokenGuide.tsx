@@ -1,5 +1,5 @@
 import React from 'react';
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink } from '@/src/icons';
 
 type TokenProvider = 'Google Drive' | 'Dropbox' | 'OneDrive';
 

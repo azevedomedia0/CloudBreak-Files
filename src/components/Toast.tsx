@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles } from 'lucide-react';
+import { Sparkles } from '@/src/icons';
 
 export const Toast: React.FC<{ message: string }> = ({ message }) => (
   <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-2xl macos-glass-card shadow-2xl text-xs font-medium text-cyan-200 border border-cyan-400/30">

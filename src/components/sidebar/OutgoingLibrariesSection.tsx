@@ -1,7 +1,8 @@
 import React from 'react';
-import { Users, Plus, ChevronDown, FolderUp } from 'lucide-react';
+import { Plus, ChevronDown } from '@/src/icons';
 import { SharedLibrary } from '../../types';
 import { SidebarSectionKey } from './sectionKey';
+import { OutgoingLibraryIcon } from './OutgoingLibraryIcon';
 
 export interface OutgoingLibrariesSectionProps {
   onSelectFolder: (folderId: string | null) => void;
@@ -63,7 +64,10 @@ export const OutgoingLibrariesSection: React.FC<OutgoingLibrariesSectionProps> =
                   title={`Currently seeding to ${peerCount} specified P2P users\nSpeed: ${lib.transferSpeed || 'Active'}\nProtocol: ${lib.p2pProtocol || 'Zero-Knowledge P2P Seeder'}`}
                 >
                   <div className="flex items-center gap-2 truncate min-w-0">
-                    <FolderUp className={`w-4 h-4 shrink-0 ${isSelected ? 'text-purple-400' : 'text-purple-400/80'}`} />
+                    <OutgoingLibraryIcon
+                      className={`w-4 h-4 shrink-0 ${isSelected ? 'text-purple-400' : 'text-purple-400/80'}`}
+                      title="Outgoing library"
+                    />
                     <div className="truncate min-w-0">
                       <div className="truncate text-[11px] leading-tight">{lib.name}</div>
                       <div className="text-[9px] text-purple-400/80 truncate flex items-center gap-1 font-mono">

@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, type RefObject } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Share2, Edit3, Scissors, CheckSquare, Square, Play } from 'lucide-react';
+import { Share2, Edit3, CheckSquare, Square, Play } from '@/src/icons';
+import { VideoTrimIcon } from '../video-player/VideoTrimIcon';
 import { FileItem, FolderItem, CloudAccount, CloudProviderId } from '../../types';
 import { isEditableDocument, isMacAppBundle } from '../../utils/documentKind';
 import { previewBridge } from '../../services/previewBridge';
@@ -165,7 +166,7 @@ export const ListView: React.FC<ListViewProps> = ({
                 else if (isEditableDocument(file)) onOpenDocument(file);
                 else onOpenQuickLook();
               }}
-              className={`grid items-center px-3 cursor-pointer transition-colors border-b border-white/5 text-xs ${
+              className={`group grid items-center px-3 cursor-pointer transition-colors border-b border-white/5 text-xs ${
                 isCurrent
                   ? SELECTION_CLASSES[accent].row
                   : isSelected
@@ -177,11 +178,17 @@ export const ListView: React.FC<ListViewProps> = ({
                 gridTemplateColumns: '32px minmax(160px, 2fr) 120px 80px 100px 140px 120px',
               }}
             >
-              <button type="button" onClick={e => toggleSelectOne(file.id, e)} className="flex items-center justify-center">
+              <button
+                type="button"
+                onClick={e => toggleSelectOne(file.id, e)}
+                className={`flex items-center justify-center transition-opacity ${
+                  isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                }`}
+              >
                 {isSelected ? (
                   <CheckSquare className={`w-3.5 h-3.5 ${SELECTION_CLASSES[accent].checkIcon}`} />
                 ) : (
-                  <Square className="w-3.5 h-3.5 text-neutral-600" />
+                  <Square className="w-3.5 h-3.5 text-neutral-400" />
                 )}
               </button>
               <div className="flex items-center gap-2.5 min-w-0">
@@ -233,7 +240,7 @@ export const ListView: React.FC<ListViewProps> = ({
                     className="p-1 rounded hover:bg-white/10 text-amber-400"
                     title="Cinema Suite"
                   >
-                    <Scissors className="w-3.5 h-3.5" />
+                    <VideoTrimIcon className="w-3.5 h-3.5" title="Trim" />
                   </button>
                 )}
                 {file.category === 'audio' && (

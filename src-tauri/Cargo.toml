@@ -1,6 +1,6 @@
 [package]
 name = "cloudbreak-files"
-version = "0.1.2"
+version = "0.1.3"
 description = "Cloudbreak Files — multi-cloud storage with E2EE vault, photo studio, video tools, and private P2P libraries"
 authors = ["Steven Azevedo <stevenazevedodesign@gmail.com>"]
 edition = "2021"

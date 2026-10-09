@@ -3,7 +3,7 @@ import {
   X, RotateCw, RotateCcw, FlipHorizontal, FlipVertical,
   Sliders, Wand2, Download, Save, Undo2, Redo2, Check,
   Sparkles, Layers, ZoomIn, ZoomOut, Maximize2, Minimize2, Crop
-} from 'lucide-react';
+} from '@/src/icons';
 import { FileItem, PhotoAdjustments } from '../types';
 import { photoResultToDataUrl, renderPhotoNative } from '../services/mediaBridge';
 import { PhotoNav, PhotoNavArrows } from './PhotoNavArrows';

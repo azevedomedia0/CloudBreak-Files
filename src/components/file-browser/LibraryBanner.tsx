@@ -1,8 +1,10 @@
 import React from 'react';
-import { ShieldCheck, FolderDown, FolderUp, Users, Wifi, Copy, Radio } from 'lucide-react';
+import { ShieldCheck, Users, Wifi, Copy, Radio } from '@/src/icons';
 import { FileItem, SharedLibrary } from '../../types';
 import { formatBytes } from '../../utils/format';
 import type { SwarmStatus } from '../../services/p2pBridge';
+import { OutgoingLibraryIcon } from '../sidebar/OutgoingLibraryIcon';
+import { IncomingLibraryIcon } from '../sidebar/IncomingLibraryIcon';
 
 export interface LibraryBannerProps {
   files: FileItem[];
@@ -31,9 +33,9 @@ export const LibraryBanner: React.FC<LibraryBannerProps> = ({
               : 'bg-purple-500/15 border-purple-400/30 text-purple-300'
           }`}>
             {selectedLibrary.direction === 'incoming' ? (
-              <FolderDown className="w-5 h-5" />
+              <IncomingLibraryIcon className="w-5 h-5 text-emerald-300" title="Incoming library" />
             ) : (
-              <FolderUp className="w-5 h-5" />
+              <OutgoingLibraryIcon className="w-5 h-5 text-purple-300" title="Outgoing library" />
             )}
           </div>
           <div className="min-w-0">

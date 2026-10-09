@@ -1,5 +1,5 @@
 import React from 'react';
-import { Radio, Settings } from 'lucide-react';
+import { Radio, Settings } from '@/src/icons';
 import { SharedLibrary } from '../../types';
 import type { SwarmStatus } from '../../services/p2pBridge';
 
