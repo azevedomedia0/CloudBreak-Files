@@ -147,12 +147,12 @@ export const MacFinderToolbar: React.FC<MacFinderToolbarProps> = ({
   };
 
   return (
-    <div className="h-10 px-3 flex items-center justify-between gap-2 sm:gap-3 macos-toolbar-glass select-none shrink-0 z-30">
+    <div data-tauri-drag-region className="h-10 px-3 flex items-center justify-between gap-2 sm:gap-3 macos-toolbar-glass select-none shrink-0 z-30">
 
       {/* Left Section: Navigation */}
-      <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
+      <div data-tauri-drag-region className="flex items-center gap-2.5 sm:gap-3 shrink-0">
         {/* The desktop app's native macOS window buttons overlay this corner. */}
-        {isTauri() && <div className="w-[62px] shrink-0" aria-hidden="true" />}
+        {isTauri() && <div data-tauri-drag-region className="w-[52px] self-stretch shrink-0" aria-hidden="true" />}
 
         <div className="flex items-center gap-0.5 text-neutral-300">
           <button className="p-1 rounded-md hover:bg-white/10 hover:text-white transition-colors" title="Back">
@@ -177,14 +177,14 @@ export const MacFinderToolbar: React.FC<MacFinderToolbarProps> = ({
           </button>
         )}
 
-        <div className="flex items-center gap-2 font-semibold text-neutral-100 truncate max-w-[210px] md:max-w-sm">
+        <div className="flex items-center gap-2 font-semibold text-neutral-100 truncate max-w-[210px] md:max-w-sm pointer-events-none">
           <HardDrive className="w-[18px] h-[18px] text-sky-400 shrink-0" />
           <span className="truncate text-sm sm:text-[14px] font-semibold tracking-tight text-white">{activePathTitle}</span>
         </div>
       </div>
 
       {/* Center: view modes + notifications / search / sort */}
-      <div className="flex-1 flex items-center justify-center gap-2.5 min-w-0 px-2">
+      <div data-tauri-drag-region className="flex-1 flex items-center justify-center gap-2.5 min-w-0 px-2">
         <div className="flex p-0.5 rounded-lg macos-segmented-pill shrink-0">
           <button
             onClick={() => onViewModeChange('icons')}
@@ -479,7 +479,7 @@ export const MacFinderToolbar: React.FC<MacFinderToolbarProps> = ({
           </div>
         </div>
 
-        <div className="ml-auto shrink-0 flex items-center gap-0.5">
+        <div data-tauri-drag-region className="ml-auto shrink-0 flex items-center gap-0.5">
           {onShowTerminal && (
             <button
               type="button"
