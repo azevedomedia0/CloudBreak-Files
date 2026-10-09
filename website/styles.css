@@ -867,6 +867,12 @@ main,
   margin-top: 1.75rem;
 }
 
+.download-meta {
+  margin: 1rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
+
 /* FAQ */
 .faq-list {
   width: min(760px, 100%);

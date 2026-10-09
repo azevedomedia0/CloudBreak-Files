@@ -26,3 +26,27 @@ if ("IntersectionObserver" in window) {
 } else {
   observeTargets.forEach((el) => el.classList.add("is-inview"));
 }
+
+/** Point Download for Mac at the latest universal DMG on GitHub Releases. */
+const downloadMac = document.getElementById("download-mac");
+const downloadMeta = document.getElementById("download-meta");
+if (downloadMac) {
+  fetch("https://api.github.com/repos/azevedomedia0/CloudBreak-Files/releases/latest")
+    .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+    .then((rel) => {
+      const dmg = (rel.assets || []).find((a) => /\.dmg$/i.test(a.name));
+      if (!dmg?.browser_download_url) return;
+      downloadMac.href = dmg.browser_download_url;
+      downloadMac.setAttribute("download", dmg.name);
+      if (downloadMeta) {
+        const ver = String(rel.tag_name || rel.name || "").replace(/^v/, "");
+        downloadMeta.hidden = false;
+        downloadMeta.textContent = ver
+          ? `Latest: v${ver} · universal macOS (Apple Silicon + Intel)`
+          : "Latest notarized macOS build";
+      }
+    })
+    .catch(() => {
+      /* Keep the Releases page fallback on the anchor. */
+    });
+}

@@ -4,6 +4,14 @@ Static landing page for CloudBreak Files, structured after [umanodesign.studio](
 
 **Slogan:** CloudBreak Files — A new wave of file browsing.
 
+## Live site
+
+Published via GitHub Pages from this folder:
+
+`https://azevedomedia0.github.io/CloudBreak-Files/`
+
+Workflow: `.github/workflows/deploy-website.yml` (push to `main` under `website/**`, or run manually).
+
 ## Preview
 
 ```bash
