@@ -5,6 +5,7 @@ import {
   ArrowUpDown, ArrowUpAZ, ArrowDownAZ, Check, ListFilter,
   FileText, Image as ImageIcon, Video, Music, Archive, Star, SquareTerminal,
 } from 'lucide-react';
+import { isTauri } from '@tauri-apps/api/core';
 import { CloudAccount, AppNotification, FileCategory } from '../types';
 import { DateFilter, FileSortDirection, FileSortKey } from '../utils/filterFiles';
 import { NotificationPanel } from './NotificationPanel';
@@ -148,28 +149,10 @@ export const MacFinderToolbar: React.FC<MacFinderToolbarProps> = ({
   return (
     <div className="h-10 px-3 flex items-center justify-between gap-2 sm:gap-3 macos-toolbar-glass select-none shrink-0 z-30">
 
-      {/* Left Section: Traffic Lights & Navigation */}
+      {/* Left Section: Navigation */}
       <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
-        <div className="flex items-center gap-1.5 group/lights shrink-0">
-          <button
-            className="w-3.5 h-3.5 rounded-full bg-[#FF5F56] border border-[#E0443E] hover:opacity-85 transition-opacity flex items-center justify-center text-[9px] font-bold text-[#4A0002]"
-            title="Close Window"
-          >
-            <span className="opacity-0 group-hover/lights:opacity-100">×</span>
-          </button>
-          <button
-            className="w-3.5 h-3.5 rounded-full bg-[#FFBD2E] border border-[#DEA123] hover:opacity-85 transition-opacity flex items-center justify-center text-[9px] font-bold text-[#563C00]"
-            title="Minimize Window"
-          >
-            <span className="opacity-0 group-hover/lights:opacity-100">−</span>
-          </button>
-          <button
-            className="w-3.5 h-3.5 rounded-full bg-[#27C93F] border border-[#1AAB29] hover:opacity-85 transition-opacity flex items-center justify-center text-[8px] font-bold text-[#0A4714]"
-            title="Full Screen Window"
-          >
-            <span className="opacity-0 group-hover/lights:opacity-100">+</span>
-          </button>
-        </div>
+        {/* The desktop app's native macOS window buttons overlay this corner. */}
+        {isTauri() && <div className="w-[62px] shrink-0" aria-hidden="true" />}
 
         <div className="flex items-center gap-0.5 text-neutral-300">
           <button className="p-1 rounded-md hover:bg-white/10 hover:text-white transition-colors" title="Back">
