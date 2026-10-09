@@ -256,6 +256,35 @@ export function editorHtmlFromFile(file: FileItem): string {
   return plainTextToEditorHtml(raw);
 }
 
+/** Turn the document editor's HTML back into the plain text it was made from (see `plainTextToEditorHtml`). */
+export function editorHtmlToPlainText(html: string): string {
+  const text = html
+    .replace(/<(p|div)(\s[^>]*)?>\s*<br\s*\/?>\s*<\/\1>/gi, '<$1></$1>')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|h[1-6]|li|blockquote|pre|tr)>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&');
+  return text.endsWith('\n') ? text.slice(0, -1) : text;
+}
+
+/**
+ * What to write to disk when a local file is saved from the document editor.
+ * Returns `null` for formats the editor cannot produce (Word, PDF, ...), which must not be overwritten.
+ */
+export function localFileContents(file: FileItem): string | null {
+  const body = file.documentBody;
+  if (body == null) return null;
+  const ext = fileExtension(file.name);
+  if (ext === 'html' || ext === 'htm' || ext === 'xhtml') return body;
+  if (isPlainTextDocument(file)) return editorHtmlToPlainText(body);
+  return null;
+}
+
 export function countWords(text: string): number {
   const trimmed = text.replace(/\s+/g, ' ').trim();
   return trimmed ? trimmed.split(' ').length : 0;

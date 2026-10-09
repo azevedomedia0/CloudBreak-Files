@@ -1,7 +1,9 @@
 import { FileItem, FolderItem } from '../types';
+import { localFs, type LocalEntry, type LocalFolder } from '../services/localFsBridge';
 import {
   classifyUploadCategory,
   isEditableDocument,
+  fileExtension,
   isPlainTextDocument,
   TEXT_UPLOAD_MAX_BYTES,
 } from './documentKind';
@@ -19,7 +21,28 @@ export type LocalFolderImport = {
   rootFolder: FolderItem;
   folders: FolderItem[];
   files: FileItem[];
+  /** True when the folder had more items than the scan limit and the rest were skipped. */
+  truncated?: boolean;
 };
+
+const MIME_BY_EXTENSION: Record<string, string> = {
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp',
+  bmp: 'image/bmp', heic: 'image/heic', avif: 'image/avif', tif: 'image/tiff', tiff: 'image/tiff',
+  mp4: 'video/mp4', m4v: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', mkv: 'video/x-matroska',
+  mp3: 'audio/mpeg', wav: 'audio/wav', flac: 'audio/flac', m4a: 'audio/mp4', aac: 'audio/aac', ogg: 'audio/ogg',
+  pdf: 'application/pdf', zip: 'application/zip', json: 'application/json',
+  html: 'text/html', htm: 'text/html', txt: 'text/plain', md: 'text/markdown', csv: 'text/csv', svg: 'image/svg+xml',
+};
+
+function guessMime(name: string): string {
+  return MIME_BY_EXTENSION[fileExtension(name)] ?? '';
+}
+
+/** Merge into an existing list, replacing items that have the same id (so adding a folder twice is harmless). */
+export function mergeById<T extends { id: string }>(existing: T[], incoming: T[]): T[] {
+  const ids = new Set(incoming.map(item => item.id));
+  return [...incoming, ...existing.filter(item => !ids.has(item.id))];
+}
 
 function folderPathFor(rootName: string, relativeSegments: string[]): string {
   if (!relativeSegments.length) return `/${rootName}`;
@@ -155,8 +178,109 @@ function recountFolderItems(folders: FolderItem[], files: FileItem[]): void {
   }
 }
 
+async function diskEntryToItem(entry: LocalEntry, folderId: string, folderPath: string): Promise<FileItem> {
+  const mimeType = guessMime(entry.name) || 'application/octet-stream';
+  const category = classifyUploadCategory(entry.name, mimeType);
+  const url = localFs.assetUrl(entry.path);
+  const probe = { name: entry.name, mimeType, category };
+
+  let documentBody: string | undefined;
+  if (
+    isEditableDocument(probe)
+    && entry.sizeBytes <= TEXT_UPLOAD_MAX_BYTES
+    && (isPlainTextDocument(probe) || /\.html?$/i.test(entry.name))
+  ) {
+    try {
+      documentBody = await localFs.readText(entry.path);
+    } catch {
+      documentBody = undefined;
+    }
+  }
+
+  return {
+    id: `file-local-${entry.path}`,
+    name: entry.name,
+    folderId,
+    folderPath,
+    accountId: 'all',
+    sizeBytes: entry.sizeBytes,
+    category,
+    mimeType,
+    updatedAt: new Date(entry.modifiedMs || Date.now()).toISOString(),
+    url,
+    thumbnailUrl: category === 'photo' ? url : undefined,
+    starred: false,
+    tags: ['Local Files'],
+    documentBody,
+    localPath: entry.path,
+    encryption: {
+      isEncrypted: false,
+      algorithm: 'None (local folder)',
+      keyFingerprint: 'Not encrypted',
+      checksumSha256: 'Not computed (local folder)',
+      zeroKnowledgeVerified: false,
+    },
+    version: 1,
+    videoMeta: category === 'video'
+      ? {
+          durationSeconds: 0,
+          dimensions: { width: 1920, height: 1080 },
+          framerate: 30,
+          codec: 'Unknown',
+          bitrate: '—',
+          audioCodec: '—',
+        }
+      : undefined,
+    photoExif: category === 'photo'
+      ? { camera: 'Local disk', colorSpace: 'sRGB' }
+      : undefined,
+  };
+}
+
+/** Scan a folder the user added in the desktop app and build the sidebar folders and file list. */
+export async function importLocalFolderAtPath(folder: LocalFolder): Promise<LocalFolderImport> {
+  const scan = await localFs.scanFolder(folder.path);
+  const rootId = `folder-local-${folder.path}`;
+  const rootFolder: FolderItem = { id: rootId, name: folder.name, accountId: 'all', itemCount: 0, color: 'sky' };
+  const folders: FolderItem[] = [rootFolder];
+  const folderIds = new Map<string, string>([['', rootId]]);
+  const pending: Array<{ entry: LocalEntry; folderId: string; folderPath: string }> = [];
+
+  // Entries arrive folder-first, so a parent is always known before its children.
+  for (const entry of scan.entries) {
+    const cut = entry.relativePath.lastIndexOf('/');
+    const parentRel = cut >= 0 ? entry.relativePath.slice(0, cut) : '';
+    const parentId = folderIds.get(parentRel) ?? rootId;
+    if (entry.isDir) {
+      const id = `folder-local-${entry.path}`;
+      folders.push({ id, name: entry.name, accountId: 'all', parentId, itemCount: 0, color: 'sky' });
+      folderIds.set(entry.relativePath, id);
+    } else {
+      pending.push({
+        entry,
+        folderId: parentId,
+        folderPath: folderPathFor(folder.name, parentRel ? parentRel.split('/') : []),
+      });
+    }
+  }
+
+  const files: FileItem[] = [];
+  for (let i = 0; i < pending.length; i += 16) {
+    const batch = pending.slice(i, i + 16);
+    files.push(...await Promise.all(batch.map(p => diskEntryToItem(p.entry, p.folderId, p.folderPath))));
+  }
+
+  recountFolderItems(folders, files);
+  return { rootFolder, folders, files, truncated: scan.truncated };
+}
+
 /** Open the system folder picker and import the tree into Local Files. */
 export async function pickLocalFolderFromDisk(): Promise<LocalFolderImport | null> {
+  if (localFs.available()) {
+    const picked = await localFs.pickFolder();
+    return picked ? importLocalFolderAtPath(picked) : null;
+  }
+
   const showDirectoryPicker = (window as unknown as {
     showDirectoryPicker?: (opts?: { mode?: 'read' | 'readwrite' }) => Promise<DirHandle>;
   }).showDirectoryPicker;

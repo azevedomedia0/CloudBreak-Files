@@ -1,8 +1,9 @@
-import { useState, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import type {
   CloudProviderId, FavoriteShortcut, FileItem, FolderItem, RemovableDevice,
 } from '../types';
-import { pickLocalFolderFromDisk } from '../utils/importLocalFolder';
+import { importLocalFolderAtPath, mergeById, pickLocalFolderFromDisk } from '../utils/importLocalFolder';
+import { localFs } from '../services/localFsBridge';
 
 export interface NetworkServer {
   name: string;
@@ -62,9 +63,9 @@ export function useSidebarSources({
     try {
       const imported = await pickLocalFolderFromDisk();
       if (!imported) return;
-      setFolders(prev => [...prev, ...imported.folders]);
+      setFolders(prev => mergeById(prev, imported.folders));
       if (imported.files.length) {
-        setFiles(prev => [...imported.files, ...prev]);
+        setFiles(prev => mergeById(prev, imported.files));
       }
       setSelectedAccountId('all');
       setSelectedLibraryId(null);
@@ -74,7 +75,7 @@ export function useSidebarSources({
       const fileNote = imported.files.length
         ? ` · ${imported.files.length} file${imported.files.length === 1 ? '' : 's'}`
         : '';
-      showToast(`Added “${imported.rootFolder.name}” to Local Files${fileNote}`);
+      showToast(`Added “${imported.rootFolder.name}” to Local Files${fileNote}${imported.truncated ? ' (large folder: only the first items were added)' : ''}`);
     } catch (err) {
       showToast(err instanceof Error ? err.message : String(err));
     }
@@ -89,9 +90,9 @@ export function useSidebarSources({
   const handleBrowseFavoriteFolder = async (): Promise<boolean> => {
     const imported = await pickLocalFolderFromDisk();
     if (!imported) return false;
-    setFolders(prev => [...prev, ...imported.folders]);
+    setFolders(prev => mergeById(prev, imported.folders));
     if (imported.files.length) {
-      setFiles(prev => [...imported.files, ...prev]);
+      setFiles(prev => mergeById(prev, imported.files));
     }
     const fav: FavoriteShortcut = {
       id: `fav-${Date.now()}`,
@@ -172,6 +173,27 @@ export function useSidebarSources({
     if (selectedSourceId === deviceId) setSelectedSourceId(null);
     if (device) showToast(`Ejected ${device.name}`);
   };
+
+  // Bring back the folders added in earlier sessions (desktop app only).
+  useEffect(() => {
+    if (!localFs.available()) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const saved = await localFs.listFolders();
+        for (const folder of saved) {
+          const imported = await importLocalFolderAtPath(folder).catch(() => null);
+          if (cancelled || !imported) continue;
+          setFolders(prev => mergeById(prev, imported.folders));
+          setFiles(prev => mergeById(prev, imported.files));
+        }
+      } catch {
+        // The folder list is unavailable; nothing to restore.
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return {
     removableDevices, customFavorites, networkServers, favoritedSourceIds,
