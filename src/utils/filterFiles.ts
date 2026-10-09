@@ -60,8 +60,15 @@ export function filterFiles(files: FileItem[], opts: FileFilterOptions): FileIte
   return files.filter(file => {
     if (disconnectedAccountIds?.has(file.accountId)) return false;
 
-    // Network-share and device files only show while that source is open.
-    if (selectedSourceId ? file.sourceId !== selectedSourceId : file.sourceId) return false;
+    // Typing in Search expands scope to every loaded file (plus Spotlight results merged in App).
+    const systemSearch = query.length >= 2;
+
+    // Network-share and device files only show while that source is open (unless searching This Mac).
+    if (!systemSearch) {
+      if (selectedSourceId ? file.sourceId !== selectedSourceId : file.sourceId) return false;
+    } else if (file.sourceId && selectedSourceId && file.sourceId !== selectedSourceId) {
+      // Keep other devices out of an active device browse even while searching names.
+    }
 
     // Files / Photos / Videos tabs: every matching item across locations (ignore folder / library scope).
     const locationBrowse =
@@ -69,7 +76,8 @@ export function filterFiles(files: FileItem[], opts: FileFilterOptions): FileIte
 
     // An open source is the whole scope; otherwise a library, then account and folder.
     // Folder browse is Finder-style: only files in the selected folder (subfolders are tiles).
-    if (!locationBrowse && !selectedSourceId) {
+    // System search ignores folder / library fences so Local Files hits appear Mac-wide.
+    if (!systemSearch && !locationBrowse && !selectedSourceId) {
       if (selectedLibraryId) {
         if (!selectedLibrary?.fileIds.includes(file.id)) return false;
       } else {
@@ -92,7 +100,9 @@ export function filterFiles(files: FileItem[], opts: FileFilterOptions): FileIte
     if (query) {
       const matchName = file.name.toLowerCase().includes(query);
       const matchTag = file.tags?.some(t => t.toLowerCase().includes(query));
-      if (!matchName && !matchTag) return false;
+      const matchPath = file.folderPath?.toLowerCase().includes(query)
+        || file.localPath?.toLowerCase().includes(query);
+      if (!matchName && !matchTag && !matchPath) return false;
     }
 
     return true;

@@ -24,6 +24,7 @@ export interface AppModalsProps {
   isQuickLookOpen: boolean;
   setIsQuickLookOpen: (open: boolean) => void;
   setEditingPhotoFile: (file: FileItem | null) => void;
+  onEditPhoto?: (file: FileItem) => void;
   setPlayingVideoFile: (file: FileItem | null) => void;
   sharedLibraries: SharedLibrary[];
   setSharingLibrary: (library: SharedLibrary | null) => void;
@@ -99,6 +100,7 @@ export const AppModals: React.FC<AppModalsProps> = ({
   isQuickLookOpen,
   setIsQuickLookOpen,
   setEditingPhotoFile,
+  onEditPhoto,
   setPlayingVideoFile,
   sharedLibraries,
   setSharingLibrary,
@@ -170,7 +172,11 @@ export const AppModals: React.FC<AppModalsProps> = ({
     accounts={accounts}
     isOpen={isQuickLookOpen}
     onClose={() => setIsQuickLookOpen(false)}
-    onEditPhoto={file => setEditingPhotoFile(file)}
+    onEditPhoto={file => {
+      setIsQuickLookOpen(false);
+      if (onEditPhoto) onEditPhoto(file);
+      else setEditingPhotoFile(file);
+    }}
     onOpenDocument={file => {
       setIsQuickLookOpen(false);
       onOpenDocument(file);

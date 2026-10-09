@@ -88,6 +88,22 @@ export interface FileItem {
   documentBody?: string;
   /** Absolute path on disk, for files added from a local folder in the desktop app. Edits are saved here. */
   localPath?: string;
+  /**
+   * Trust metadata for data extracted from the file.
+   * All extracted content is untrusted external data; suspicious payloads need a user verdict.
+   */
+  contentSafety?: {
+    risk: 'none' | 'low' | 'medium' | 'high';
+    flags: string[];
+    reasons: string[];
+    htmlHardened: boolean;
+    /** Always true for file-extracted bodies — cannot rewrite execution logic. */
+    untrustedExternal: boolean;
+    /** User gate outcome; denied content must never enter the editor panel. */
+    userVerdict?: 'pending' | 'confirmed' | 'denied' | 'auto';
+    /** Strict system-prompt boundary text for agents / future AI paths. */
+    systemBoundary?: string;
+  };
 }
 
 export interface FolderItem {

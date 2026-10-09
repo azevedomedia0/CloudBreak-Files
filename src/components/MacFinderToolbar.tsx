@@ -17,6 +17,10 @@ interface MacFinderToolbarProps {
   onViewModeChange: (mode: MacViewMode) => void;
   searchQuery: string;
   onSearchChange: (q: string) => void;
+  /** Spotlight search in flight (desktop). */
+  systemSearching?: boolean;
+  /** Query long enough to search This Mac. */
+  systemSearchActive?: boolean;
   selectedCategory: FileCategory;
   onCategoryChange: (cat: FileCategory) => void;
   starredOnly: boolean;
@@ -82,6 +86,8 @@ export const MacFinderToolbar: React.FC<MacFinderToolbarProps> = ({
   onViewModeChange,
   searchQuery,
   onSearchChange,
+  systemSearching = false,
+  systemSearchActive = false,
   selectedCategory,
   onCategoryChange,
   starredOnly,
@@ -268,15 +274,28 @@ export const MacFinderToolbar: React.FC<MacFinderToolbarProps> = ({
             />
           </div>
 
-          <div ref={filterRef} className="relative w-36 sm:w-56 md:w-64 min-w-0">
-            <Search className="w-4 h-4 text-neutral-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none z-[1]" />
+          <div ref={filterRef} className="relative w-40 sm:w-60 md:w-72 min-w-0">
+            <Search className={`w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none z-[1] ${
+              systemSearchActive ? 'text-cyan-400' : 'text-neutral-400'
+            }`} />
             <input
-              type="text"
+              type="search"
               value={searchQuery}
               onChange={e => onSearchChange(e.target.value)}
-              placeholder="Search"
-              className="w-full bg-black/40 border border-white/10 rounded-lg pl-8.5 pr-9 py-1 text-sm font-medium text-neutral-100 placeholder-neutral-400 focus:outline-none focus:border-cyan-400/50 focus:bg-black/60 transition-all font-sans"
+              placeholder={isTauri() ? 'Search This Mac' : 'Search'}
+              title={isTauri() ? 'Search files across this Mac with Spotlight' : 'Search files'}
+              className={`w-full bg-black/40 border rounded-lg pl-8.5 pr-9 py-1 text-sm font-medium text-neutral-100 placeholder-neutral-400 focus:outline-none focus:bg-black/60 transition-all font-sans ${
+                systemSearchActive
+                  ? 'border-cyan-400/40 focus:border-cyan-400/60'
+                  : 'border-white/10 focus:border-cyan-400/50'
+              }`}
             />
+            {systemSearching && (
+              <span
+                className="absolute right-8 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full border-2 border-cyan-400/30 border-t-cyan-400 animate-spin"
+                aria-label="Searching This Mac"
+              />
+            )}
             <button
               type="button"
               onClick={() => {

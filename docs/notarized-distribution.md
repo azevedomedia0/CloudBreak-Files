@@ -35,6 +35,8 @@ Optional: set `bundle.macOS.signingIdentity` in `tauri.conf.json` instead of the
 
 Create an App Store Connect **Team** API key (Users and Access → Integrations), or an app-specific password. Keep the `.p8` outside the repo and outside synced folders (e.g. `~/.private_keys/`, mode 600).
 
+**Local (recommended):** put exports in `~/.config/cloudbreak/apple-notarization.env` (mode `600`). `npm run build:mac` / `scripts/build-macos-release.sh` sources that file automatically. A one-line `source` in `~/.zshrc` is optional for interactive shells.
+
 **API key (recommended for CI and local):**
 
 - `APPLE_SIGNING_IDENTITY`
@@ -46,7 +48,7 @@ Create an App Store Connect **Team** API key (Users and Access → Integrations)
 
 - `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`
 
-Never commit or paste these values.
+Never commit or paste these values into the repo, docs, or chat.
 
 ## 4. Build
 
@@ -96,7 +98,7 @@ For `.github/workflows/release.yml`:
 
 Push a `v*` tag (or run workflow_dispatch), test the draft release installers, then publish the release.
 
-Updater + Apple signing secrets are on the repo (`TAURI_SIGNING_*`, `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_API_KEY`, `APPLE_API_KEY_P8`). **`APPLE_API_ISSUER` is still required for notarization** (App Store Connect → Users and Access → Integrations → Issuer ID). Without it, CI/local builds sign with Developer ID but skip notarization.
+Updater + Apple signing secrets are on the repo (`TAURI_SIGNING_*`, `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_API_ISSUER`, `APPLE_API_KEY`, `APPLE_API_KEY_P8`). Local builds use `~/.config/cloudbreak/apple-notarization.env` (see §3). Without issuer + API key, builds sign with Developer ID but skip notarization.
 
 Auto-updates: see [`docs/auto-updates.md`](./auto-updates.md).
 

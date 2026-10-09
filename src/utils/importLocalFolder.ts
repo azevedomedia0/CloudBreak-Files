@@ -5,9 +5,10 @@ import {
   isEditableDocument,
   fileExtension,
   isPlainTextDocument,
+  needsNativeThumbnail,
   TEXT_UPLOAD_MAX_BYTES,
 } from './documentKind';
-
+import { prepareDocumentBodyForOpen } from './contentSafety';
 const MAX_DEPTH = 12;
 const MAX_FILES = 25_000;
 
@@ -27,12 +28,33 @@ export type LocalFolderImport = {
 
 const MIME_BY_EXTENSION: Record<string, string> = {
   jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp',
-  bmp: 'image/bmp', heic: 'image/heic', avif: 'image/avif', tif: 'image/tiff', tiff: 'image/tiff',
+  bmp: 'image/bmp', heic: 'image/heic', heif: 'image/heif', avif: 'image/avif',
+  tif: 'image/tiff', tiff: 'image/tiff',
+  raw: 'image/x-raw', dng: 'image/x-adobe-dng',
+  cr2: 'image/x-canon-cr2', nef: 'image/x-nikon-nef', arw: 'image/x-sony-arw',
   mp4: 'video/mp4', m4v: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', mkv: 'video/x-matroska',
   mp3: 'audio/mpeg', wav: 'audio/wav', flac: 'audio/flac', m4a: 'audio/mp4', aac: 'audio/aac', ogg: 'audio/ogg',
-  pdf: 'application/pdf', zip: 'application/zip', json: 'application/json',
+  pdf: 'application/pdf',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  rtf: 'application/rtf',
+  odt: 'application/vnd.oasis.opendocument.text',
+  pages: 'application/vnd.apple.pages',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ppt: 'application/vnd.ms-powerpoint',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  numbers: 'application/vnd.apple.numbers',
+  key: 'application/vnd.apple.keynote',
+  app: 'application/x-apple-app',
+  csf: 'application/octet-stream',
+  zip: 'application/zip', json: 'application/json',
   html: 'text/html', htm: 'text/html', txt: 'text/plain', md: 'text/markdown', csv: 'text/csv', svg: 'image/svg+xml',
 };
+
+function isMacAppEntryName(name: string): boolean {
+  return name.toLowerCase().endsWith('.app');
+}
 
 function guessMime(name: string): string {
   return MIME_BY_EXTENSION[fileExtension(name)] ?? '';
@@ -75,7 +97,9 @@ async function fileToItem(
     && (isPlainTextDocument(probe) || /\.html?$/i.test(file.name) || mimeType === 'text/html')
   ) {
     try {
-      documentBody = await file.text();
+      const raw = await file.text();
+      const asHtml = !isPlainTextDocument(probe) || /\.html?$/i.test(file.name) || mimeType === 'text/html';
+      documentBody = prepareDocumentBodyForOpen(raw, { treatAsHtml: asHtml }).body;
     } catch {
       documentBody = undefined;
     }
@@ -93,7 +117,7 @@ async function fileToItem(
     updatedAt: new Date(file.lastModified || Date.now()).toISOString(),
     addedAt: new Date().toISOString(),
     url: blobUrl,
-    thumbnailUrl: category === 'photo' ? blobUrl : undefined,
+    thumbnailUrl: category === 'photo' && !needsNativeThumbnail(probe) ? blobUrl : undefined,
     starred: false,
     tags: ['Local Files', 'Imported'],
     documentBody,
@@ -141,6 +165,10 @@ async function walkDirectory(
     if (entry.name.startsWith('.')) continue;
 
     if (entry.kind === 'directory' && entry.entries) {
+      const lower = entry.name.toLowerCase();
+      // Browser import cannot extract .app icons; skip rather than empty folders.
+      if (lower.endsWith('.app')) continue;
+
       const folderId = `folder-local-${opts.stamp}-${opts.folders.length}`;
       const segments = [...opts.relativeSegments, entry.name];
       opts.folders.push({
@@ -151,11 +179,9 @@ async function walkDirectory(
         itemCount: 0,
         color: 'sky',
       });
-      const lower = entry.name.toLowerCase();
       const isPhotosLibrary = lower.endsWith('.photoslibrary') || lower.endsWith('.photolibrary');
       const opaque =
-        lower.endsWith('.app')
-        || lower.endsWith('.bundle')
+        lower.endsWith('.bundle')
         || lower.endsWith('.framework')
         || lower.endsWith('.tvlibrary')
         || lower.endsWith('.musiclibrary')
@@ -163,7 +189,8 @@ async function walkDirectory(
       if (isPhotosLibrary) {
         // Mirror Rust: only walk originals/ inside Apple Photos libraries.
         try {
-          for await (const [childName, child] of entry.entries()) {
+          for await (const [childName, childEntry] of entry.entries()) {
+            const child = childEntry as { kind: 'file' | 'directory'; entries?: DirHandle['entries'] };
             if (childName === 'originals' && child.kind === 'directory' && child.entries) {
               await walkDirectory(child as DirHandle, {
                 ...opts,
@@ -217,27 +244,15 @@ function recountFolderItems(folders: FolderItem[], files: FileItem[]): void {
 }
 
 async function diskEntryToItem(entry: LocalEntry, folderId: string, folderPath: string): Promise<FileItem> {
-  const mimeType = guessMime(entry.name) || 'application/octet-stream';
+  const isApp = isMacAppEntryName(entry.name);
+  const mimeType = isApp
+    ? 'application/x-apple-app'
+    : (guessMime(entry.name) || 'application/octet-stream');
   const category = classifyUploadCategory(entry.name, mimeType);
-  const url = localFs.assetUrl(entry.path);
+  const url = isApp ? '#' : localFs.assetUrl(entry.path);
   const probe = { name: entry.name, mimeType, category };
 
-  // Only preload text for top-level files. Nested project trees (e.g. on Desktop)
-  // can contain thousands of sources — those load on open via localPath.
-  let documentBody: string | undefined;
-  const isTopLevel = !entry.relativePath.includes('/');
-  if (
-    isTopLevel
-    && isEditableDocument(probe)
-    && entry.sizeBytes <= TEXT_UPLOAD_MAX_BYTES
-    && (isPlainTextDocument(probe) || /\.html?$/i.test(entry.name))
-  ) {
-    try {
-      documentBody = await localFs.readText(entry.path);
-    } catch {
-      documentBody = undefined;
-    }
-  }
+  // Text loads on open via localPath (openDocumentFile) — no startup preload IPC.
 
   return {
     id: `file-local-${entry.path}`,
@@ -251,10 +266,10 @@ async function diskEntryToItem(entry: LocalEntry, folderId: string, folderPath: 
     updatedAt: new Date(entry.modifiedMs || Date.now()).toISOString(),
     addedAt: new Date().toISOString(),
     url,
-    thumbnailUrl: category === 'photo' ? url : undefined,
+    // HEIC/RAW/TIFF / .app icons need Quick Look — FileThumbnail loads that lazily.
+    thumbnailUrl: category === 'photo' && !needsNativeThumbnail(probe) ? url : undefined,
     starred: false,
-    tags: ['Local Files'],
-    documentBody,
+    tags: isApp ? ['Local Files', 'Application'] : ['Local Files'],
     localPath: entry.path,
     encryption: {
       isEncrypted: false,
@@ -320,12 +335,13 @@ export async function importLocalFolderAtPath(
       const cut = entry.relativePath.lastIndexOf('/');
       const parentRel = cut >= 0 ? entry.relativePath.slice(0, cut) : '';
       const parentId = folderIds.get(parentRel) ?? rootId;
-      if (entry.isDir) {
+      if (entry.isDir && !isMacAppEntryName(entry.name)) {
         if (folderIds.has(entry.relativePath)) continue;
         const id = `folder-local-${entry.path}`;
         folders.push({ id, name: entry.name, accountId: 'all', parentId, itemCount: 0, color: 'sky' });
         folderIds.set(entry.relativePath, id);
       } else {
+        // Regular files and .app packages (opaque dirs) show as file tiles with icons.
         pending.push({
           entry,
           folderId: parentId,

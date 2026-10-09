@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   AlignCenter, AlignLeft, AlignRight, AlignVerticalSpaceAround, Bold, ChevronDown, ChevronUp,
   Download, FileText, Highlighter, ImagePlus, Italic, Link, List, ListOrdered, Minus,
-  PanelLeft, Plus, Printer, Redo2, Save, Search, Table2,
+  PanelLeft, Plus, Printer, Redo2, Save, Search, ShieldAlert, Table2,
   Underline, Undo2, X, ZoomIn, ZoomOut,
 } from 'lucide-react';
 import { FileItem } from '../../types';
@@ -120,7 +120,11 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
 }) => {
   /** File still downloads as text when the extension is a plain-text type. */
   const plainFormat = isPlainTextDocument(file);
-  const starting = editorHtmlFromFile(file);
+  // Denied / pending gate: never mount extracted body into the editable surface.
+  const contentBlocked =
+    file.contentSafety?.userVerdict === 'denied'
+    || file.contentSafety?.userVerdict === 'pending';
+  const starting = contentBlocked ? '<p><br></p>' : editorHtmlFromFile(file);
   const baselineRef = useRef(starting);
   const versionRef = useRef(file.version);
   const initialHtmlRef = useRef(starting);
@@ -673,6 +677,35 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
           <X className="w-4 h-4" />
         </button>
       </div>
+
+      {file.contentSafety?.untrustedExternal && (
+        <div
+          className={`px-4 py-2 border-b flex items-start gap-2.5 text-xs shrink-0 ${
+            file.contentSafety.risk === 'high' || file.contentSafety.risk === 'medium'
+              ? 'bg-amber-950/50 border-amber-500/35 text-amber-100'
+              : 'bg-sky-950/40 border-sky-500/25 text-sky-100'
+          }`}
+          role="status"
+        >
+          <ShieldAlert className={`w-4 h-4 shrink-0 mt-0.5 ${
+            file.contentSafety.risk === 'high' || file.contentSafety.risk === 'medium'
+              ? 'text-amber-400'
+              : 'text-sky-400'
+          }`} />
+          <div className="min-w-0">
+            <p className="font-semibold tracking-tight">
+              Untrusted external content
+              {file.contentSafety.userVerdict === 'confirmed' ? ' · confirmed as data only' : ''}
+              {file.contentSafety.htmlHardened ? ' · active HTML removed' : ''}
+            </p>
+            <p className="text-[11px] opacity-80 mt-0.5 leading-relaxed">
+              {(file.contentSafety.reasons[0]
+                || 'Data extracted from this file cannot rewrite Cloudbreak execution logic or system prompts.')}
+              {' '}Instructions inside the document are treated as data, never as commands.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="h-10 shrink-0 flex items-center gap-0.5 px-3 border-b border-white/8 bg-neutral-900/70 overflow-x-auto">
           <button

@@ -16,6 +16,7 @@ import {
   hasEncryptedPayload,
 } from '../utils/fileEncryption';
 import { isZipArchive, unzipArchiveToFileItems } from '../utils/unzipArchive';
+import { prepareDocumentBodyForOpen } from '../utils/contentSafety';
 import { rustBridge } from '../services/rustBridge';
 import { dataUrlToBytes, localFs } from '../services/localFsBridge';
 
@@ -494,7 +495,9 @@ export function useFileActions({
         && (isPlainTextDocument(probe) || /\.html?$/i.test(file.name) || mimeType === 'text/html')
       ) {
         try {
-          documentBody = await file.text();
+          const raw = await file.text();
+          const asHtml = !isPlainTextDocument(probe) || /\.html?$/i.test(file.name) || mimeType === 'text/html';
+          documentBody = prepareDocumentBodyForOpen(raw, { treatAsHtml: asHtml }).body;
         } catch {
           documentBody = undefined;
         }

@@ -1,9 +1,16 @@
-import React, { useState } from 'react';
-import { Image as ImageIcon, Video, FileText, Archive, Music2 } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Image as ImageIcon, Video, FileText, Archive, Music2, AppWindow } from 'lucide-react';
 import { FileItem } from '../../types';
 import { DocumentPreview } from '../document-editor/DocumentPreview';
-import { isEditableDocument } from '../../utils/documentKind';
+import {
+  isEditableDocument,
+  isMacAppBundle,
+  isSystemPreviewDocument,
+  needsNativeThumbnail,
+} from '../../utils/documentKind';
 import { isZipArchive } from '../../utils/unzipArchive';
+import { previewBridge } from '../../services/previewBridge';
+import { useNearViewport } from '../../hooks/useNearViewport';
 
 interface FileThumbnailProps {
   file: FileItem;
@@ -19,6 +26,8 @@ const DOC_STYLES: Record<string, { badge: string; label: string }> = {
   doc: { badge: 'bg-blue-500', label: 'DOC' },
   docx: { badge: 'bg-blue-500', label: 'DOC' },
   pages: { badge: 'bg-orange-400', label: 'PAGES' },
+  odt: { badge: 'bg-indigo-500', label: 'ODT' },
+  rtf: { badge: 'bg-neutral-500', label: 'RTF' },
   xls: { badge: 'bg-emerald-500', label: 'XLS' },
   xlsx: { badge: 'bg-emerald-500', label: 'XLS' },
   csv: { badge: 'bg-emerald-500', label: 'CSV' },
@@ -26,9 +35,9 @@ const DOC_STYLES: Record<string, { badge: string; label: string }> = {
   ppt: { badge: 'bg-orange-500', label: 'PPT' },
   pptx: { badge: 'bg-orange-500', label: 'PPT' },
   key: { badge: 'bg-sky-500', label: 'KEY' },
+  csf: { badge: 'bg-fuchsia-500', label: 'CSF' },
   txt: { badge: 'bg-neutral-500', label: 'TXT' },
   md: { badge: 'bg-neutral-500', label: 'MD' },
-  rtf: { badge: 'bg-neutral-500', label: 'RTF' },
   zip: { badge: 'bg-pink-500', label: 'ZIP' },
 };
 
@@ -80,9 +89,28 @@ export const FileThumbnail: React.FC<FileThumbnailProps> = ({
 }) => {
   const [posterFailed, setPosterFailed] = useState(false);
   const [videoFailed, setVideoFailed] = useState(false);
+  const [nativeThumb, setNativeThumb] = useState<string | null>(null);
+  const { ref, near } = useNearViewport<HTMLDivElement>('200px');
 
-  const mediaClass = `w-full h-full object-cover ${hoverZoom ? 'transition-transform duration-300 group-hover:scale-105' : ''}`;
+  const wantsNative = needsNativeThumbnail(file) && !!file.localPath && previewBridge.available();
+  const isApp = isMacAppBundle(file);
   const hasRealUrl = file.url && file.url !== '#';
+  const wantsVideoPoster = file.category === 'video' && hasRealUrl;
+
+  useEffect(() => {
+    setPosterFailed(false);
+    setNativeThumb(null);
+    if (!near || !wantsNative || !file.localPath) return;
+    const ac = new AbortController();
+    void previewBridge.thumbnailUrl(file.localPath, 512, ac.signal).then(url => {
+      if (!ac.signal.aborted && url) setNativeThumb(url);
+    });
+    return () => {
+      ac.abort();
+    };
+  }, [file.id, file.localPath, wantsNative, near]);
+
+  const mediaClass = `w-full h-full ${isApp ? 'object-contain p-[6%]' : 'object-cover'} ${hoverZoom ? 'transition-transform duration-300 group-hover:scale-105' : ''}`;
 
   const handleContextMenu = onContextMenu
     ? (event: React.MouseEvent) => {
@@ -92,7 +120,11 @@ export const FileThumbnail: React.FC<FileThumbnailProps> = ({
       }
     : undefined;
 
-  const posterSrc = file.thumbnailUrl || (file.category === 'photo' && hasRealUrl ? file.url : undefined);
+  // Prefer native Quick Look / sips JPEG for HEIC, PDF, Office, .app icons, etc.
+  const posterSrc =
+    nativeThumb
+    || file.thumbnailUrl
+    || (!wantsNative && file.category === 'photo' && hasRealUrl ? file.url : undefined);
 
   let content: React.ReactNode;
   if (posterSrc && !posterFailed) {
@@ -106,7 +138,13 @@ export const FileThumbnail: React.FC<FileThumbnailProps> = ({
         onContextMenu={handleContextMenu}
       />
     );
-  } else if (file.category === 'video' && hasRealUrl && !videoFailed) {
+  } else if (isApp) {
+    content = (
+      <div className="w-full h-full flex items-center justify-center bg-transparent">
+        <AppWindow className={`${iconClassName} text-sky-300/80`} />
+      </div>
+    );
+  } else if (wantsVideoPoster && near && !videoFailed) {
     content = (
       <video
         src={`${file.url}#t=0.1`}
@@ -120,6 +158,12 @@ export const FileThumbnail: React.FC<FileThumbnailProps> = ({
         onContextMenu={handleContextMenu}
       />
     );
+  } else if (wantsVideoPoster && !near) {
+    content = (
+      <div className="w-full h-full flex items-center justify-center text-neutral-500">
+        <Video className={`${iconClassName} text-amber-400`} />
+      </div>
+    );
   } else if (isZipArchive(file) || file.category === 'archive') {
     content = (
       <div className="w-full h-full flex items-center justify-center bg-gradient-to-b from-pink-950/40 to-neutral-950/80">
@@ -128,7 +172,7 @@ export const FileThumbnail: React.FC<FileThumbnailProps> = ({
     );
   } else if (isEditableDocument(file)) {
     content = <DocumentPreview file={file} compact={compact} className="w-full h-full" />;
-  } else if (file.category === 'document') {
+  } else if (isSystemPreviewDocument(file) || file.category === 'document') {
     content = <DocumentPage name={file.name} compact={compact} />;
   } else {
     const Icon = FALLBACK_ICONS[file.category as keyof typeof FALLBACK_ICONS] ?? FileText;
@@ -142,7 +186,7 @@ export const FileThumbnail: React.FC<FileThumbnailProps> = ({
   }
 
   return (
-    <div className={`${className} overflow-hidden`} onContextMenu={handleContextMenu}>
+    <div ref={ref} className={`${className} overflow-hidden`} onContextMenu={handleContextMenu}>
       {content}
     </div>
   );

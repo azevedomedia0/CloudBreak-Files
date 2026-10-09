@@ -8,6 +8,7 @@
 use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -28,6 +29,8 @@ pub struct LocalRoots {
     roots: Mutex<Vec<PathBuf>>,
     /// Folders allowed for this session only (save destinations). Never written to disk.
     session_only: Mutex<Vec<PathBuf>>,
+    /// Individual files from Spotlight “Search This Mac” (session only).
+    pub(crate) search_allowed: Mutex<HashSet<PathBuf>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -145,6 +148,80 @@ pub fn resolve_in_roots(roots: &[PathBuf], path: &Path) -> Result<PathBuf, Strin
     } else {
         Err("Cloudbreak only has access to folders you have added. Add this folder first.".into())
     }
+}
+
+/// Resolve a path under Local Folders / session roots, or a Spotlight search hit.
+pub fn resolve_accessible(state: &LocalRoots, path: &Path) -> Result<PathBuf, String> {
+    match resolve_in_roots(&snapshot(state), path) {
+        Ok(resolved) => Ok(resolved),
+        Err(root_err) => {
+            let resolved = fs::canonicalize(path).map_err(|_| root_err.clone())?;
+            let allowed = state
+                .search_allowed
+                .lock()
+                .map(|g| g.contains(&resolved))
+                .unwrap_or(false);
+            if allowed {
+                Ok(resolved)
+            } else {
+                Err(root_err)
+            }
+        }
+    }
+}
+
+/// Resolve a `.app` (or symlink to one) listed under an added folder.
+///
+/// Finder puts stubs in `/Applications` that symlink into `/System/Applications`.
+/// Full canonicalize would leave the allowed root, so we only require the parent
+/// folder to sit inside a root and return the path as listed (for `open` / QL).
+pub fn resolve_app_bundle(state: &LocalRoots, path: &Path) -> Result<PathBuf, String> {
+    if !path.is_absolute() {
+        return Err("Local paths must be absolute".into());
+    }
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| "That path has no file name".to_string())?;
+    if !name.to_ascii_lowercase().ends_with(".app") {
+        return Err("That path is not an application".into());
+    }
+    if name.contains("..") {
+        return Err("Invalid file name".into());
+    }
+    let parent = path
+        .parent()
+        .ok_or_else(|| "That path has no parent folder".to_string())?;
+    let parent_canon = fs::canonicalize(parent)
+        .map_err(|_| "The folder does not exist".to_string())?;
+    let candidate = parent_canon.join(name);
+    let roots = snapshot(state);
+    let under_root = roots.iter().filter_map(|r| fs::canonicalize(r).ok()).any(|root| {
+        parent_canon.starts_with(&root) || candidate.starts_with(&root)
+    });
+    if !under_root {
+        // Spotlight may have allow-listed the resolved target.
+        if let Ok(resolved) = fs::canonicalize(&candidate) {
+            let allowed = state
+                .search_allowed
+                .lock()
+                .map(|g| g.contains(&resolved))
+                .unwrap_or(false);
+            if allowed {
+                return Ok(resolved);
+            }
+        }
+        return Err(
+            "Cloudbreak only has access to folders you have added. Add this folder first.".into(),
+        );
+    }
+    // Accept real dirs and Application stubs (symlinks).
+    let meta = fs::symlink_metadata(&candidate)
+        .map_err(|e| format!("Could not open that application: {e}"))?;
+    if !(meta.is_dir() || meta.file_type().is_symlink()) {
+        return Err("That path is not an application".into());
+    }
+    Ok(candidate)
 }
 
 fn valid_file_name(name: &str) -> Result<&str, String> {
@@ -422,11 +499,28 @@ pub fn restore_roots(app: &AppHandle, state: &LocalRoots) {
 }
 
 /// Allow a folder. `remember` keeps it for later launches; otherwise it is only allowed until the app quits.
-fn add_root(app: &AppHandle, state: &LocalRoots, root: PathBuf, remember: bool) -> Result<LocalFolder, String> {
+/// When `persist` is false, remembered roots are kept in memory only — caller must `save_roots` once.
+fn add_root(
+    app: &AppHandle,
+    state: &LocalRoots,
+    root: PathBuf,
+    remember: bool,
+) -> Result<LocalFolder, String> {
+    add_root_ex(app, state, root, remember, true).map(|(folder, _)| folder)
+}
+
+fn add_root_ex(
+    app: &AppHandle,
+    state: &LocalRoots,
+    root: PathBuf,
+    remember: bool,
+    persist: bool,
+) -> Result<(LocalFolder, bool), String> {
     let root = fs::canonicalize(&root).map_err(|e| format!("Could not open that folder: {e}"))?;
     if !root.is_dir() {
         return Err("That is not a folder".into());
     }
+    let mut changed = false;
     if remember {
         app.asset_protocol_scope()
             .allow_directory(&root, true)
@@ -434,14 +528,18 @@ fn add_root(app: &AppHandle, state: &LocalRoots, root: PathBuf, remember: bool) 
         let mut guard = state.roots.lock().map_err(|_| "Local folder list is unavailable".to_string())?;
         if !guard.contains(&root) {
             guard.push(root.clone());
+            changed = true;
         }
-        save_roots(&roots_file(app)?, &guard)?;
+        if persist && changed {
+            save_roots(&roots_file(app)?, &guard)?;
+        }
     } else if let Ok(mut guard) = state.session_only.lock() {
         if !guard.contains(&root) {
             guard.push(root.clone());
+            changed = true;
         }
     }
-    Ok(folder_of(&root))
+    Ok((folder_of(&root), changed))
 }
 
 /// For the debug-only self-test: allow a folder exactly as picking it in the dialog would.
@@ -520,6 +618,7 @@ fn standard_folder_candidates() -> Vec<(String, PathBuf)> {
 
 /// Add the standard user folders (Desktop, Documents, …) when they exist on disk.
 /// Returns each folder with its sidebar display name. Skips missing paths quietly.
+/// Persists `local_roots.json` once at the end when any new root was added.
 #[tauri::command]
 pub fn local_ensure_standard_folders(app: AppHandle, state: State<'_, LocalRoots>) -> Vec<LocalFolder> {
     // Re-touch protected locations so Files and Folders prompts can appear if still undetermined.
@@ -528,12 +627,14 @@ pub fn local_ensure_standard_folders(app: AppHandle, state: State<'_, LocalRoots
 
     let home = std::env::var("HOME").ok().map(PathBuf::from);
     let mut added = Vec::new();
+    let mut dirty = false;
     for (display_name, path) in standard_folder_candidates() {
         if !path.is_dir() {
             continue;
         }
-        match add_root(&app, &state, path.clone(), true) {
-            Ok(folder) => {
+        match add_root_ex(&app, &state, path.clone(), true, false) {
+            Ok((folder, changed)) => {
+                dirty |= changed;
                 let mut extra_paths = Vec::new();
                 // Merge the iCloud Drive twin when it is a separate folder.
                 if matches!(
@@ -546,7 +647,10 @@ pub fn local_ensure_standard_folders(app: AppHandle, state: State<'_, LocalRoots
                             .and_then(|n| n.to_str())
                             .unwrap_or(display_name.as_str());
                         if let Some(twin) = icloud_drive_twin(home, relative) {
-                            if add_root(&app, &state, twin.clone(), true).is_ok() {
+                            if let Ok((_, twin_changed)) =
+                                add_root_ex(&app, &state, twin.clone(), true, false)
+                            {
+                                dirty |= twin_changed;
                                 extra_paths.push(twin.to_string_lossy().into_owned());
                             }
                         }
@@ -558,10 +662,13 @@ pub fn local_ensure_standard_folders(app: AppHandle, state: State<'_, LocalRoots
                         let user_apps = home.join("Applications");
                         if user_apps.is_dir() {
                             if let Ok(canon) = fs::canonicalize(&user_apps) {
-                                if canon != PathBuf::from(&folder.path)
-                                    && add_root(&app, &state, user_apps.clone(), true).is_ok()
-                                {
-                                    extra_paths.push(canon.to_string_lossy().into_owned());
+                                if canon != PathBuf::from(&folder.path) {
+                                    if let Ok((_, apps_changed)) =
+                                        add_root_ex(&app, &state, user_apps.clone(), true, false)
+                                    {
+                                        dirty |= apps_changed;
+                                        extra_paths.push(canon.to_string_lossy().into_owned());
+                                    }
                                 }
                             }
                         }
@@ -576,6 +683,11 @@ pub fn local_ensure_standard_folders(app: AppHandle, state: State<'_, LocalRoots
             Err(_) => {
                 // Permission denied or unreadable — keep the empty sidebar stub.
             }
+        }
+    }
+    if dirty {
+        if let (Ok(file), Ok(guard)) = (roots_file(&app), state.roots.lock()) {
+            let _ = save_roots(&file, &guard);
         }
     }
     added
@@ -602,7 +714,7 @@ pub fn local_scan_folder(path: String, state: State<'_, LocalRoots>) -> Result<L
 /// Read a file as base64 (up to 64 MB). Large media should be loaded through the asset URL instead.
 #[tauri::command]
 pub fn local_read_file(path: String, state: State<'_, LocalRoots>) -> Result<String, String> {
-    let resolved = resolve_in_roots(&snapshot(&state), Path::new(&path))?;
+    let resolved = resolve_accessible(&state, Path::new(&path))?;
     let meta = fs::metadata(&resolved).map_err(|e| format!("Could not read the file: {e}"))?;
     if !meta.is_file() {
         return Err("That is not a file".into());
@@ -901,6 +1013,25 @@ mod tests {
         let roots = vec![t.0.clone()];
         assert!(resolve_in_roots(&roots, &t.0.join("link/x.txt")).is_err());
         assert!(resolve_in_roots(&roots, &t.0.join("link/new.txt")).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resolve_app_bundle_allows_symlink_stub_under_root() {
+        let t = Tmp::new();
+        let outside = Tmp::new();
+        fs::create_dir_all(outside.0.join("Contents")).unwrap();
+        let stub = t.0.join("Safari.app");
+        std::os::unix::fs::symlink(&outside.0, &stub).unwrap();
+        // Full canonicalize leaves the allowed root — resolve_in_roots must fail.
+        assert!(resolve_in_roots(&[t.0.clone()], &stub).is_err());
+        let state = LocalRoots {
+            roots: Mutex::new(vec![t.0.clone()]),
+            session_only: Mutex::new(Vec::new()),
+            search_allowed: Mutex::new(std::collections::HashSet::new()),
+        };
+        let resolved = resolve_app_bundle(&state, &stub).unwrap();
+        assert_eq!(resolved, stub);
     }
 
     #[test]

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Folder, RotateCcw, Trash2, ChevronRight, HardDrive } from 'lucide-react';
+import { Folder, RotateCcw, Trash2, ChevronRight, HardDrive, Search } from 'lucide-react';
 import { FileItem, CloudAccount, FolderItem, SharedLibrary, CloudProviderId, FileCategory } from '../types';
 import { MacViewMode } from './MacFinderToolbar';
 import { LibraryBanner } from './file-browser/LibraryBanner';
@@ -9,13 +9,14 @@ import { ColumnsView } from './file-browser/ColumnsView';
 import { GalleryView } from './file-browser/GalleryView';
 import { FileContextMenu, FileRenameField } from './file-browser/FileContextMenu';
 import { FileGetInfo } from './file-browser/FileGetInfo';
-import { isEditableDocument } from '../utils/documentKind';
+import { isEditableDocument, isMacAppBundle, isSystemPreviewDocument } from '../utils/documentKind';
 import { getFolderIcon } from '../utils/folderIcons';
 import { sortLocalRootFolders } from '../utils/defaultLocalFolders';
 import { childFoldersOf, groupFilesByLocalFolders } from '../utils/groupFilesByLocation';
 import { accentForSelection } from '../utils/selectionAccent';
 import { isZipArchive } from '../utils/unzipArchive';
 import { FILE_CONTEXT_MENU_EVENT, FileContextMenuDetail } from '../utils/fileContextMenuBus';
+import { previewBridge } from '../services/previewBridge';
 import type { SwarmStatus } from '../services/p2pBridge';
 import { AudioPlayerBar } from './AudioPlayerBar';
 
@@ -56,6 +57,10 @@ interface FileBrowserProps {
   onRefreshSwarm?: () => void;
   /** Columns mode: size to the equal-width columns so the inspector can fill leftover space. */
   hugContent?: boolean;
+  /** Spotlight “Search This Mac” is active / in flight. */
+  systemSearchActive?: boolean;
+  systemSearching?: boolean;
+  systemHitCount?: number;
 }
 
 export const FileBrowser: React.FC<FileBrowserProps> = ({
@@ -93,6 +98,9 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   onCopyLibraryInvite,
   onRefreshSwarm,
   hugContent = false,
+  systemSearchActive = false,
+  systemSearching = false,
+  systemHitCount = 0,
 }) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [iconScale, setIconScale] = useState<number>(100); // 75 to 150%
@@ -100,6 +108,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   const [renaming, setRenaming] = useState<{ file: FileItem; x: number; y: number } | null>(null);
   const [infoFileId, setInfoFileId] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const browseScrollRef = useRef<HTMLDivElement>(null);
 
   const selectedFile = files.find(f => f.id === selectedFileId) || files[0] || null;
   const accent = selectedFile && isZipArchive(selectedFile)
@@ -163,11 +172,19 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
 
   const openFile = (file: FileItem) => {
     selectFile(file);
+    if (isMacAppBundle(file) && file.localPath && previewBridge.available()) {
+      void previewBridge.openWithDefault(file.localPath).catch(() => {});
+      return;
+    }
     if (file.category === 'photo') onEditPhoto(file);
     else if (file.category === 'video') onOpenVideo(file);
     else if (file.category === 'audio') onOpenAudio(file);
     else if (isEditableDocument(file)) onOpenDocument(file);
     else if (file.name.toLowerCase().endsWith('.zip') || file.mimeType === 'application/zip') onUnzipFile(file);
+    else if (isSystemPreviewDocument(file)) {
+      // PDF / Office / Pages: in-app Quick Look preview (thumbnails + PDF iframe).
+      onOpenQuickLook();
+    }
     else onOpenQuickLook();
   };
 
@@ -328,6 +345,23 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         </div>
       )}
 
+      {systemSearchActive && (
+        <div className="px-4 py-2 border-b border-cyan-500/20 bg-cyan-950/30 flex items-center justify-between gap-3 text-xs text-cyan-100/90 shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <Search className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+            <span className="font-medium truncate">
+              {systemSearching ? 'Searching This Mac…' : 'Results from This Mac'}
+            </span>
+            <span className="text-[10px] font-mono text-cyan-300/70 shrink-0">
+              {systemHitCount} system · {files.length} shown
+            </span>
+          </div>
+          <span className="text-[10px] text-cyan-300/60 hidden sm:inline shrink-0">
+            Spotlight · Full Disk Access improves coverage
+          </span>
+        </div>
+      )}
+
       {/* P2P Media Library Protocol & Seeding Status Banner */}
       {selectedLibrary && (
         <LibraryBanner
@@ -342,7 +376,10 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
       )}
 
       {/* Main Viewport Content based on macOS View Mode */}
-      <div className={`flex-1 overflow-y-auto p-4 relative ${viewMode === 'columns' ? 'overflow-x-auto' : 'overflow-x-hidden'}`}>
+      <div
+        ref={browseScrollRef}
+        className={`flex-1 overflow-y-auto p-4 relative ${viewMode === 'columns' ? 'overflow-x-auto' : 'overflow-x-hidden'}`}
+      >
         
         {files.length === 0 && browseSubfolders.length === 0 && !groupByLocation && (
           <div className="h-full flex flex-col items-center justify-center text-center p-8 text-neutral-400">
@@ -393,7 +430,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
               <IconsView accent={accent} files={files} folders={browseSubfolders} selectedFileId={selectedFileId} selectedIds={selectedIds} iconScale={iconScale} onSelectFile={selectFile} onOpenFolder={onSelectFolder} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenAudio={onOpenAudio} onOpenQuickLook={onOpenQuickLook} onFileContextMenu={openContextMenu} toggleSelectOne={toggleSelectOne} />
             )}
             {viewMode === 'list' && (files.length > 0 || browseSubfolders.length > 0) && (
-              <ListView accent={accent} files={files} folders={browseSubfolders} selectedFileId={selectedFileId} selectedIds={selectedIds} onSelectFile={selectFile} onOpenFolder={onSelectFolder} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenAudio={onOpenAudio} onShareFile={onShareFile} onOpenQuickLook={onOpenQuickLook} onFileContextMenu={openContextMenu} toggleSelectOne={toggleSelectOne} toggleSelectAll={toggleSelectAll} getAccount={getAccount} />
+              <ListView accent={accent} files={files} folders={browseSubfolders} selectedFileId={selectedFileId} selectedIds={selectedIds} scrollParentRef={browseScrollRef} onSelectFile={selectFile} onOpenFolder={onSelectFolder} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenAudio={onOpenAudio} onShareFile={onShareFile} onOpenQuickLook={onOpenQuickLook} onFileContextMenu={openContextMenu} toggleSelectOne={toggleSelectOne} toggleSelectAll={toggleSelectAll} getAccount={getAccount} />
             )}
             {viewMode === 'columns' && (
               <ColumnsView accent={accent} files={files} selectedFolder={selectedFolder} selectedFileId={selectedFileId} folders={folders.filter(f => f.accountId === 'all' ? !f.parentId : true)} totalSize={totalSize} onSelectFile={selectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenAudio={onOpenAudio} onOpenQuickLook={onOpenQuickLook} onFileContextMenu={openContextMenu} onSelectFolder={onSelectFolder} />
@@ -426,7 +463,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
           <button onClick={() => { onSelectFolder(null); }} className="hover:text-sky-300 transition-colors cursor-pointer">Cloudbreak</button>
           <ChevronRight className="w-3 h-3 text-neutral-600" />
           <button onClick={() => { onSelectFolder(null); }} className="text-neutral-400 hover:text-sky-300 transition-colors cursor-pointer">
-            {selectedLibrary ? selectedLibrary.name : selectedAccountId === 'all' ? 'All Mounted Clouds' : accounts.find(a => a.id === selectedAccountId)?.name}
+            {selectedLibrary ? selectedLibrary.name : selectedAccountId === 'all' ? 'Local Files' : accounts.find(a => a.id === selectedAccountId)?.name}
           </button>
           {selectedFolder && (() => {
             const trail: FolderItem[] = [];

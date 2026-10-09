@@ -1,7 +1,8 @@
 import React from 'react';
 import { Image as ImageIcon, Folder, Video, FileText, Download, ChevronRight, HardDrive, Monitor, AppWindow, Music2 } from 'lucide-react';
 import { FileItem, FolderItem } from '../../types';
-import { isEditableDocument } from '../../utils/documentKind';
+import { isEditableDocument, isMacAppBundle } from '../../utils/documentKind';
+import { previewBridge } from '../../services/previewBridge';
 import { FileThumbnail } from './FileThumbnail';
 import { SelectionAccent, SELECTION_CLASSES } from '../../utils/selectionAccent';
 import { formatBytes } from '../../utils/format';
@@ -103,7 +104,9 @@ export const ColumnsView: React.FC<ColumnsViewProps> = ({
                 onClick={() => onSelectFile(file)}
                 onContextMenu={event => onFileContextMenu(file, event)}
                 onDoubleClick={() => {
-                  if (file.category === 'photo') onEditPhoto(file);
+                  if (isMacAppBundle(file) && file.localPath && previewBridge.available()) {
+                    void previewBridge.openWithDefault(file.localPath).catch(() => {});
+                  } else if (file.category === 'photo') onEditPhoto(file);
                   else if (file.category === 'video') onOpenVideo(file);
                   else if (file.category === 'audio') onOpenAudio(file);
                   else if (isEditableDocument(file)) onOpenDocument(file);

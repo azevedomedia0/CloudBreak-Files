@@ -8,7 +8,9 @@ pub mod macos_full_disk_access;
 pub mod macos_local_network;
 pub mod mounted_volumes;
 pub mod media;
+pub mod preview;
 pub mod p2p;
+pub mod system_search;
 pub mod selftest;
 pub mod storage;
 pub mod terminal;
@@ -128,6 +130,11 @@ pub fn run() {
             local_fs::local_write_file,
             local_fs::local_write_text,
             local_fs::local_rename_file,
+            preview::local_file_thumbnail,
+            preview::local_file_raster,
+            preview::local_open_with_default,
+            system_search::system_search,
+            system_search::system_search_clear,
             mounted_volumes::list_sidebar_volumes,
             mounted_volumes::probe_network_server,
             mounted_volumes::open_network_share,

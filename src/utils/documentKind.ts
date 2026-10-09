@@ -1,4 +1,5 @@
 import { FileCategory, FileItem } from '../types';
+import { sanitizeHtmlForEditor } from './contentSafety';
 
 /** Extensions edited as plain text (no rich formatting chrome). */
 const PLAIN_EXTENSIONS = new Set([
@@ -21,9 +22,21 @@ const PLAIN_EXTENSIONS = new Set([
   'lock', 'map', 'svg',
 ]);
 
-/** Word-processor / rich surfaces (contentEditable). */
+/** HTML (and similar) edited in the rich contentEditable surface. */
 const RICH_EXTENSIONS = new Set([
-  'pdf', 'doc', 'docx', 'rtf', 'odt', 'pages', 'html', 'htm', 'xhtml',
+  'html', 'htm', 'xhtml',
+]);
+
+/**
+ * Binary / system-preview documents: Quick Look thumbnail + in-app preview,
+ * opened with the macOS default app for real editing (Word, Pages, Excel, …).
+ */
+const SYSTEM_PREVIEW_EXTENSIONS = new Set([
+  'pdf',
+  'doc', 'docx', 'rtf', 'odt', 'pages',
+  'xls', 'xlsx', 'numbers',
+  'ppt', 'pptx', 'key',
+  'csf',
 ]);
 
 const ARCHIVE_EXTENSIONS = new Set([
@@ -41,6 +54,12 @@ const VIDEO_EXTENSIONS = new Set([
 
 const IMAGE_EXTENSIONS = new Set([
   'jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'heic', 'heif', 'bmp', 'tif', 'tiff', 'ico',
+  'raw', 'dng', 'cr2', 'nef', 'arw', 'orf', 'rw2', 'raf', 'pef',
+]);
+
+/** Formats that need a native JPEG raster before the web view can show them reliably. */
+const NATIVE_THUMB_IMAGE_EXTENSIONS = new Set([
+  'heic', 'heif', 'avif', 'tif', 'tiff', 'raw', 'dng', 'cr2', 'nef', 'arw', 'orf', 'rw2', 'raf', 'pef',
 ]);
 
 const BINARY_EXTENSIONS = new Set([
@@ -68,11 +87,21 @@ const PLAIN_MIME = new Set([
 ]);
 
 const RICH_MIME_PREFIXES = [
+  'text/html',
+  'application/xhtml+xml',
+];
+
+const SYSTEM_PREVIEW_MIME_PREFIXES = [
   'application/pdf',
   'application/msword',
   'application/rtf',
-  'application/vnd.oasis.opendocument.text',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml',
+  'application/vnd.oasis.opendocument',
+  'application/vnd.openxmlformats-officedocument',
+  'application/vnd.ms-excel',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.apple.pages',
+  'application/vnd.apple.numbers',
+  'application/vnd.apple.keynote',
 ];
 
 /** Max bytes to load into the editor from an uploaded text file. */
@@ -100,6 +129,17 @@ export function formatBadgeClasses(extension: string): string {
     case 'odt':
     case 'rtf':
       return 'bg-indigo-500/15 border-indigo-400/30 text-indigo-300';
+    case 'xls':
+    case 'xlsx':
+    case 'numbers':
+    case 'csv':
+      return 'bg-emerald-500/15 border-emerald-400/30 text-emerald-300';
+    case 'ppt':
+    case 'pptx':
+    case 'key':
+      return 'bg-orange-500/15 border-orange-400/30 text-orange-300';
+    case 'csf':
+      return 'bg-fuchsia-500/15 border-fuchsia-400/30 text-fuchsia-300';
     case 'md':
     case 'markdown':
     case 'mdx':
@@ -115,7 +155,6 @@ export function formatBadgeClasses(extension: string): string {
     case 'json':
     case 'jsonc':
       return 'bg-amber-500/15 border-amber-400/30 text-amber-300';
-    case 'csv':
     case 'tsv':
       return 'bg-emerald-500/15 border-emerald-400/30 text-emerald-300';
     case 'xml':
@@ -147,8 +186,40 @@ export function formatBadgeClasses(extension: string): string {
 
 function isRichMime(mimeType: string): boolean {
   const mime = mimeType.toLowerCase();
-  if (mime === 'text/html' || mime === 'application/xhtml+xml') return true;
   return RICH_MIME_PREFIXES.some(prefix => mime.startsWith(prefix));
+}
+
+function isSystemPreviewMime(mimeType: string): boolean {
+  const mime = mimeType.toLowerCase();
+  return SYSTEM_PREVIEW_MIME_PREFIXES.some(prefix => mime.startsWith(prefix));
+}
+
+/** PDF, Office, Pages, spreadsheets, decks — preview in-app, edit via default macOS app. */
+export function isSystemPreviewDocument(file: Pick<FileItem, 'name' | 'mimeType'>): boolean {
+  const ext = fileExtension(file.name);
+  if (SYSTEM_PREVIEW_EXTENSIONS.has(ext)) return true;
+  return isSystemPreviewMime(file.mimeType);
+}
+
+/** macOS application bundle — show the official icon and launch with `open`. */
+export function isMacAppBundle(file: Pick<FileItem, 'name' | 'mimeType'>): boolean {
+  if (fileExtension(file.name) === 'app') return true;
+  return file.mimeType.toLowerCase() === 'application/x-apple-app';
+}
+
+/** True when the web view should ask Rust for a Quick Look / sips JPEG thumbnail. */
+export function needsNativeThumbnail(file: Pick<FileItem, 'name' | 'mimeType' | 'category'>): boolean {
+  const ext = fileExtension(file.name);
+  if (NATIVE_THUMB_IMAGE_EXTENSIONS.has(ext)) return true;
+  if (isMacAppBundle(file)) return true;
+  if (isSystemPreviewDocument(file)) return true;
+  return false;
+}
+
+/** Camera RAW / HEIC / TIFF-like photos that need a raster before Studio / Quick Look. */
+export function needsNativeRaster(file: Pick<FileItem, 'name' | 'mimeType' | 'category'>): boolean {
+  const ext = fileExtension(file.name);
+  return NATIVE_THUMB_IMAGE_EXTENSIONS.has(ext) || (file.category === 'photo' && (ext === 'heic' || ext === 'heif'));
 }
 
 /** Plain-text files use the monospace editor: no character formatting. */
@@ -178,10 +249,14 @@ export function isEditableDocument(file: Pick<FileItem, 'name' | 'mimeType' | 'c
     return false;
   }
 
+  if (isMacAppBundle(file)) return false;
+
   const ext = fileExtension(file.name);
   if (BINARY_EXTENSIONS.has(ext)) return false;
   if (IMAGE_EXTENSIONS.has(ext)) return false;
   if (VIDEO_EXTENSIONS.has(ext) || AUDIO_EXTENSIONS.has(ext)) return false;
+
+  if (isSystemPreviewDocument(file)) return false;
 
   if (isPlainTextDocument(file)) return true;
   if (RICH_EXTENSIONS.has(ext) || isRichMime(file.mimeType)) return true;
@@ -197,6 +272,7 @@ export function classifyUploadCategory(name: string, mimeType: string): FileCate
   const ext = fileExtension(name);
   const mime = mimeType.toLowerCase();
 
+  if (ext === 'app' || mime === 'application/x-apple-app') return 'document';
   if (mime.startsWith('video/') || VIDEO_EXTENSIONS.has(ext)) return 'video';
   if ((mime.startsWith('image/') || IMAGE_EXTENSIONS.has(ext)) && ext !== 'svg') return 'photo';
   // SVG is text — treat as a document so the text editor opens it.
@@ -245,6 +321,7 @@ export function initialDocumentBody(file: FileItem): string {
 /**
  * HTML for the contentEditable surface. Plain-text library bodies are wrapped as
  * paragraphs so every editable format gets the same formatting toolbar.
+ * HTML from disk is sanitized (scripts / event handlers stripped) before render.
  */
 export function editorHtmlFromFile(file: FileItem): string {
   const raw = file.documentBody;
@@ -252,7 +329,9 @@ export function editorHtmlFromFile(file: FileItem): string {
     if (isPlainTextDocument(file)) return '<p><br></p>';
     return initialDocumentBody(file);
   }
-  if (looksLikeHtml(raw)) return raw;
+  if (looksLikeHtml(raw)) {
+    return sanitizeHtmlForEditor(raw).html;
+  }
   return plainTextToEditorHtml(raw);
 }
 

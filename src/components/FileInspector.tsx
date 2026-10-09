@@ -8,11 +8,18 @@ import {
   Copy, ClipboardPaste, TextCursorInput, FolderInput, FileArchive, FolderPlus,
 } from 'lucide-react';
 import { FileItem, CloudAccount, FolderItem } from '../types';
-import { isEditableDocument } from '../utils/documentKind';
+import {
+  isEditableDocument,
+  isMacAppBundle,
+  isSystemPreviewDocument,
+  needsNativeThumbnail,
+} from '../utils/documentKind';
 import { formatBytes, formatDate, formatTimecode } from '../utils/format';
 import { isZipArchive } from '../utils/unzipArchive';
 import { DocumentPreview } from './document-editor/DocumentPreview';
 import { emitFileContextMenu } from '../utils/fileContextMenuBus';
+import { previewBridge } from '../services/previewBridge';
+import { FileThumbnail } from './file-browser/FileThumbnail';
 
 import { PhotoNav, PhotoNavArrows } from './PhotoNavArrows';
 
@@ -73,10 +80,20 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
   const [duration, setDuration] = useState<number>(file?.videoMeta?.durationSeconds || 15);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [movePickerOpen, setMovePickerOpen] = useState(false);
+  const [nativePreview, setNativePreview] = useState<string | null>(null);
 
   useEffect(() => {
     setMovePickerOpen(false);
-  }, [file?.id]);
+    setNativePreview(null);
+    if (!file?.localPath || !previewBridge.available() || !needsNativeThumbnail(file)) return;
+    let cancelled = false;
+    void previewBridge.thumbnailUrl(file.localPath, 720).then(url => {
+      if (!cancelled && url) setNativePreview(url);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [file?.id, file?.localPath]);
 
   useEffect(() => {
     setIsPlaying(false);
@@ -273,7 +290,7 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
               <>
               {file.category === 'photo' && (
                 <img
-                  src={file.url}
+                  src={nativePreview || file.thumbnailUrl || file.url}
                   alt={file.name}
                   className="w-full h-full object-cover"
                   onContextMenu={event => {
@@ -404,7 +421,23 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
               )}
 
               {file.category !== 'photo' && file.category !== 'video' && file.category !== 'audio' && (
-                <DocumentPreview file={file} />
+                nativePreview || file.thumbnailUrl || isSystemPreviewDocument(file) ? (
+                  nativePreview || file.thumbnailUrl ? (
+                    <img
+                      src={nativePreview || file.thumbnailUrl}
+                      alt={file.name}
+                      className="w-full h-full object-contain bg-neutral-950"
+                      onContextMenu={event => {
+                        event.preventDefault();
+                        emitFileContextMenu(file, event.clientX, event.clientY);
+                      }}
+                    />
+                  ) : (
+                    <FileThumbnail file={file} className="w-full h-full" />
+                  )
+                ) : (
+                  <DocumentPreview file={file} />
+                )
               )}
               </>
               )}
@@ -516,6 +549,38 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                 >
                   <Archive className="w-3.5 h-3.5" />
                   <span>Unzip</span>
+                </button>
+              ) : isMacAppBundle(file) ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (file.localPath && previewBridge.available()) {
+                      void previewBridge.openWithDefault(file.localPath).catch(() => {});
+                    }
+                  }}
+                  className="col-span-2 h-9 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 border border-sky-400/30 text-sky-200 flex items-center justify-center gap-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer"
+                  title="Open application"
+                  aria-label="Open application"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  <span>Open</span>
+                </button>
+              ) : isSystemPreviewDocument(file) ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (file.localPath && previewBridge.available()) {
+                      void previewBridge.openWithDefault(file.localPath).catch(() => onOpenDocument(file));
+                    } else {
+                      onOpenDocument(file);
+                    }
+                  }}
+                  className="col-span-2 h-9 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 border border-sky-400/30 text-sky-200 flex items-center justify-center gap-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer"
+                  title="Open with default app"
+                  aria-label="Open with default app"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  <span>Open</span>
                 </button>
               ) : (
                 <button

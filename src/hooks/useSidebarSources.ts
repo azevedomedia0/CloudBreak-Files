@@ -159,13 +159,35 @@ export function useSidebarSources({
     return { rootFolder, folders, files };
   };
 
+  const pruneAppFolders = (list: FolderItem[]) =>
+    list.filter(f => !f.name.toLowerCase().endsWith('.app'));
+
   const applyImportedFolder = (imported: Awaited<ReturnType<typeof importLocalFolderAtPath>>) => {
     const { rootFolder, folders, files } = normalizeImported(imported);
-    setFolders(prev => mergeLocalFolders(prev, folders));
+    // .app packages are FileItems now — drop any leftover folder tiles from older scans.
+    setFolders(prev => pruneAppFolders(mergeLocalFolders(prev, folders)));
     if (files.length) {
       setFiles(prev => mergeById(prev, files));
     }
     return rootFolder;
+  };
+
+  /** Merge many parallel imports into one React update (startup / rescan). */
+  const applyImportedFoldersBatch = (
+    imports: Array<Awaited<ReturnType<typeof importLocalFolderAtPath>>>,
+  ) => {
+    if (!imports.length) return;
+    const allFolders: FolderItem[] = [];
+    const allFiles: FileItem[] = [];
+    for (const imported of imports) {
+      const { folders, files } = normalizeImported(imported);
+      allFolders.push(...folders);
+      allFiles.push(...files);
+    }
+    setFolders(prev => pruneAppFolders(mergeLocalFolders(prev, allFolders)));
+    if (allFiles.length) {
+      setFiles(prev => mergeById(prev, allFiles));
+    }
   };
 
   /** Descendants of a Local Files root (not including the root itself). */
@@ -192,47 +214,63 @@ export function useSidebarSources({
   };
 
   /**
-   * Rescan one disk folder: replace its sidebar subtree and local files so deletes
-   * on disk disappear and new files show up without a restart.
+   * Rescan disk folders: replace each sidebar subtree and local files so deletes
+   * on disk disappear. Applies all results in one setState pass.
    */
-  const applyRescannedFolder = (
-    imported: Awaited<ReturnType<typeof importLocalFolderAtPath>>,
-    diskPaths: string | string[],
+  const applyRescannedFoldersBatch = (
+    items: Array<{
+      imported: Awaited<ReturnType<typeof importLocalFolderAtPath>>;
+      diskPaths: string[];
+    }>,
   ) => {
-    const roots = (Array.isArray(diskPaths) ? diskPaths : [diskPaths]).filter(Boolean);
-    const { rootFolder, folders: nextFolders, files: nextFiles } = normalizeImported(imported);
-    const rootId = rootFolder.id;
-    const nextFolderIds = new Set(nextFolders.map(f => f.id));
-    const folderScope = new Set<string>([rootId, ...collectDescendantFolderIds(folders, rootId)]);
+    if (!items.length) return;
+
+    const normalized = items.map(({ imported, diskPaths }) => ({
+      ...normalizeImported(imported),
+      diskPaths,
+    }));
 
     setFolders(prev => {
-      const staleKids = collectDescendantFolderIds(prev, rootId);
-      const kept = prev.filter(f => {
-        if (f.id === rootId) return false;
-        if (staleKids.has(f.id) && !nextFolderIds.has(f.id)) return false;
-        return true;
-      });
-      return mergeLocalFolders(kept, nextFolders);
+      let next = prev;
+      for (const { rootFolder, folders: nextFolders } of normalized) {
+        const rootId = rootFolder.id;
+        const nextFolderIds = new Set(nextFolders.map(f => f.id));
+        const staleKids = collectDescendantFolderIds(next, rootId);
+        const kept = next.filter(f => {
+          if (f.id === rootId) return false;
+          if (staleKids.has(f.id) && !nextFolderIds.has(f.id)) return false;
+          return true;
+        });
+        next = mergeLocalFolders(kept, nextFolders);
+      }
+      return pruneAppFolders(next);
     });
 
     setFiles(prev => {
+      const dropRoots = normalized.flatMap(n => n.diskPaths);
+      const folderScopes = new Set<string>();
+      for (const { rootFolder } of normalized) {
+        folderScopes.add(rootFolder.id);
+        for (const id of collectDescendantFolderIds(folders, rootFolder.id)) {
+          folderScopes.add(id);
+        }
+      }
       const kept = prev.filter(f => {
-        if (roots.some(root => pathIsUnderRoot(f.localPath, root))) return false;
-        if (f.localPath && f.folderId && folderScope.has(f.folderId)) return false;
+        if (dropRoots.some(root => pathIsUnderRoot(f.localPath, root))) return false;
+        if (f.localPath && f.folderId && folderScopes.has(f.folderId)) return false;
         if (
           f.accountId === 'all'
           && f.folderId
-          && folderScope.has(f.folderId)
+          && folderScopes.has(f.folderId)
           && f.id.startsWith('file-local-')
         ) {
           return false;
         }
         return true;
       });
+      const nextFiles = normalized.flatMap(n => n.files);
       return mergeById(kept, nextFiles);
     });
-
-    return rootFolder;
   };
 
   const diskPathsFor = (folder: LocalFolder): string[] => (
@@ -248,6 +286,7 @@ export function useSidebarSources({
     rescanBusyRef.current = true;
     setIsRescanningLocal(true);
     try {
+      // ensure is cheap when roots are unchanged (single save_roots only if dirty).
       const standards = await localFs.ensureStandardFolders().catch(() => [] as LocalFolder[]);
       const saved = await localFs.listFolders().catch(() => [] as LocalFolder[]);
       const byPath = new Map<string, LocalFolder>();
@@ -264,10 +303,13 @@ export function useSidebarSources({
         return;
       }
 
-      let ok = 0;
       let fileTotal = 0;
       let truncated = false;
       const errors: string[] = [];
+      const batch: Array<{
+        imported: Awaited<ReturnType<typeof importLocalFolderAtPath>>;
+        diskPaths: string[];
+      }> = [];
 
       // Import in parallel so a huge Desktop tree cannot block Documents / Downloads.
       await Promise.all(targets.map(async folder => {
@@ -276,14 +318,16 @@ export function useSidebarSources({
             rootId: defaultLocalFolderIdForName(folder.name),
             displayName: folder.name,
           });
-          applyRescannedFolder(imported, diskPathsFor(folder));
-          ok += 1;
+          batch.push({ imported, diskPaths: diskPathsFor(folder) });
           fileTotal += imported.files.length;
           if (imported.truncated) truncated = true;
         } catch (err) {
           errors.push(`${folder.name}: ${err instanceof Error ? err.message : String(err)}`);
         }
       }));
+
+      applyRescannedFoldersBatch(batch);
+      const ok = batch.length;
 
       if (ok === 0 && errors.length) {
         showToast(`Rescan failed. ${errors[0]}`);
@@ -495,23 +539,31 @@ export function useSidebarSources({
         const saved = await localFs.listFolders();
         const standardPaths = new Set(standards.flatMap(f => diskPathsFor(f)));
 
-        // Parallel imports — Documents must not wait on a large Desktop scan.
-        await Promise.all(standards.map(async folder => {
-          if (cancelled) return;
-          const imported = await importLocalFolderAtPath(folder, {
-            rootId: defaultLocalFolderIdForName(folder.name),
-            displayName: folder.name,
-          }).catch(() => null);
-          if (!imported || cancelled) return;
-          applyImportedFolder(imported);
-        }));
+        // Parallel imports, then one React update for standards + one for extra saved roots.
+        const standardImports = (
+          await Promise.all(standards.map(async folder => {
+            if (cancelled) return null;
+            return importLocalFolderAtPath(folder, {
+              rootId: defaultLocalFolderIdForName(folder.name),
+              displayName: folder.name,
+            }).catch(() => null);
+          }))
+        ).filter((x): x is NonNullable<typeof x> => !!x);
 
-        await Promise.all(saved.map(async folder => {
-          if (cancelled || standardPaths.has(folder.path)) return;
-          const imported = await importLocalFolderAtPath(folder).catch(() => null);
-          if (!imported || cancelled) return;
-          applyImportedFolder(imported);
-        }));
+        if (!cancelled && standardImports.length) {
+          applyImportedFoldersBatch(standardImports);
+        }
+
+        const savedImports = (
+          await Promise.all(saved.map(async folder => {
+            if (cancelled || standardPaths.has(folder.path)) return null;
+            return importLocalFolderAtPath(folder).catch(() => null);
+          }))
+        ).filter((x): x is NonNullable<typeof x> => !!x);
+
+        if (!cancelled && savedImports.length) {
+          applyImportedFoldersBatch(savedImports);
+        }
       } catch {
         // empty default stubs stay in the sidebar.
       }

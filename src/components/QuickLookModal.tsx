@@ -1,12 +1,19 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  X, Eye, Edit3, Scissors, Share2, Download, ShieldCheck, 
-  Video, Image as ImageIcon, FileText, Lock, HardDrive, Maximize2
+  X, Edit3, Scissors, Share2, ShieldCheck,
+  FileText, ExternalLink,
 } from 'lucide-react';
 import { FileItem, CloudAccount } from '../types';
-import { isEditableDocument } from '../utils/documentKind';
-import { formatBytes, formatDate, formatTimecode } from '../utils/format';
+import {
+  fileExtension,
+  isEditableDocument,
+  isSystemPreviewDocument,
+  needsNativeRaster,
+} from '../utils/documentKind';
+import { formatBytes, formatTimecode } from '../utils/format';
 import { PhotoNav, PhotoNavArrows } from './PhotoNavArrows';
+import { previewBridge, withNativeRaster } from '../services/previewBridge';
+import { FileThumbnail } from './file-browser/FileThumbnail';
 
 interface QuickLookModalProps {
   file: FileItem | null;
@@ -31,7 +38,9 @@ export const QuickLookModal: React.FC<QuickLookModalProps> = ({
   onShare,
   photoNav,
 }) => {
-  // Listen for Space or Escape to toggle / close
+  const [previewFile, setPreviewFile] = useState<FileItem | null>(file);
+  const [docThumb, setDocThumb] = useState<string | null>(null);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!isOpen) return;
@@ -50,17 +59,43 @@ export const QuickLookModal: React.FC<QuickLookModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose, photoNav]);
 
-  if (!isOpen || !file) return null;
+  useEffect(() => {
+    setPreviewFile(file);
+    setDocThumb(null);
+    if (!isOpen || !file) return;
+    let cancelled = false;
+    if (needsNativeRaster(file) && file.localPath) {
+      void withNativeRaster(file).then(next => {
+        if (!cancelled) setPreviewFile(next);
+      });
+    } else if (isSystemPreviewDocument(file) && file.localPath && previewBridge.available()) {
+      void previewBridge.thumbnailUrl(file.localPath, 1024).then(url => {
+        if (!cancelled && url) setDocThumb(url);
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [file, isOpen]);
+
+  if (!isOpen || !file || !previewFile) return null;
 
   const account = accounts.find(a => a.id === file.accountId);
+  const ext = fileExtension(file.name);
+  const isPdf = ext === 'pdf' || file.mimeType.toLowerCase().includes('pdf');
+  const systemDoc = isSystemPreviewDocument(file);
+
+  const openExternally = () => {
+    if (!file.localPath || !previewBridge.available()) return;
+    void previewBridge.openWithDefault(file.localPath).catch(() => {});
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xl p-4 animate-fadeIn">
-      <div 
+      <div
         className="app-modal-panel relative flex flex-col w-full max-w-4xl max-h-[85vh] rounded-2xl overflow-hidden macos-window animate-scaleUp select-none"
         onClick={e => e.stopPropagation()}
       >
-        {/* macOS Quick Look Header */}
         <div className="flex items-center justify-between px-4 py-2.5 macos-toolbar-glass">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5">
@@ -87,13 +122,12 @@ export const QuickLookModal: React.FC<QuickLookModalProps> = ({
             </div>
           </div>
 
-          {/* Quick Action Button in Titlebar */}
           <div className="flex items-center gap-2">
             {file.category === 'photo' && (
               <button
                 onClick={() => {
                   onClose();
-                  onEditPhoto(file);
+                  onEditPhoto(previewFile);
                 }}
                 className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-cyan-400 hover:bg-cyan-300 text-neutral-950 font-semibold text-xs transition-colors shadow-sm"
               >
@@ -109,6 +143,17 @@ export const QuickLookModal: React.FC<QuickLookModalProps> = ({
               >
                 <Edit3 className="w-3.5 h-3.5" />
                 <span>Edit document</span>
+              </button>
+            )}
+
+            {systemDoc && file.localPath && previewBridge.available() && (
+              <button
+                type="button"
+                onClick={openExternally}
+                className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white/10 hover:bg-white/15 text-neutral-100 font-semibold text-xs transition-colors shadow-sm border border-white/15"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Open with Default App</span>
               </button>
             )}
 
@@ -138,12 +183,11 @@ export const QuickLookModal: React.FC<QuickLookModalProps> = ({
           </div>
         </div>
 
-        {/* Media Preview Screen */}
         <div className="flex-1 min-h-[420px] bg-black/40 flex items-center justify-center p-6 relative overflow-hidden">
           {file.category === 'photo' && photoNav && <PhotoNavArrows nav={photoNav} />}
           {file.category === 'photo' && (
             <img
-              src={file.url}
+              src={previewFile.url}
               alt={file.name}
               className="max-h-[60vh] max-w-full object-contain rounded-lg shadow-2xl"
             />
@@ -158,16 +202,51 @@ export const QuickLookModal: React.FC<QuickLookModalProps> = ({
             />
           )}
 
-          {file.category !== 'photo' && file.category !== 'video' && (
-            <div className="flex flex-col items-center justify-center text-neutral-400 gap-3">
-              <FileText className="w-16 h-16 text-cyan-400" />
+          {file.category !== 'photo' && file.category !== 'video' && isPdf && file.url && file.url !== '#' && (
+            <iframe
+              title={file.name}
+              src={file.url}
+              // Untrusted document: block top-navigation and forms; PDF viewers still render.
+              sandbox="allow-same-origin"
+              referrerPolicy="no-referrer"
+              className="w-full h-[60vh] rounded-lg bg-white shadow-2xl border border-white/10"
+            />
+          )}
+
+          {file.category !== 'photo' && file.category !== 'video' && !isPdf && (docThumb || file.thumbnailUrl) && (
+            <img
+              src={docThumb || file.thumbnailUrl}
+              alt={file.name}
+              className="max-h-[60vh] max-w-full object-contain rounded-lg shadow-2xl bg-white"
+            />
+          )}
+
+          {file.category !== 'photo' && file.category !== 'video' && !isPdf && !docThumb && !file.thumbnailUrl && (
+            <div className="flex flex-col items-center justify-center text-neutral-400 gap-3 max-w-sm text-center">
+              <div className="w-28 h-36 rounded-lg overflow-hidden border border-white/10 shadow-lg">
+                <FileThumbnail file={file} className="w-full h-full" />
+              </div>
               <div className="text-sm font-medium text-neutral-200">{file.name}</div>
-              <div className="text-xs text-neutral-500 font-mono">SHA-256: {file.encryption.checksumSha256.slice(0, 24)}...</div>
+              {systemDoc && file.localPath && (
+                <button
+                  type="button"
+                  onClick={openExternally}
+                  className="mt-1 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-200 text-xs font-medium border border-sky-400/30"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  Open with Default App
+                </button>
+              )}
+              {!systemDoc && (
+                <div className="text-xs text-neutral-500 font-mono flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5" />
+                  SHA-256: {file.encryption.checksumSha256.slice(0, 24)}…
+                </div>
+              )}
             </div>
           )}
         </div>
 
-        {/* Bottom macOS Metadata Footer */}
         <div className="px-5 py-3 macos-toolbar-glass flex items-center justify-between text-xs text-neutral-400">
           <div className="flex items-center gap-3">
             <span>{formatBytes(file.sizeBytes)}</span>
@@ -185,6 +264,12 @@ export const QuickLookModal: React.FC<QuickLookModalProps> = ({
               <>
                 <span>·</span>
                 <span className="font-mono">{formatTimecode(file.videoMeta.durationSeconds)} · {file.videoMeta.framerate} fps</span>
+              </>
+            )}
+            {systemDoc && (
+              <>
+                <span>·</span>
+                <span className="text-neutral-500">Preview</span>
               </>
             )}
           </div>

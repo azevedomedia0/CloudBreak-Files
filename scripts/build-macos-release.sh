@@ -9,6 +9,30 @@ export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/tmp/cloudbreak-cargo-target}"
 # Match tauri.conf.json bundle.macOS.minimumSystemVersion so Intel Macs on Big Sur+ can run the binary.
 export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-11.0}"
 
+# Local Apple signing + notarization (never committed). See docs/notarized-distribution.md.
+APPLE_ENV_DEFAULT="${HOME}/.config/cloudbreak/apple-notarization.env"
+if [[ -f "${APPLE_NOTARIZATION_ENV:-$APPLE_ENV_DEFAULT}" ]]; then
+  # shellcheck disable=SC1090
+  source "${APPLE_NOTARIZATION_ENV:-$APPLE_ENV_DEFAULT}"
+  echo "Loaded Apple notarization env from ${APPLE_NOTARIZATION_ENV:-$APPLE_ENV_DEFAULT}"
+fi
+if [[ -z "${APPLE_SIGNING_IDENTITY:-}" ]]; then
+  # Prefer Developer ID Application when present in the login keychain.
+  DEV_ID="$(security find-identity -v -p codesigning 2>/dev/null | sed -n 's/.*"\(Developer ID Application: .*\)"/\1/p' | head -1 || true)"
+  if [[ -n "$DEV_ID" ]]; then
+    export APPLE_SIGNING_IDENTITY="$DEV_ID"
+    echo "Using codesign identity: $APPLE_SIGNING_IDENTITY"
+  fi
+fi
+if [[ -n "${APPLE_SIGNING_IDENTITY:-}" && -n "${APPLE_API_ISSUER:-}" && -n "${APPLE_API_KEY:-}" && -n "${APPLE_API_KEY_PATH:-}" && -f "${APPLE_API_KEY_PATH}" ]]; then
+  echo "Notarization: enabled (API key + issuer present)"
+elif [[ -n "${APPLE_SIGNING_IDENTITY:-}" ]]; then
+  echo "warn: signing without notarization — set APPLE_API_ISSUER / APPLE_API_KEY / APPLE_API_KEY_PATH" >&2
+  echo "      (or create ~/.config/cloudbreak/apple-notarization.env)" >&2
+else
+  echo "warn: APPLE_SIGNING_IDENTITY unset — build will not be Developer ID signed." >&2
+fi
+
 # Updater signing (creates .app.tar.gz + .sig). Private key must never be committed.
 UPDATER_KEY_DEFAULT="${HOME}/.tauri/cloudbreak-files.key"
 if [[ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" && -f "$UPDATER_KEY_DEFAULT" ]]; then

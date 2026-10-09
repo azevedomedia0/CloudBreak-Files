@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { MacFinderToolbar, MacViewMode } from './components/MacFinderToolbar';
 import { Sidebar } from './components/Sidebar';
 import { useResizablePanel } from './hooks/useResizablePanel';
@@ -16,6 +16,8 @@ import { useP2pLibraries } from './hooks/useP2pLibraries';
 import { useCloudAccounts } from './hooks/useCloudAccounts';
 import { useNotifications } from './hooks/useNotifications';
 import { useSidebarSources } from './hooks/useSidebarSources';
+import { useSystemSearch } from './hooks/useSystemSearch';
+import { mergeSystemSearchResults, systemSearchBridge } from './services/systemSearchBridge';
 import { AppModals } from './components/AppModals';
 import { PhotoNav } from './components/PhotoNavArrows';
 import { UserProfile } from './components/ProfileSettingsModal';
@@ -30,7 +32,7 @@ import {
   CloudAccount, FileItem, FolderItem, SharedLibrary,
   CloudProviderId, FileCategory,
 } from './types';
-import { createDefaultLocalFolders } from './utils/defaultLocalFolders';
+import { createDefaultLocalFolders, DEFAULT_LOCAL_FOLDER_DEFS } from './utils/defaultLocalFolders';
 import { getFfmpegStatus } from './services/mediaBridge';
 import {
   checkForAppUpdate,
@@ -49,13 +51,29 @@ import {
 } from './utils/appPreferences';
 import { p2pBridge } from './services/p2pBridge';
 import { localFs } from './services/localFsBridge';
-import { isEditableDocument, isPlainTextDocument, TEXT_UPLOAD_MAX_BYTES } from './utils/documentKind';
+import { withNativeRaster } from './services/previewBridge';
+import {
+  isEditableDocument,
+  isPlainTextDocument,
+  isSystemPreviewDocument,
+  TEXT_UPLOAD_MAX_BYTES,
+} from './utils/documentKind';
+import {
+  prepareDocumentBodyForOpen,
+  sanitizeContextLabel,
+  untrustedExternalSafetyMeta,
+  type ContentSafetyReport,
+} from './utils/contentSafety';
+import { UntrustedContentGate } from './components/UntrustedContentGate';
 
 export default function App() {
   // Accounts & Navigation States
   const [selectedAccountId, setSelectedAccountId] = useState<CloudProviderId>('all');
   const [folders, setFolders] = useState<FolderItem[]>(() => createDefaultLocalFolders());
-  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+  // Start on Desktop (not the unscoped “All Files” view).
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(
+    () => DEFAULT_LOCAL_FOLDER_DEFS.find(d => d.name === 'Desktop')?.id ?? 'folder-local-desktop',
+  );
   const [selectedLibraryId, setSelectedLibraryId] = useState<string | null>(null);
   // A network share or removable device (by stable id) opened from the sidebar Network section
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
@@ -84,6 +102,12 @@ export default function App() {
   const [isQuickLookOpen, setIsQuickLookOpen] = useState<boolean>(false);
   const [editingPhotoFile, setEditingPhotoFile] = useState<FileItem | null>(null);
   const [editingDocumentFile, setEditingDocumentFile] = useState<FileItem | null>(null);
+  /** Staged file open waiting on Confirm / Deny — body must not enter the editor until confirmed. */
+  const [pendingUntrustedOpen, setPendingUntrustedOpen] = useState<{
+    file: FileItem;
+    body: string;
+    report: ContentSafetyReport;
+  } | null>(null);
   const [playingVideoFile, setPlayingVideoFile] = useState<FileItem | null>(null);
   const [playingAudioFile, setPlayingAudioFile] = useState<FileItem | null>(null);
   const [videoPlayerInitialTab, setVideoPlayerInitialTab] = useState<'player' | 'trim' | 'convert'>('player');
@@ -270,10 +294,9 @@ export default function App() {
     setSelectedSourceId, setSelectedFileId, setIsVaultSecurityOpen, showToast,
   });
 
-  // Selected file and folder objects
-  const selectedFile = files.find(f => f.id === selectedFileId) || null;
   const selectedFolder = folders.find(f => f.id === selectedFolderId) || null;
   const selectedLibrary = sharedLibraries.find(lib => lib.id === selectedLibraryId) || null;
+  const { systemResults, systemSearching } = useSystemSearch(searchQuery);
 
   const markFileOpened = (fileId: string) => {
     const now = new Date().toISOString();
@@ -285,11 +308,31 @@ export default function App() {
     markFileOpened(file.id);
   };
 
-  /** Load local text into documentBody when the scan skipped nested sources. */
+  /** Open HEIC/RAW/TIFF via a web-viewable raster when needed, then Photo Studio. */
+  const openPhotoFile = async (file: FileItem) => {
+    openFileSelection(file);
+    const ready = await withNativeRaster(file);
+    if (ready.thumbnailUrl && ready.thumbnailUrl !== file.thumbnailUrl) {
+      setFiles(prev => prev.map(f => (f.id === file.id ? { ...f, thumbnailUrl: ready.thumbnailUrl, url: ready.url } : f)));
+    }
+    setEditingPhotoFile(ready);
+  };
+
+  /** Load local text; every extracted body is untrusted external content (strict boundaries). */
   const openDocumentFile = async (file: FileItem) => {
     openFileSelection(file);
+    if (isSystemPreviewDocument(file)) {
+      setIsQuickLookOpen(true);
+      return;
+    }
+
+    // Never leave a previous editor panel open while a gate is pending.
+    setEditingDocumentFile(null);
+    setPendingUntrustedOpen(null);
+
+    let rawBody = file.documentBody;
     if (
-      file.documentBody == null
+      rawBody == null
       && file.localPath
       && localFs.available()
       && isEditableDocument(file)
@@ -297,29 +340,121 @@ export default function App() {
       && (isPlainTextDocument(file) || /\.html?$/i.test(file.name))
     ) {
       try {
-        const documentBody = await localFs.readText(file.localPath);
-        const withBody = { ...file, documentBody };
-        setFiles(prev => prev.map(f => (f.id === file.id ? { ...f, documentBody } : f)));
-        setEditingDocumentFile(withBody);
-        return;
+        rawBody = await localFs.readText(file.localPath);
       } catch {
-        // Fall through and open with empty/default body.
+        rawBody = undefined;
       }
     }
-    setEditingDocumentFile(file);
+
+    if (rawBody == null) {
+      setEditingDocumentFile({
+        ...file,
+        contentSafety: untrustedExternalSafetyMeta(
+          { risk: 'none', flags: [], reasons: [], htmlHardened: false },
+          'auto',
+        ),
+      });
+      return;
+    }
+
+    const asHtml = !isPlainTextDocument(file) || /\.html?$/i.test(file.name);
+    const prepared = prepareDocumentBodyForOpen(rawBody, { treatAsHtml: asHtml });
+
+    // Suspicious / malicious-looking activity: Confirm or Deny before body can enter any panel.
+    if (prepared.requiresAck) {
+      setPendingUntrustedOpen({
+        file: { ...file, documentBody: undefined },
+        body: prepared.body,
+        report: prepared.report,
+      });
+      return;
+    }
+
+    const safeFile: FileItem = {
+      ...file,
+      documentBody: prepared.body,
+      contentSafety: untrustedExternalSafetyMeta(prepared.report, 'auto'),
+    };
+    // Keep library list in sync with hardened body only (never raw).
+    setFiles(prev => prev.map(f => (f.id === file.id ? { ...f, documentBody: prepared.body } : f)));
+    if (prepared.report.htmlHardened || prepared.report.risk === 'low') {
+      showToast('Opened as untrusted external content — cannot rewrite app logic');
+    }
+    setEditingDocumentFile(safeFile);
   };
 
-  // Filter files
-  const filteredFiles = sortFiles(
-    filterFiles(files, {
+  const confirmUntrustedOpen = () => {
+    if (!pendingUntrustedOpen) return;
+    const { file, body, report } = pendingUntrustedOpen;
+    const safeFile: FileItem = {
+      ...file,
+      documentBody: body,
+      contentSafety: untrustedExternalSafetyMeta(report, 'confirmed'),
+    };
+    setFiles(prev => prev.map(f => (f.id === file.id ? { ...f, documentBody: body } : f)));
+    setPendingUntrustedOpen(null);
+    setEditingDocumentFile(safeFile);
+    showToast('Confirmed — viewing as data only (execution logic unchanged)');
+  };
+
+  const denyUntrustedOpen = () => {
+    if (!pendingUntrustedOpen) return;
+    const { file } = pendingUntrustedOpen;
+    // Discard extracted content so it cannot rewrite execution logic or linger in the panel.
+    setFiles(prev => prev.map(f => (
+      f.id === file.id
+        ? {
+            ...f,
+            documentBody: undefined,
+            contentSafety: untrustedExternalSafetyMeta(
+              pendingUntrustedOpen.report,
+              'denied',
+            ),
+          }
+        : f
+    )));
+    setPendingUntrustedOpen(null);
+    setEditingDocumentFile(null);
+    showToast('Denied — panel closed, extracted content discarded');
+  };
+
+  const filteredFiles = useMemo(() => {
+    const filterOpts = {
       selectedLibrary, selectedLibraryId, selectedSourceId, selectedAccountId, selectedFolderId,
       selectedCategory, searchQuery, disconnectedAccountIds, starredOnly, dateFilter,
-    }),
-    sortKey,
-    sortDirection,
-  );
+    };
+    return sortFiles(
+      mergeSystemSearchResults(
+        filterFiles(files, filterOpts),
+        searchQuery.trim().length >= 2
+          ? filterFiles(systemResults, {
+              ...filterOpts,
+              selectedFolderId: null,
+              selectedLibraryId: null,
+              selectedSourceId: null,
+              selectedLibrary: null,
+            })
+          : [],
+      ),
+      sortKey,
+      sortDirection,
+    );
+  }, [
+    files, systemResults, selectedLibrary, selectedLibraryId, selectedSourceId,
+    selectedAccountId, selectedFolderId, selectedCategory, searchQuery,
+    disconnectedAccountIds, starredOnly, dateFilter, sortKey, sortDirection,
+  ]);
 
-  const photoFiles = filteredFiles.filter(f => f.category === 'photo');
+  // Include Spotlight hits so inspector / Quick Look work for system search results.
+  const selectedFile =
+    files.find(f => f.id === selectedFileId)
+    || filteredFiles.find(f => f.id === selectedFileId)
+    || null;
+
+  const photoFiles = useMemo(
+    () => filteredFiles.filter(f => f.category === 'photo'),
+    [filteredFiles],
+  );
   const photoIndex = selectedFile?.category === 'photo' ? photoFiles.findIndex(f => f.id === selectedFile.id) : -1;
   const photoNav: PhotoNav | null =
     photoIndex >= 0 && photoFiles.length > 1
@@ -342,8 +477,7 @@ export default function App() {
   const openFolderPhoto = (index: number) => {
     const next = folderPhotos[index];
     if (!next) return;
-    setSelectedFileId(next.id);
-    setEditingPhotoFile(next);
+    void openPhotoFile(next);
   };
   const editorPhotoNav: PhotoNav | null = folderPhotoIndex >= 0
     ? {
@@ -355,7 +489,10 @@ export default function App() {
     : null;
 
   // Video navigation for playback controls
-  const videoFiles = filteredFiles.filter(f => f.category === 'video');
+  const videoFiles = useMemo(
+    () => filteredFiles.filter(f => f.category === 'video'),
+    [filteredFiles],
+  );
   const videoIndex = playingVideoFile ? videoFiles.findIndex(f => f.id === playingVideoFile.id) : -1;
   const canPreviousMedia = videoIndex > 0;
   const canNextMedia = videoIndex >= 0 && videoIndex < videoFiles.length - 1;
@@ -433,6 +570,8 @@ export default function App() {
             onViewModeChange={setViewMode}
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
+            systemSearching={systemSearching}
+            systemSearchActive={searchQuery.trim().length >= 2}
             selectedCategory={selectedCategory}
             onCategoryChange={cat => {
               setSelectedCategory(cat);
@@ -583,10 +722,7 @@ export default function App() {
                 playingAudioFile={playingAudioFile}
                 audioPlaylist={files.filter(f => f.category === 'audio')}
                 onSelectFile={file => openFileSelection(file)}
-                onEditPhoto={file => {
-                  openFileSelection(file);
-                  setEditingPhotoFile(file);
-                }}
+                onEditPhoto={file => { void openPhotoFile(file); }}
                 onOpenDocument={file => { void openDocumentFile(file); }}
                 onOpenVideo={async file => {
                   openFileSelection(file);
@@ -638,6 +774,9 @@ export default function App() {
                 onCopyLibraryInvite={() => { void copyLibraryInvite(); }}
                 onRefreshSwarm={() => { void refreshSwarm(); }}
                 hugContent={columnsInspectorFill}
+                systemSearchActive={searchQuery.trim().length >= 2 && systemSearchBridge.available()}
+                systemSearching={systemSearching}
+                systemHitCount={systemResults.length}
               />
             )}
 
@@ -663,8 +802,8 @@ export default function App() {
                   userName: userProfile.name,
                   isVaultUnlocked,
                   peerId: swarmStatus?.peerId ?? null,
-                  fileNames: filteredFiles.map(f => f.name),
-                  libraryNames: sharedLibraries.map(l => l.name),
+                  fileNames: filteredFiles.map(f => sanitizeContextLabel(f.name)),
+                  libraryNames: sharedLibraries.map(l => sanitizeContextLabel(l.name)),
                 }}
               />
             )}
@@ -676,10 +815,7 @@ export default function App() {
                 accounts={accounts}
                 folders={folders}
                 isOpen={true}
-                onEditPhoto={file => {
-                  openFileSelection(file);
-                  setEditingPhotoFile(file);
-                }}
+                onEditPhoto={file => { void openPhotoFile(file); }}
                 onOpenDocument={file => { void openDocumentFile(file); }}
                 onOpenVideo={(file, tab) => {
                   openFileSelection(file);
@@ -723,6 +859,16 @@ export default function App() {
         </div>
       </div>
 
+      {pendingUntrustedOpen && (
+        <UntrustedContentGate
+          isOpen
+          fileName={pendingUntrustedOpen.file.name}
+          report={pendingUntrustedOpen.report}
+          onConfirm={confirmUntrustedOpen}
+          onDeny={denyUntrustedOpen}
+        />
+      )}
+
       <AppModals
         selectedFile={selectedFile}
         photoNav={photoNav}
@@ -732,6 +878,7 @@ export default function App() {
         isQuickLookOpen={isQuickLookOpen}
         setIsQuickLookOpen={setIsQuickLookOpen}
         setEditingPhotoFile={setEditingPhotoFile}
+        onEditPhoto={file => { void openPhotoFile(file); }}
         setPlayingVideoFile={setPlayingVideoFile}
         sharedLibraries={sharedLibraries}
         setSharingLibrary={setSharingLibrary}

@@ -1,17 +1,18 @@
 import React from 'react';
 import { Play, CheckSquare, Square, Music2 } from 'lucide-react';
 import { FileItem, FolderItem } from '../../types';
-import { isEditableDocument } from '../../utils/documentKind';
+import { isEditableDocument, isMacAppBundle } from '../../utils/documentKind';
+import { previewBridge } from '../../services/previewBridge';
 import { FileThumbnail } from './FileThumbnail';
 import { FolderTile } from './FolderTile';
 import { SelectionAccent, SELECTION_CLASSES } from '../../utils/selectionAccent';
 import { formatTimecode } from '../../utils/format';
 import { setFileDragData } from '../../utils/fileDrag';
-import { useMediaDuration } from '../../hooks/useMediaDuration';
 
+/** Badge only when duration is already known — avoids a hidden <video> per tile. */
 const MediaDurationBadge: React.FC<{ file: FileItem }> = ({ file }) => {
-  const duration = useMediaDuration(file.url, file.videoMeta?.durationSeconds);
-  if (!(duration > 0)) return null;
+  const duration = file.videoMeta?.durationSeconds;
+  if (!(duration && duration > 0)) return null;
   return (
     <div className="absolute bottom-1.5 left-1.5 flex items-center gap-1 text-[10px] font-mono text-white bg-black/75 px-1.5 py-0.5 rounded-md">
       {file.category === 'audio'
@@ -56,7 +57,8 @@ export const IconsView: React.FC<IconsViewProps> = ({
       {files.map(file => {
         const isSelected = selectedIds.has(file.id);
         const isCurrent = selectedFileId === file.id;
-        const isPhoto = file.category === 'photo';
+        const isApp = isMacAppBundle(file);
+        const isPhoto = file.category === 'photo' && !isApp;
 
         return (
           <div
@@ -66,7 +68,9 @@ export const IconsView: React.FC<IconsViewProps> = ({
             onClick={() => onSelectFile(file)}
             onContextMenu={event => onFileContextMenu(file, event)}
             onDoubleClick={() => {
-              if (file.category === 'photo') onEditPhoto(file);
+              if (isApp && file.localPath && previewBridge.available()) {
+                void previewBridge.openWithDefault(file.localPath).catch(() => {});
+              } else if (file.category === 'photo') onEditPhoto(file);
               else if (file.category === 'video') onOpenVideo(file);
               else if (file.category === 'audio') onOpenAudio(file);
               else if (isEditableDocument(file)) onOpenDocument(file);
@@ -84,10 +88,18 @@ export const IconsView: React.FC<IconsViewProps> = ({
             <div className="aspect-[4/3] flex items-center justify-center relative">
               <div
                 className={`relative overflow-hidden shadow-md shadow-black/40 ${
-                  isPhoto
+                  isApp
+                    ? 'w-[72%] aspect-square rounded-[22%]'
+                    : isPhoto
                     ? 'w-[78%] aspect-square rounded-2xl'
                     : 'w-[82%] aspect-[4/3] rounded-xl'
-                } ${isPhoto ? 'bg-neutral-800' : 'bg-black/50 border border-white/8'}`}
+                } ${
+                  isApp
+                    ? 'bg-transparent'
+                    : isPhoto
+                    ? 'bg-neutral-800'
+                    : 'bg-black/50 border border-white/8'
+                }`}
               >
                 <FileThumbnail
                   file={file}

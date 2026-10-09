@@ -61,14 +61,16 @@ export interface CloudHttpResponse {
 export function guessCategory(mimeType: string, name: string): FileCategory {
   const mime = mimeType.toLowerCase();
   const lower = name.toLowerCase();
-  if (mime.startsWith('image/') || /\.(jpe?g|png|gif|webp|heic|raw|dng)$/i.test(lower)) return 'photo';
+  if (mime.startsWith('image/') || /\.(jpe?g|png|gif|webp|heic|heif|avif|tiff?|raw|dng|cr2|nef|arw)$/i.test(lower)) return 'photo';
   if (mime.startsWith('video/') || /\.(mp4|mov|mkv|webm|avi)$/i.test(lower)) return 'video';
   if (mime.startsWith('audio/') || /\.(mp3|wav|flac|aac|m4a|aiff)$/i.test(lower)) return 'audio';
   if (
     mime.includes('pdf')
     || mime.includes('document')
+    || mime.includes('sheet')
+    || mime.includes('presentation')
     || mime.includes('text')
-    || /\.(pdf|docx?|txt|md|rtf|pages)$/i.test(lower)
+    || /\.(pdf|docx?|txt|md|rtf|pages|odt|xlsx?|pptx?|numbers|key|csf)$/i.test(lower)
   ) {
     return 'document';
   }
