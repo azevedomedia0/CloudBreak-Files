@@ -37,9 +37,9 @@ With the variables set, Tauri signs, submits to Apple, waits, and staples. Outpu
 - The repo is private, so release downloads will not work publicly. Use a public releases repo or our own hosting.
 
 ## 7. Automation and other platforms
-- `.github/workflows/release.yml` builds macOS (universal, signed, notarized), Windows and Linux on a `v*` tag and uploads them to a draft release. It has not been run yet.
+- `.github/workflows/release.yml` builds macOS (universal, signed, notarized) and Windows on a `v*` tag and uploads them to a draft release. It has not been run yet.
 - Repository secrets it needs: `APPLE_CERTIFICATE` (base64 of the exported Developer ID `.p12`), `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_API_ISSUER`, `APPLE_API_KEY`, `APPLE_API_KEY_P8` (the key file contents).
-- Windows and Linux installers are unsigned. Windows will show a SmartScreen warning until the app is code-signed.
+- The Windows installer is unsigned and will show a SmartScreen warning until the app is code-signed. There is no Linux build.
 - Auto-updates (`tauri-plugin-updater`) are not set up. They need an updater key pair that only the maintainer should generate and keep, and a place to host the update manifest.
 
 ## Risks to settle first

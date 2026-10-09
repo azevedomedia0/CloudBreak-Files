@@ -15,6 +15,8 @@ Tauri 2 + React 19 + Vite + Tailwind 4 desktop app. It manages many cloud accoun
 - Do not run `npm install` inside a OneDrive folder if you can avoid it. `node_modules` will sync. Use `CARGO_TARGET_DIR` outside OneDrive for Rust builds.
 - Never write Apple credentials, key IDs, key file paths, tokens or passwords into this file, the docs or commits. Release credentials live in the maintainer's shell or in GitHub Actions secrets.
 
+- If a macOS build fails with `Failed to create app Assets.car: failed to run actool`, a stale Xcode helper is usually the cause. Run `pkill -x ibtoold` and build again from a normal terminal.
+
 ## What works
 - **Vault crypto** (`src-tauri/src/crypto.rs`, `commands.rs`): AES-256-GCM, PBKDF2 (600,000 iterations), constant-time passphrase verifier. The session key is held in Rust, not JS. In-session encryption is limited to 32 MB per file.
 - **Vault passphrase check** is saved: `vault.json` in the app data folder in the desktop app (`vault_store.rs`), localStorage in the browser (`services/browserVaultStore.ts`). A corrupt file or entry is an error and is never silently replaced.
@@ -46,7 +48,7 @@ Tauri 2 + React 19 + Vite + Tailwind 4 desktop app. It manages many cloud accoun
 - Bundle `ffmpeg` (or ship a clear first-run message), since a downloaded app will not have it on PATH.
 - Streaming encryption for files over 32 MB, and a non-base64 path for large P2P transfers.
 - Auto-updates (`tauri-plugin-updater`): needs an updater key pair and a hosted manifest.
-- Windows and Linux builds are only configured in the workflow. They are untested and unsigned.
+- The Windows build is only configured in the workflow. It is untested and unsigned.
 - Some sidebar actions still create placeholder entries without a real connection, for example "Connect to server" adds an entry that is marked online. Removable devices and "Server Nodes" are not backed by real detection.
 - The P2P create flow fills in invited peers with placeholder status and node IDs until a real peer connects.
 - Provider credentials are saved in plain browser storage (`services/cloud/credentials.ts`). Moving them to the OS keychain from Rust is the safer design.

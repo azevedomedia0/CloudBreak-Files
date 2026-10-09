@@ -21,15 +21,6 @@ npm run lint                  # TypeScript type check
 cd src-tauri && cargo test    # Rust tests (crypto and vault file)
 ```
 
-## Linux / COSMIC (scaffold)
-
-A native Rust port for the [COSMIC](https://github.com/pop-os/cosmic-epoch) desktop lives in [`Linux/`](Linux/). Architecture only for now: COSMIC shell, real vault crypto, placeholders for cloud/P2P/media. See [`Linux/README.md`](Linux/README.md).
-
-```bash
-cd Linux && cargo test --no-default-features
-cd Linux && cargo run          # COSMIC UI (Linux / Pop!_OS recommended)
-```
-
 ## Security notes
 
 - Encryption is AES-256-GCM with a PBKDF2-HMAC-SHA256 key (600,000 iterations). Passphrases need 8 or more characters.
