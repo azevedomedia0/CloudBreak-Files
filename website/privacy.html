@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Privacy Policy — CloudBreak Files</title>
+    <link rel="icon" type="image/png" href="./assets/icon.png" />
+    <link rel="preconnect" href="https://fonts.bunny.net" crossorigin />
+    <link href="https://fonts.bunny.net/css?family=kanit:400,500,600,700|dm-sans:400,500,600,700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css" />
+    <style>
+.doc{max-width:760px;margin:0 auto;padding:7rem 1.25rem 4rem;position:relative;z-index:1}
+.doc h1{font-size:clamp(2rem,5vw,2.8rem);margin:0 0 .5rem}
+.doc h2{font-size:1.3rem;margin:2.2rem 0 .6rem}
+.doc p,.doc li{color:var(--ink-soft);line-height:1.65}
+.doc a{color:var(--ink);text-decoration:underline}
+.doc code{font-size:.88em;background:rgba(20,24,31,.08);padding:.1em .35em;border-radius:4px}
+.doc table{width:100%;border-collapse:collapse;margin:1rem 0;font-size:.92rem}
+.doc th,.doc td{text-align:left;vertical-align:top;padding:.55rem .6rem;border-bottom:1px solid rgba(20,24,31,.14)}
+.doc .back{display:inline-block;margin-bottom:1.5rem;font-size:.9rem}
+</style>
+  </head>
+  <body>
+    <main class="doc">
+      <a class="back" href="./index.html">&larr; CloudBreak Files</a>
+<h1>Privacy Policy</h1>
+<p><strong>Cloudbreak Files</strong> · Effective 10 October 2026 · Published by Steven Azevedo / Azevedo Media</p>
+<p>Cloudbreak Files is a desktop app that runs on your computer. We do not run a service that receives your files, accounts or usage. This policy explains what stays on your device and the few places the app connects to on its own.</p>
+<h2>The short version</h2>
+<ul><li><strong>We collect nothing.</strong> There are no Cloudbreak accounts, no analytics, no crash reporting and no advertising.</li><li><strong>Your files and credentials stay on your device.</strong> Passwords and sign-in tokens are kept in your operating system's keychain.</li><li><strong>The app talks directly to services you choose</strong> (Google Drive, Dropbox, OneDrive, MEGA, Nextcloud, other people's devices for shared libraries). We are not in the middle.</li><li><strong>A few background requests happen automatically</strong>: an update check on GitHub and font downloads from Google Fonts. These are listed below.</li><li>The source code is public, so you can check all of this: <a href="https://github.com/azevedomedia0/CloudBreak-Files">https://github.com/azevedomedia0/CloudBreak-Files</a>.</li></ul>
+<h2>What is stored on your device</h2>
+<table><thead><tr><th>What</th><th>Where</th><th>Notes</th></tr></thead><tbody><tr><td>Cloud sign-in tokens and passwords (Google, Dropbox, OneDrive, rclone token, MEGA and Nextcloud passwords)</td><td>OS keychain (macOS Keychain, Windows Credential Manager, Linux Secret Service)</td><td>Removed when you disconnect the account. In the browser preview only, they are kept in the browser's local storage.</td></tr><tr><td>Vault passphrase check</td><td><code>vault.json</code> in the app data folder</td><td>Contains a verifier, never your passphrase. The encryption key lives in memory while the vault is unlocked.</td></tr><tr><td>Folders you added</td><td><code>local_roots.json</code> in the app data folder</td><td>Paths only. The app can read only folders you added.</td></tr><tr><td>Preferences, profile name, theme, saved network servers, volume</td><td>App local storage</td><td>Never sent to us.</td></tr><tr><td>Private library data and your P2P identity keys</td><td>App data folder</td><td>Library contents are encrypted.</td></tr></tbody></table>
+<p>On macOS the app data folder is <code>~/Library/Application Support/com.cloudbreak.files</code>.</p>
+<h2>Services the app connects to</h2>
+<p>Requests go straight from your device to the service. We do not see them.</p>
+<p><strong>Cloud accounts you connect.</strong> When you connect an account, the app talks to that provider with your permission:</p>
+<ul><li><strong>Google Drive</strong> (<code>accounts.google.com</code>, <code>oauth2.googleapis.com</code>, <code>www.googleapis.com</code>). Access requested: your Drive files and your email address.</li><li><strong>Dropbox</strong> (<code>www.dropbox.com</code>, <code>api.dropboxapi.com</code>). Access requested: account info, and reading and writing files.</li><li><strong>OneDrive</strong> (<code>login.microsoftonline.com</code>, <code>graph.microsoft.com</code>). Access requested: reading and writing files, your basic profile, and offline access to renew sign-in.</li><li><strong>MEGA</strong> (<code>g.api.mega.co.nz</code>). Your MEGA email and password are sent to MEGA to log in.</li><li><strong>Nextcloud</strong> (the server address you enter). Sign-in uses a revocable app password.</li></ul>
+<p>These providers handle your data under their own privacy policies. File names, sizes and contents are loaded to show and manage your files in the app. They are not sent to us or to anyone else.</p>
+<p><strong>Quick sign-in for Google Drive (rclone).</strong> This option runs the open-source rclone tool, bundled with the app, on your computer. It signs in with rclone's own Google app, so Google's consent screen shows the name "rclone". rclone talks to Google from your device. Nothing goes through us.</p>
+<p><strong>Update check (GitHub).</strong> A short while after the app starts, it asks GitHub (<code>github.com</code>) whether a newer release exists. GitHub receives your IP address and standard request details such as the app's user agent. Updates are downloaded only when you choose to install them.</p>
+<p><strong>Fonts (Google Fonts).</strong> The app loads its interface fonts from Google Fonts (<code>fonts.googleapis.com</code>, <code>fonts.gstatic.com</code>) when it starts, and more fonts if you pick them in the document editor. Google receives your IP address and standard request details.</p>
+<p><strong>Private libraries (peer to peer).</strong> When you create, join or share a private library, the app connects directly to the devices named in an invite. There is no central server, tracker or public peer discovery. While a library is shared, the app listens for connections on TCP port 7421. People you share with can see your IP address and your library peer ID. File contents and library manifests are encrypted.</p>
+<p><strong>Network shares.</strong> If you save an SMB or NFS server, the app checks whether it is reachable by opening a connection to the address you saved.</p>
+<p>Everything else (browsing local folders, photo and video editing, the vault, search and the terminal panel) works on your device without a network connection.</p>
+<h2>Google API data</h2>
+<p>Cloudbreak Files' use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
+<ul><li>We request access to your Google Drive and your email address so you can browse and manage your Drive in the app and see which account is connected.</li><li>This data is processed on your device only. It is not sent to us, sold, shared, used for advertising, or used to train AI models. No person at Cloudbreak can read it, because we never receive it.</li><li>You can revoke access at any time at <a href="https://myaccount.google.com/permissions">https://myaccount.google.com/permissions</a>.</li></ul>
+<h2>Your choices</h2>
+<ul><li><strong>Disconnect an account</strong> in the app to remove its credentials from your keychain.</li><li><strong>Revoke access</strong> with the provider: Google Account → Security → Third-party access; Dropbox → Settings → Connected apps; Microsoft account → Privacy → Apps and services; Nextcloud → Settings → Security → Devices &amp; sessions.</li><li><strong>Delete local data</strong> by uninstalling the app and deleting its app data folder, and by removing the "com.cloudbreak.files" entries from your keychain.</li><li><strong>Stop background requests</strong> by blocking the app's network access with your firewall. Updates and fonts will then stop working.</li></ul>
+<h2>Children</h2>
+<p>Cloudbreak Files is not directed at children under 13, and we do not knowingly collect information from anyone.</p>
+<h2>This website</h2>
+<p>The Cloudbreak Files website is hosted on GitHub Pages. It does not use analytics or cookies. Your browser loads fonts from Bunny Fonts, some logos from <code>cdn.simpleicons.org</code>, and asks GitHub's API for the latest release. Those services receive your IP address.</p>
+<h2>Changes</h2>
+<p>If the app starts collecting or sending anything new, this policy will change first, and the new date will appear at the top. Earlier versions are in the repository history.</p>
+<h2>Contact</h2>
+<p>Questions or concerns: open an issue at <a href="https://github.com/azevedomedia0/CloudBreak-Files/issues">https://github.com/azevedomedia0/CloudBreak-Files/issues</a>.</p>
+    </main>
+  </body>
+</html>

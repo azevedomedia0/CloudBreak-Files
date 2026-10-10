@@ -467,7 +467,7 @@ export function recordToSharedLibrary(rec: P2pLibraryRecord): import('../types')
     isSeeding: rec.isSeeding,
     seedingStatus: (rec.seedingStatus as 'active' | 'paused') || undefined,
     p2pProtocol: 'Cloudbreak private · invite-dial only',
-    p2pEncryptionCipher: 'AES-256-GCM E2EE',
+    p2pEncryptionCipher: 'AES-256-GCM',
     senderPeerNodeId: rec.ownerPeerId,
     seedingBandwidthCap: rec.bandwidthCap ?? undefined,
     expiresAt: rec.expiresAt ?? undefined,

@@ -9,7 +9,7 @@ export interface CloudAccount {
   usedBytes: number;
   totalBytes: number;
   status: 'connected' | 'syncing' | 'offline';
-  encryptionLevel: 'Standard TLS' | 'Client E2EE AES-256' | 'Zero-Knowledge Vault';
+  encryptionLevel: 'Standard TLS' | 'Client-side AES-256';
   isVault?: boolean;
   /** True when credentials were verified against the live provider API. */
   liveConnected?: boolean;

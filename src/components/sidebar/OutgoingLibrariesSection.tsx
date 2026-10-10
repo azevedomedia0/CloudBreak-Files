@@ -61,7 +61,7 @@ export const OutgoingLibrariesSection: React.FC<OutgoingLibrariesSectionProps> =
                       ? 'bg-purple-500/20 text-purple-100 font-medium shadow-sm border border-purple-400/30'
                       : 'text-neutral-300 hover:bg-white/5 hover:text-white'
                   }`}
-                  title={`Currently seeding to ${peerCount} specified P2P users\nSpeed: ${lib.transferSpeed || 'Active'}\nProtocol: ${lib.p2pProtocol || 'Zero-Knowledge P2P Seeder'}`}
+                  title={`Currently seeding to ${peerCount} specified P2P users\nSpeed: ${lib.transferSpeed || 'Active'}\nProtocol: ${lib.p2pProtocol || 'Invite-only P2P (AES-256-GCM)'}`}
                 >
                   <div className="flex items-center gap-2 truncate min-w-0">
                     <OutgoingLibraryIcon

@@ -3,7 +3,6 @@ import {
   X, Shield, ShieldCheck, Key, Lock, Unlock, RefreshCw, 
   Check, Copy, AlertTriangle, FileCode, Cpu, Fingerprint
 } from '@/src/icons';
-import { formatFingerprint } from '../utils/crypto';
 
 interface VaultSecurityModalProps {
   isOpen: boolean;
@@ -19,29 +18,8 @@ export const VaultSecurityModal: React.FC<VaultSecurityModalProps> = ({
   onToggleVaultLock,
 }) => {
   const [passphrase, setPassphrase] = useState<string>('');
-  const [isAuditing, setIsAuditing] = useState<boolean>(false);
-  const [auditComplete, setAuditComplete] = useState<boolean>(false);
-  const [copiedKey, setCopiedKey] = useState<boolean>(false);
-
-  const keyFingerprint = '9c:a1:83:fe:72:0b:da:51:98:3c:e4:aa:4f:b1:20:99';
-  const seedWords = 'aurora quantum vector velvet prism cipher kinetic obsidian horizon cobalt zenith echo';
 
   if (!isOpen) return null;
-
-  const handleAudit = () => {
-    setIsAuditing(true);
-    setAuditComplete(false);
-    setTimeout(() => {
-      setIsAuditing(false);
-      setAuditComplete(true);
-    }, 1200);
-  };
-
-  const copyKey = () => {
-    navigator.clipboard.writeText(keyFingerprint);
-    setCopiedKey(true);
-    setTimeout(() => setCopiedKey(false), 2000);
-  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
@@ -56,18 +34,18 @@ export const VaultSecurityModal: React.FC<VaultSecurityModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-sm font-semibold text-neutral-100">
-                  End-to-End Cryptographic Security Vault
+                  Encrypted Vault
                 </h2>
                 <span className={`text-[10px] px-2 py-0.5 rounded font-mono border ${
                   isVaultUnlocked 
                     ? 'bg-cyan-950/40 text-cyan-300 border-cyan-800' 
                     : 'bg-amber-950/40 text-amber-300 border-amber-800'
                 }`}>
-                  {isVaultUnlocked ? 'VAULT UNLOCKED' : 'VAULT ENCRYPTED / LOCKED'}
+                  {isVaultUnlocked ? 'VAULT UNLOCKED' : 'VAULT LOCKED'}
                 </span>
               </div>
               <p className="text-xs text-neutral-400 mt-0.5">
-                Client-Side AES-256-GCM · Zero-Knowledge Architecture
+                Client-side AES-256-GCM · key derived from your passphrase
               </p>
             </div>
           </div>
@@ -108,7 +86,7 @@ export const VaultSecurityModal: React.FC<VaultSecurityModalProps> = ({
             </div>
             
             <p className="text-xs text-neutral-400">
-              When locked, media previews in the sovereign vault require your private passphrase for decryption. The first unlock sets the passphrase (8 or more characters); later unlocks — including after a page reload — must match it. Keep it safe. It cannot be recovered.
+              When locked, files encrypted with the vault need your passphrase to open. The first unlock sets the passphrase (8 or more characters); later unlocks — including after a page reload — must match it. Keep it safe. It cannot be recovered, and if you lose it the encrypted files cannot be opened.
             </p>
 
             {!isVaultUnlocked && (
@@ -138,74 +116,19 @@ export const VaultSecurityModal: React.FC<VaultSecurityModalProps> = ({
               </div>
               <div className="p-3 bg-neutral-950/50 border border-neutral-800 rounded-lg">
                 <div className="text-neutral-500 text-[10px]">Key Derivation</div>
-                <div className="text-neutral-200 font-medium mt-1 font-mono">PBKDF2 (100,000 rds)</div>
+                <div className="text-neutral-200 font-medium mt-1 font-mono">PBKDF2 (600,000 iterations)</div>
               </div>
               <div className="p-3 bg-neutral-950/50 border border-neutral-800 rounded-lg">
-                <div className="text-neutral-500 text-[10px]">Integrity Checksum</div>
-                <div className="text-neutral-200 font-medium mt-1 font-mono">SHA-256 (Constant Time)</div>
+                <div className="text-neutral-500 text-[10px]">Passphrase Check</div>
+                <div className="text-neutral-200 font-medium mt-1 font-mono">Salted verifier, constant-time compare</div>
               </div>
               <div className="p-3 bg-neutral-950/50 border border-neutral-800 rounded-lg">
                 <div className="text-neutral-500 text-[10px]">Initialization Vector</div>
-                <div className="text-neutral-200 font-medium mt-1 font-mono">96-bit CSPRNG per Asset</div>
+                <div className="text-neutral-200 font-medium mt-1 font-mono">96-bit random nonce per file</div>
               </div>
             </div>
           </div>
 
-          {/* Master Key Fingerprint */}
-          <div className="p-4 bg-neutral-950/50 border border-neutral-800 rounded-xl space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-neutral-300 flex items-center gap-1.5">
-                <Fingerprint className="w-4 h-4 text-cyan-400" />
-                <span>Master Key Fingerprint</span>
-              </span>
-              <button
-                onClick={copyKey}
-                className="text-[11px] text-cyan-400 hover:underline flex items-center gap-1"
-              >
-                {copiedKey ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                <span>{copiedKey ? 'Copied' : 'Copy'}</span>
-              </button>
-            </div>
-            <div className="p-2.5 bg-neutral-900 rounded font-mono text-xs text-neutral-300 break-all border border-neutral-800">
-              {keyFingerprint}
-            </div>
-          </div>
-
-          {/* 12-Word Vault Recovery Mnemonic */}
-          <div className="space-y-2">
-            <h4 className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wider">
-              Offline Recovery Seed
-            </h4>
-            <div className="p-3 bg-neutral-950 rounded-lg border border-neutral-800/80">
-              <div className="grid grid-cols-4 gap-2 font-mono text-[11px] text-neutral-400">
-                {seedWords.split(' ').map((word, i) => (
-                  <div key={i} className="flex gap-1.5">
-                    <span className="text-neutral-600 select-none">{(i + 1).toString().padStart(2, '0')}</span>
-                    <span className="text-neutral-200">{word}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* E2EE Audit Trigger */}
-          <div className="pt-2">
-            <button
-              onClick={handleAudit}
-              disabled={isAuditing}
-              className="w-full py-2.5 px-4 rounded-lg bg-neutral-800 hover:bg-neutral-750 text-neutral-200 border border-neutral-700 text-xs font-medium flex items-center justify-center gap-2 transition-colors"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isAuditing ? 'animate-spin' : ''}`} />
-              <span>{isAuditing ? 'Verifying SHA-256 Hashes...' : 'Run E2EE Integrity & Zero-Knowledge Audit'}</span>
-            </button>
-
-            {auditComplete && (
-              <div className="mt-3 p-3 bg-emerald-950/30 border border-emerald-800/50 rounded-lg text-xs text-emerald-300 flex items-center gap-2">
-                <Check className="w-4 h-4 text-emerald-400" />
-                <span>Audit Passed: All 8 assets verified with valid signatures and intact ciphertexts.</span>
-              </div>
-            )}
-          </div>
 
         </div>
 

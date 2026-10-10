@@ -26,7 +26,7 @@ export function buildCloudAccount(
     usedBytes: info?.usedBytes ?? 0,
     totalBytes: info?.totalBytes || 1,
     status: info ? 'connected' : 'offline',
-    encryptionLevel: provider === 'MEGA Drive' ? 'Zero-Knowledge Vault' : 'Standard TLS',
+    encryptionLevel: 'Standard TLS',
     liveConnected: info !== null,
     endpoint: endpoint || defaultEndpoint(provider),
   };
