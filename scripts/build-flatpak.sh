@@ -21,6 +21,13 @@ if [[ "$(uname -s)" != "Linux" ]]; then
   exit 1
 fi
 
+# org.flatpak.Builder talks to the host flatpak over the session bus to find
+# user-installed SDKs. GitHub Actions runners have no session bus by default.
+if [[ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]] && command -v dbus-run-session >/dev/null 2>&1; then
+  echo "Starting a temporary D-Bus session for Flatpak Builder…"
+  exec dbus-run-session -- "$0" "$@"
+fi
+
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/tmp/cloudbreak-cargo-target}"
 FLATPAK_DIR="$ROOT/flatpak"
 # flatpak-builder requires state-dir and build-dir on the same filesystem.

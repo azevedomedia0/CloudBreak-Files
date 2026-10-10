@@ -22,6 +22,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     patchelf \
     flatpak \
     flatpak-builder \
+    appstream \
+    dbus-x11 \
     elfutils \
     file \
     xz-utils \

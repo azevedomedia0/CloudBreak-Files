@@ -165,6 +165,7 @@ jobs:
             flatpak \
             flatpak-builder \
             appstream \
+            dbus-x11 \
             elfutils \
             binutils \
             zstd \
