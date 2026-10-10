@@ -95,7 +95,10 @@ mkdir -p "$(dirname "$BUNDLE_OUT")" "$STATE_DIR"
   cd "$FLATPAK_DIR"
   # Runtime/SDK are preinstalled above. Do not pass --install-deps-from=flathub:
   # nested flatpak install from org.flatpak.Builder needs a D-Bus session (fails in CI).
+  # --disable-rofiles-fuse: GitHub runners / nested Flatpak Builder often lack
+  # a working FUSE mount for rofiles-fuse.
   run_flatpak_builder --force-clean --user \
+    --disable-rofiles-fuse \
     --state-dir="$STATE_DIR" \
     --repo="$REPO_DIR" "$BUILD_DIR" com.cloudbreak.files.yml
 )
