@@ -16,5 +16,8 @@ src-tauri/binaries/ffmpeg-*
 src-tauri/tauri.ffmpeg.conf.json
 # Flatpak build intermediates (see docs/flatpak.md).
 flatpak/cloudbreak-files.deb
+flatpak/.build/
+flatpak/.repo/
+flatpak/.flatpak-builder/
 dist-flatpak/
 *.zip

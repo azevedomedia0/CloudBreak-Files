@@ -31,10 +31,11 @@ fi
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/tmp/cloudbreak-cargo-target}"
 FLATPAK_DIR="$ROOT/flatpak"
 # flatpak-builder requires state-dir and build-dir on the same filesystem.
-# Keep all three under /tmp so CI workspace (often a different mount) is fine.
-BUILD_DIR="${FLATPAK_BUILD_DIR:-/tmp/cloudbreak-flatpak-build}"
-REPO_DIR="${FLATPAK_REPO_DIR:-/tmp/cloudbreak-flatpak-repo}"
-STATE_DIR="${FLATPAK_STATE_DIR:-/tmp/cloudbreak-flatpak-state}"
+# Keep them under the repo (not /tmp): org.flatpak.Builder's sandbox has a
+# private /tmp, so host /tmp paths break when spawning build modules.
+BUILD_DIR="${FLATPAK_BUILD_DIR:-$ROOT/flatpak/.build}"
+REPO_DIR="${FLATPAK_REPO_DIR:-$ROOT/flatpak/.repo}"
+STATE_DIR="${FLATPAK_STATE_DIR:-$ROOT/flatpak/.flatpak-builder}"
 BUNDLE_OUT="${FLATPAK_BUNDLE:-$ROOT/dist-flatpak/com.cloudbreak.files.flatpak}"
 GNOME_RUNTIME_VERSION="${GNOME_RUNTIME_VERSION:-49}"
 
