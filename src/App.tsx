@@ -45,6 +45,8 @@ import {
   updaterAvailable,
 } from './services/updaterBridge';
 import { isTauri } from '@tauri-apps/api/core';
+import { whenIdle } from './utils/deferWork';
+import { desktopScanReady } from './utils/startupGate';
 import {
   AppPreferences,
   applyTheme,
@@ -123,7 +125,7 @@ export default function App() {
   const [userProfile, setUserProfileState] = useState<UserProfile>(() => loadProfile());
   const [isAddAccountOpen, setIsAddAccountOpen] = useState<boolean>(false);
   const [integratingAccount, setIntegratingAccount] = useState<CloudAccount | null>(null);
-  const [isInspectorOpen, setIsInspectorOpen] = useState<boolean>(() => loadPreferences().showInspectorOnLaunch);
+  const [isInspectorOpen, setIsInspectorOpen] = useState(true);
   const [sidePanelMode, setSidePanelMode] = useState<'inspector' | 'terminal'>('inspector');
 
   const setUserProfile = (profile: UserProfile) => {
@@ -136,7 +138,6 @@ export default function App() {
     savePreferences(prefs);
     applyTheme(prefs.theme);
     setViewMode(prefs.defaultView);
-    setIsInspectorOpen(prefs.showInspectorOnLaunch);
   };
 
   // Resizable sidebar & inspector widths
@@ -191,14 +192,19 @@ export default function App() {
       if (localStorage.getItem(key) === '1') return;
     } catch { /* private mode */ }
     let cancelled = false;
-    void getFfmpegStatus().then(status => {
-      if (cancelled || status.available) return;
-      showToast(status.installHint || 'ffmpeg is required for video trim and convert.');
-      try {
-        localStorage.setItem(key, '1');
-      } catch { /* ignore */ }
-    });
-    return () => { cancelled = true; };
+    const cancelIdle = whenIdle(() => {
+      void desktopScanReady.then(() => getFfmpegStatus()).then(status => {
+        if (cancelled || status.available) return;
+        showToast(status.installHint || 'ffmpeg is required for video trim and convert.');
+        try {
+          localStorage.setItem(key, '1');
+        } catch { /* ignore */ }
+      });
+    }, 2500);
+    return () => {
+      cancelled = true;
+      cancelIdle();
+    };
   }, [showToast]);
 
   // Remind when Full Disk Access is still off (native side opens Settings once on first launch).
@@ -206,21 +212,27 @@ export default function App() {
     if (!isTauri()) return;
     let cancelled = false;
     const key = 'cloudbreak.fdaReminderDismissed';
-    void (async () => {
-      try {
-        if (localStorage.getItem(key) === '1') return;
-        const { fullDiskAccessGranted } = await import('./services/permissionsBridge');
-        const granted = await fullDiskAccessGranted();
-        if (cancelled || granted) return;
-        showToast('Turn on Cloudbreak Files under System Settings → Privacy & Security → Full Disk Access');
+    const cancelIdle = whenIdle(() => {
+      void (async () => {
         try {
-          localStorage.setItem(key, '1');
-        } catch { /* ignore */ }
-      } catch {
-        // Browser or older build without the command.
-      }
-    })();
-    return () => { cancelled = true; };
+          await desktopScanReady;
+          if (localStorage.getItem(key) === '1') return;
+          const { fullDiskAccessGranted } = await import('./services/permissionsBridge');
+          const granted = await fullDiskAccessGranted();
+          if (cancelled || granted) return;
+          showToast('Turn on Cloudbreak Files under System Settings → Privacy & Security → Full Disk Access');
+          try {
+            localStorage.setItem(key, '1');
+          } catch { /* ignore */ }
+        } catch {
+          // Browser or older build without the command.
+        }
+      })();
+    }, 3000);
+    return () => {
+      cancelled = true;
+      cancelIdle();
+    };
   }, [showToast]);
 
   // Resolve installed version + quiet launch check for a newer signed release.
@@ -231,28 +243,34 @@ export default function App() {
       if (!cancelled) setAppVersion(v);
     });
     const key = 'cloudbreak.updatePromptDismissed';
-    void (async () => {
-      try {
-        if (!(await updaterAvailable())) return;
-        const result = await checkForAppUpdate();
-        if (cancelled || !result.available) return;
-        const dismissed = (() => {
-          try {
-            return localStorage.getItem(key);
-          } catch {
-            return null;
-          }
-        })();
-        if (dismissed === result.version) return;
-        showToast(`Update ${result.version} is available — open Profile → Preferences to install`);
+    const cancelIdle = whenIdle(() => {
+      void (async () => {
         try {
-          localStorage.setItem(key, result.version);
-        } catch { /* ignore */ }
-      } catch {
-        // Offline / private repo / no latest.json yet — quiet.
-      }
-    })();
-    return () => { cancelled = true; };
+          await desktopScanReady;
+          if (!(await updaterAvailable())) return;
+          const result = await checkForAppUpdate();
+          if (cancelled || !result.available) return;
+          const dismissed = (() => {
+            try {
+              return localStorage.getItem(key);
+            } catch {
+              return null;
+            }
+          })();
+          if (dismissed === result.version) return;
+          showToast(`Update ${result.version} is available — open Profile → Preferences to install`);
+          try {
+            localStorage.setItem(key, result.version);
+          } catch { /* ignore */ }
+        } catch {
+          // Offline / private repo / no latest.json yet — quiet.
+        }
+      })();
+    }, 5000);
+    return () => {
+      cancelled = true;
+      cancelIdle();
+    };
   }, [showToast]);
 
   const handleCheckForUpdates = async () => {
@@ -291,6 +309,7 @@ export default function App() {
   useNativeAppMenu({
     hasSelection: !!selectedFileId,
     isEncrypted: !!selectedFileForMenu?.encryption?.isEncrypted,
+    onCheckForUpdates: handleCheckForUpdates,
   });
 
   useEffect(() => {
@@ -542,7 +561,6 @@ export default function App() {
     selectedAccountId,
     selectedFolder,
     showToast,
-    confirmBeforeDelete: appPreferences.confirmBeforeDelete,
     isVaultUnlocked,
   });
 
@@ -674,7 +692,7 @@ export default function App() {
   const handleDeleteFolders = useCallback(async (sources: FolderItem[]) => {
     if (!sources.length) return;
     const label = sources.length === 1 ? `“${sources[0].name}”` : `${sources.length} folders`;
-    if (appPreferences.confirmBeforeDelete && !window.confirm(`Move ${label} to the Trash?`)) return;
+    if (!window.confirm(`Move ${label} to the Trash?`)) return;
 
     const removeIds = new Set<string>();
     for (const folder of sources) {
@@ -696,10 +714,10 @@ export default function App() {
     }
 
     setFolders(prev => prev.filter(f => !removeIds.has(f.id)));
-    setFiles(prev => prev.filter(f => !removeIds.has(f.folderId)));
+    setFiles(prev => prev.filter(f => !f.folderId || !removeIds.has(f.folderId)));
     if (selectedFolderId && removeIds.has(selectedFolderId)) setSelectedFolderId(null);
     showToast(sources.length === 1 ? `Moved “${sources[0].name}” to the Trash` : `Moved ${sources.length} folders to the Trash`);
-  }, [appPreferences.confirmBeforeDelete, collectDescendantFolderIds, selectedFolderId, showToast]);
+  }, [collectDescendantFolderIds, selectedFolderId, showToast]);
 
   const handleToggleFolderTag = useCallback((folderIds: string[], tag: string) => {
     const idSet = new Set(folderIds);

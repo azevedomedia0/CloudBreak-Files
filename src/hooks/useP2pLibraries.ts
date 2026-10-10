@@ -5,6 +5,8 @@ import type { CreateP2pLibraryForm, JoinP2pLibraryForm } from '../components/Sid
 import { mergeSwarmPeersIntoLibraries, pendingInvitePeer } from '../utils/p2pPeers';
 import { localFs } from '../services/localFsBridge';
 import { isTauri } from '@tauri-apps/api/core';
+import { whenIdle } from '../utils/deferWork';
+import { desktopScanReady } from '../utils/startupGate';
 
 const MAX_BASE64_P2P_BYTES = 32 * 1024 * 1024;
 
@@ -29,45 +31,52 @@ export function useP2pLibraries({
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      try {
-        await p2pBridge.getIdentity(userName);
-        const records = await p2pBridge.listLibraries();
-        if (cancelled) return;
-        if (records.length) {
-          setSharedLibraries(prev => {
-            const byId = new Map(prev.map(l => [l.id, l]));
+    const cancelIdle = whenIdle(() => {
+      void (async () => {
+        try {
+          await desktopScanReady;
+          await p2pBridge.getIdentity(userName);
+          const records = await p2pBridge.listLibraries();
+          if (cancelled) return;
+          if (records.length) {
+            setSharedLibraries(prev => {
+              const byId = new Map(prev.map(l => [l.id, l]));
+              for (const rec of records) {
+                byId.set(rec.libraryId, recordToSharedLibrary(rec));
+              }
+              return [...byId.values()];
+            });
+            // Resume seeding off the critical path — identity/list already painted the sidebar.
             for (const rec of records) {
-              byId.set(rec.libraryId, recordToSharedLibrary(rec));
-            }
-            return [...byId.values()];
-          });
-          // Resume seeding for outgoing libraries so the tray status dot goes green.
-          for (const rec of records) {
-            if (rec.direction === 'outgoing' && rec.isSeeding) {
-              try {
-                await p2pBridge.startSeeding(rec.libraryId);
-              } catch {
-                // ignore per-library resume failures
+              if (cancelled) return;
+              if (rec.direction === 'outgoing' && rec.isSeeding) {
+                try {
+                  await p2pBridge.startSeeding(rec.libraryId);
+                } catch {
+                  // ignore per-library resume failures
+                }
               }
             }
           }
-        }
-        const status = await p2pBridge.swarmStatus();
-        if (!cancelled) {
-          setSwarmStatus(status);
-          setSharedLibraries(prev => mergeSwarmPeersIntoLibraries(prev, status));
-        }
-        try {
-          await p2pBridge.refreshTrayStatus();
+          const status = await p2pBridge.swarmStatus();
+          if (!cancelled) {
+            setSwarmStatus(status);
+            setSharedLibraries(prev => mergeSwarmPeersIntoLibraries(prev, status));
+          }
+          try {
+            await p2pBridge.refreshTrayStatus();
+          } catch {
+            // Browser preview has no tray
+          }
         } catch {
-          // Browser preview has no tray
+          // Browser / first launch — identity created on first seed/join
         }
-      } catch {
-        // Browser / first launch — identity created on first seed/join
-      }
-    })();
-    return () => { cancelled = true; };
+      })();
+    }, 800);
+    return () => {
+      cancelled = true;
+      cancelIdle();
+    };
   }, [userName]);
 
   const refreshSwarm = async () => {

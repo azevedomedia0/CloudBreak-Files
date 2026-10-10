@@ -4,9 +4,11 @@ import type {
 } from '../types';
 import { importLocalFolderAtPath, mergeById, pickLocalFolderFromDisk } from '../utils/importLocalFolder';
 import {
+  DEFAULT_LOCAL_FOLDER_DEFS,
   defaultLocalFolderIdForName,
   mergeLocalFolders,
 } from '../utils/defaultLocalFolders';
+import { desktopScanReady, markDesktopScanReady, markDesktopScanSkipped } from '../utils/startupGate';
 import { localFs, type LocalFolder } from '../services/localFsBridge';
 import {
   ejectVolume,
@@ -20,6 +22,7 @@ import {
   type SavedNetworkServer,
   volumeToRemovableDevice,
 } from '../services/volumesBridge';
+import { delay, whenIdle } from '../utils/deferWork';
 
 export type { NetworkServerEntry };
 
@@ -42,6 +45,23 @@ interface UseSidebarSourcesOptions {
 }
 
 const VOLUME_POLL_MS = 8_000;
+const DESKTOP_ROOT_ID = DEFAULT_LOCAL_FOLDER_DEFS[0].id;
+/** How many local roots to scan at once after Desktop. */
+const LOCAL_SCAN_CONCURRENCY = 2;
+
+const STANDARD_SCAN_ORDER = new Map(
+  DEFAULT_LOCAL_FOLDER_DEFS.map((def, index) => [def.name.toLowerCase(), index]),
+);
+
+/** Desktop always first; other standards follow Finder order; heavy roots last. */
+function localScanPriority(folderName: string, rootId: string | undefined): number {
+  if (rootId === DESKTOP_ROOT_ID || folderName.toLowerCase() === 'desktop') return 0;
+  if (folderName === 'Applications') return 200;
+  if (folderName === 'Photos') return 190;
+  const order = STANDARD_SCAN_ORDER.get(folderName.toLowerCase());
+  if (order != null) return 10 + order;
+  return 100;
+}
 
 /** Sidebar content: local folders, favorites, network servers, removable devices, and what is selected. */
 export function useSidebarSources({
@@ -107,15 +127,36 @@ export function useSidebarSources({
     setNetworkServers(mergeNetworkLists(saved, reachability, mountedNet));
   }, [mergeNetworkLists]);
 
+  // Defer volume/network probe past first paint; avoid double-refresh on mount.
   useEffect(() => {
-    void refreshVolumesAndServers();
-    if (!localFs.available()) return;
+    let cancelled = false;
+    const cancelIdle = whenIdle(() => {
+      void (async () => {
+        await desktopScanReady;
+        if (!cancelled) void refreshVolumesAndServers();
+      })();
+    }, 600);
+    if (!localFs.available()) {
+      return () => {
+        cancelled = true;
+        cancelIdle();
+      };
+    }
     const id = window.setInterval(() => { void refreshVolumesAndServers(); }, VOLUME_POLL_MS);
-    return () => window.clearInterval(id);
+    return () => {
+      cancelled = true;
+      cancelIdle();
+      window.clearInterval(id);
+    };
   }, [refreshVolumesAndServers]);
 
+  const skipNetworkPersistRefresh = useRef(true);
   useEffect(() => {
     persistSavedNetworkServers(savedNetworkServers);
+    if (skipNetworkPersistRefresh.current) {
+      skipNetworkPersistRefresh.current = false;
+      return;
+    }
     void refreshVolumesAndServers();
   }, [savedNetworkServers, refreshVolumesAndServers]);
 
@@ -530,46 +571,82 @@ export function useSidebarSources({
     })();
   };
 
+  // Restore local folders after first paint: Desktop alone, then the rest (parallel batches).
   useEffect(() => {
-    if (!localFs.available()) return;
+    if (!localFs.available()) {
+      markDesktopScanSkipped();
+      return;
+    }
     let cancelled = false;
-    void (async () => {
-      try {
-        const standards = await localFs.ensureStandardFolders().catch(() => []);
-        const saved = await localFs.listFolders();
-        const standardPaths = new Set(standards.flatMap(f => diskPathsFor(f)));
+    const cancelIdle = whenIdle(() => {
+      void (async () => {
+        try {
+          const standards = await localFs.ensureStandardFolders().catch(() => [] as LocalFolder[]);
+          const saved = await localFs.listFolders().catch(() => [] as LocalFolder[]);
+          if (cancelled) return;
+          const standardPaths = new Set(standards.flatMap(f => diskPathsFor(f)));
 
-        // Parallel imports, then one React update for standards + one for extra saved roots.
-        const standardImports = (
-          await Promise.all(standards.map(async folder => {
+          type ImportJob = {
+            folder: LocalFolder;
+            opts?: { rootId?: string; displayName: string };
+            priority: number;
+          };
+
+          const jobs: ImportJob[] = [
+            ...standards.map(folder => {
+              const rootId = defaultLocalFolderIdForName(folder.name);
+              return {
+                folder,
+                opts: { rootId, displayName: folder.name },
+                priority: localScanPriority(folder.name, rootId),
+              };
+            }),
+            ...saved
+              .filter(folder => !standardPaths.has(folder.path))
+              .map(folder => ({ folder, priority: 150 } as ImportJob)),
+          ];
+          jobs.sort((a, b) => a.priority - b.priority);
+
+          const importOne = async (job: ImportJob) => {
             if (cancelled) return null;
-            return importLocalFolderAtPath(folder, {
-              rootId: defaultLocalFolderIdForName(folder.name),
-              displayName: folder.name,
-            }).catch(() => null);
-          }))
-        ).filter((x): x is NonNullable<typeof x> => !!x);
+            return importLocalFolderAtPath(job.folder, job.opts).catch(() => null);
+          };
 
-        if (!cancelled && standardImports.length) {
-          applyImportedFoldersBatch(standardImports);
+          const desktopIdx = jobs.findIndex(
+            j => j.opts?.rootId === DESKTOP_ROOT_ID || j.folder.name.toLowerCase() === 'desktop',
+          );
+          const desktopJob = desktopIdx >= 0 ? jobs[desktopIdx] : jobs[0];
+          const rest = desktopIdx >= 0
+            ? [...jobs.slice(0, desktopIdx), ...jobs.slice(desktopIdx + 1)]
+            : jobs.slice(1);
+
+          if (desktopJob) {
+            const imp = await importOne(desktopJob);
+            if (!cancelled && imp) applyImportedFoldersBatch([imp]);
+          }
+          markDesktopScanReady();
+
+          for (let i = 0; i < rest.length; i += LOCAL_SCAN_CONCURRENCY) {
+            if (cancelled) return;
+            await delay(0);
+            const batch = rest.slice(i, i + LOCAL_SCAN_CONCURRENCY);
+            const imports = (await Promise.all(batch.map(importOne))).filter(
+              (imp): imp is NonNullable<typeof imp> => imp != null,
+            );
+            if (!cancelled && imports.length) applyImportedFoldersBatch(imports);
+          }
+        } catch {
+          markDesktopScanReady();
         }
+      })();
+    }, 80);
 
-        const savedImports = (
-          await Promise.all(saved.map(async folder => {
-            if (cancelled || standardPaths.has(folder.path)) return null;
-            return importLocalFolderAtPath(folder).catch(() => null);
-          }))
-        ).filter((x): x is NonNullable<typeof x> => !!x);
-
-        if (!cancelled && savedImports.length) {
-          applyImportedFoldersBatch(savedImports);
-        }
-      } catch {
-        // empty default stubs stay in the sidebar.
-      }
-    })();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      cancelled = true;
+      cancelIdle();
+      markDesktopScanReady();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- launch-only
   }, []);
 
   return {

@@ -4,6 +4,8 @@ import { cloudService, credentialStore } from '../services/cloud';
 import { buildCloudAccount } from '../utils/cloudAccount';
 import type { MountedCloudResult } from '../components/AddAccountModal';
 import type { CloudSyncPayload } from '../components/CloudProviderIntegrationModal';
+import { whenIdle } from '../utils/deferWork';
+import { desktopScanReady } from '../utils/startupGate';
 
 interface UseCloudAccountsOptions {
   files: FileItem[];
@@ -92,30 +94,49 @@ export function useCloudAccounts({
     })();
   };
 
-  // Hydrate keychain/local credentials, then re-sync each saved connection once at launch.
+  // Hydrate credentials after first paint; sync accounts in parallel so one slow
+  // provider cannot serialize launch.
   useEffect(() => {
     let cancelled = false;
-    void (async () => {
-      await cloudService.hydrateCredentials();
-      if (cancelled) return;
-      const failed: string[] = [];
-      for (const creds of credentialStore.list()) {
-        try {
-          const synced = await cloudService.syncAccount(creds.accountId);
-          if (cancelled || !synced) continue;
-          const account = buildCloudAccount(creds.provider, synced.info, creds.endpoint);
-          setAccounts(prev => [...prev.filter(a => a.id !== account.id), account]);
-          applyCloudLibrary(account.id, synced.library);
-        } catch {
-          if (cancelled) return;
+    const cancelIdle = whenIdle(() => {
+      void (async () => {
+        await desktopScanReady;
+        await cloudService.hydrateCredentials();
+        if (cancelled) return;
+        const credsList = credentialStore.list();
+        // Show offline placeholders immediately so the sidebar fills without waiting on network.
+        for (const creds of credsList) {
           const account = buildCloudAccount(creds.provider, null, creds.endpoint);
           setAccounts(prev => [...prev.filter(a => a.id !== account.id), account]);
-          failed.push(account.name);
         }
-      }
-      if (failed.length) showToast(`Could not reach ${failed.join(', ')}. Shown as offline.`);
-    })();
-    return () => { cancelled = true; };
+        const results = await Promise.allSettled(
+          credsList.map(async creds => {
+            const synced = await cloudService.syncAccount(creds.accountId);
+            if (!synced) throw new Error('sync returned empty');
+            return { creds, synced };
+          }),
+        );
+        if (cancelled) return;
+        const failed: string[] = [];
+        for (let i = 0; i < results.length; i++) {
+          const result = results[i];
+          const creds = credsList[i];
+          if (result.status === 'fulfilled') {
+            const { synced } = result.value;
+            const account = buildCloudAccount(creds.provider, synced.info, creds.endpoint);
+            setAccounts(prev => [...prev.filter(a => a.id !== account.id), account]);
+            applyCloudLibrary(account.id, synced.library);
+          } else {
+            failed.push(buildCloudAccount(creds.provider, null, creds.endpoint).name);
+          }
+        }
+        if (failed.length) showToast(`Could not reach ${failed.join(', ')}. Shown as offline.`);
+      })();
+    }, 400);
+    return () => {
+      cancelled = true;
+      cancelIdle();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

@@ -1,8 +1,9 @@
 //! System tray: app icon with a live status dot for P2P seeding.
 
 use crate::p2p::P2pState;
-use image::{imageops, Rgba, RgbaImage};
+use image::{Rgba, RgbaImage};
 use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::OnceLock;
 use tauri::{
     image::Image,
     menu::{Menu, MenuItem, PredefinedMenuItem},
@@ -49,16 +50,23 @@ impl TrayStatus {
     }
 }
 
+/// Native 32×32 asset — avoids Lanczos-resizing 128×128 on every tray refresh / launch.
 fn base_icon_png() -> &'static [u8] {
-    include_bytes!("../icons/128x128.png")
+    include_bytes!("../icons/32x32.png")
+}
+
+fn base_tray_rgba() -> &'static RgbaImage {
+    static BASE: OnceLock<RgbaImage> = OnceLock::new();
+    BASE.get_or_init(|| {
+        image::load_from_memory(base_icon_png())
+            .expect("bundled 32x32 tray icon")
+            .to_rgba8()
+    })
 }
 
 fn compose_tray_icon(status: TrayStatus) -> Result<Image<'static>, String> {
-    let decoded = image::load_from_memory(base_icon_png()).map_err(|e| e.to_string())?;
     let size = 32u32;
-    let mut rgba: RgbaImage = decoded
-        .resize_exact(size, size, imageops::FilterType::Lanczos3)
-        .to_rgba8();
+    let mut rgba = base_tray_rgba().clone();
 
     // Soften outer pixels slightly so the badge reads on light/dark menu bars.
     let cx = (size as i32) - 7;
@@ -109,6 +117,7 @@ pub fn build_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 
     let icon = compose_tray_icon(TrayStatus::Idle)?;
 
+    #[allow(unused_mut)] // mut only needed on Linux for temp_dir_path
     let mut builder = TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon)
         .tooltip(TrayStatus::Idle.tooltip())

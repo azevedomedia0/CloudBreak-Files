@@ -6,11 +6,13 @@ import { emitFileMenuAction, type FileMenuAction } from '../utils/fileMenuBus';
 export type NativeAppMenuState = {
   hasSelection: boolean;
   isEncrypted: boolean;
+  onCheckForUpdates?: () => void;
 };
 
 /**
  * Installs a native File menu (macOS menu bar / Windows window menu) with
- * common file-browser actions. Handlers run through {@link emitFileMenuAction}.
+ * common file-browser actions, plus Help → Check for Updates.
+ * Handlers run through {@link emitFileMenuAction} or the update callback.
  */
 export function useNativeAppMenu(state: NativeAppMenuState) {
   const stateRef = useRef(state);
@@ -56,6 +58,7 @@ export function useNativeAppMenu(state: NativeAppMenuState) {
           selectAll,
           sep6,
           closeWindow,
+          checkUpdates,
         ] = await Promise.all([
           MenuItem.new({
             id: 'file-new-folder',
@@ -96,6 +99,13 @@ export function useNativeAppMenu(state: NativeAppMenuState) {
           }),
           PredefinedMenuItem.new({ item: 'Separator' }),
           PredefinedMenuItem.new({ item: 'CloseWindow' }),
+          MenuItem.new({
+            id: 'help-check-updates',
+            text: 'Check for Updates…',
+            action: () => {
+              stateRef.current.onCheckForUpdates?.();
+            },
+          }),
         ]);
 
         if (cancelled) return;
@@ -150,6 +160,34 @@ export function useNativeAppMenu(state: NativeAppMenuState) {
           await menu.remove(existing[0]!);
         }
         await menu.insert(fileMenu, insertAt);
+
+        // Help → Check for Updates… (append to existing Help, or add a Help submenu).
+        const afterFile = await menu.items();
+        let helpMenu: Submenu | null = null;
+        for (const item of afterFile) {
+          if (!('text' in item) || !('append' in item)) continue;
+          const label = await (item as Submenu).text().catch(() => '');
+          if (label === 'Help') {
+            helpMenu = item as Submenu;
+            break;
+          }
+        }
+        if (helpMenu) {
+          const helpItems = await helpMenu.items();
+          if (helpItems.length > 0) {
+            await helpMenu.append(await PredefinedMenuItem.new({ item: 'Separator' }));
+          }
+          await helpMenu.append(checkUpdates);
+        } else {
+          await menu.append(
+            await Submenu.new({
+              id: 'help',
+              text: 'Help',
+              items: [checkUpdates],
+            }),
+          );
+        }
+
         await menu.setAsAppMenu();
       } catch (err) {
         console.warn('Native File menu failed:', err);

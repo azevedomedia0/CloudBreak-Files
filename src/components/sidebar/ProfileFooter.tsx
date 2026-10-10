@@ -6,7 +6,7 @@ import type { SwarmStatus } from '../../services/p2pBridge';
 export interface ProfileFooterProps {
   onOpenVaultSecurity: () => void;
   onOpenProfileSettings?: () => void;
-  userProfile: { name: string; email: string; avatarUrl?: string; role?: string };
+  userProfile: { name: string; email: string; avatarUrl?: string };
   incomingLibraries: SharedLibrary[];
   outgoingLibraries: SharedLibrary[];
   onlineServerCount: number;

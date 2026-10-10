@@ -28,7 +28,6 @@ interface Options {
   selectedAccountId: CloudProviderId;
   selectedFolder: FolderItem | null;
   showToast: (msg: string) => void;
-  confirmBeforeDelete?: boolean;
   /** When true, new uploads are encrypted with the vault session key. */
   isVaultUnlocked?: boolean;
 }
@@ -73,7 +72,6 @@ export function useFileActions({
   selectedAccountId,
   selectedFolder,
   showToast,
-  confirmBeforeDelete = true,
   isVaultUnlocked = false,
 }: Options) {
   const [isDraggingOver, setIsDraggingOver] = useState<boolean>(false);
@@ -221,13 +219,13 @@ export function useFileActions({
   const handleDeleteFile = async (fileId: string) => {
     const target = files.find(f => f.id === fileId);
     if (target?.localPath && localFs.available()) {
-      if (confirmBeforeDelete && !window.confirm(`Move “${target.name}” to the Trash?`)) return;
+      if (!window.confirm(`Move “${target.name}” to the Trash?`)) return;
       const moved = await trashLocalFiles([target]);
       removeFromList(moved);
       if (moved.length) showToast(`Moved “${target.name}” to the Trash`);
       return;
     }
-    if (confirmBeforeDelete && !window.confirm('Remove this file from the library?')) return;
+    if (!window.confirm('Remove this file from the library?')) return;
     removeFromList([fileId]);
     showToast('Removed from the library');
   };
@@ -449,12 +447,10 @@ export function useFileActions({
     const local = localFs.available() ? targets.filter(f => f.localPath) : [];
     const count = fileIds.length;
     const noun = `${count} item${count === 1 ? '' : 's'}`;
-    if (confirmBeforeDelete) {
-      const question = local.length
-        ? `Move ${local.length === count ? noun : `${local.length} of ${noun}`} to the Trash and remove the rest from the library?`
-        : `Remove ${noun} from the library?`;
-      if (!window.confirm(question)) return;
-    }
+    const question = local.length
+      ? `Move ${local.length === count ? noun : `${local.length} of ${noun}`} to the Trash and remove the rest from the library?`
+      : `Remove ${noun} from the library?`;
+    if (!window.confirm(question)) return;
     const moved = local.length ? await trashLocalFiles(local) : [];
     const localIds = new Set(local.map(f => f.id));
     const toRemove = [...fileIds.filter(id => !localIds.has(id)), ...moved];

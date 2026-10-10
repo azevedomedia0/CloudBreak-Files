@@ -26,8 +26,6 @@ export interface AppPreferences {
   theme: AppTheme;
   autoLockMinutes: number;
   rustEngineEnabled: boolean;
-  confirmBeforeDelete: boolean;
-  showInspectorOnLaunch: boolean;
   reduceMotion: boolean;
   compactSidebar: boolean;
   showTransferSpeeds: boolean;
@@ -42,8 +40,6 @@ export const DEFAULT_PREFERENCES: AppPreferences = {
   theme: 'dark',
   autoLockMinutes: 15,
   rustEngineEnabled: true,
-  confirmBeforeDelete: true,
-  showInspectorOnLaunch: true,
   reduceMotion: false,
   compactSidebar: false,
   showTransferSpeeds: true,
@@ -62,7 +58,6 @@ export function applyTheme(theme: AppTheme): void {
 export const DEFAULT_PROFILE: UserProfile = {
   name: 'User',
   email: 'you@example.com',
-  role: 'Vault Administrator',
 };
 
 const PREFS_KEY = 'cloudbreak.preferences.v1';
@@ -99,7 +94,6 @@ export function loadProfile(): UserProfile {
   return {
     name: typeof p.name === 'string' ? p.name : DEFAULT_PROFILE.name,
     email: typeof p.email === 'string' ? p.email : DEFAULT_PROFILE.email,
-    role: typeof p.role === 'string' ? p.role : DEFAULT_PROFILE.role,
     avatarUrl: typeof p.avatarUrl === 'string' ? p.avatarUrl : undefined,
   };
 }

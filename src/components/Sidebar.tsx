@@ -31,7 +31,7 @@ interface SidebarProps {
   onOpenVaultSecurity: () => void;
   onOpenProfileSettings?: () => void;
   onOpenAccountSettings?: (account: CloudAccount) => void;
-  userProfile?: { name: string; email: string; avatarUrl?: string; role?: string };
+  userProfile?: { name: string; email: string; avatarUrl?: string };
   onOpenShareModal: (library: SharedLibrary) => void;
   isVaultUnlocked: boolean;
   width?: number;
@@ -76,7 +76,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   userProfile = {
     name: 'User',
     email: 'you@example.com',
-    role: 'Sovereign Vault Administrator',
   },
   onOpenShareModal,
   isVaultUnlocked,

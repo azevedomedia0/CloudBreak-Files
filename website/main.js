@@ -42,7 +42,7 @@ if (downloadMac) {
         const ver = String(rel.tag_name || rel.name || "").replace(/^v/, "");
         downloadMeta.hidden = false;
         downloadMeta.textContent = ver
-          ? `Latest: v${ver} · universal macOS (Apple Silicon + Intel)`
+          ? `Latest: v${ver} · universal macOS (Apple Silicon + Intel (MacOS Big Sur or Later))`
           : "Latest notarized macOS build";
       }
     })

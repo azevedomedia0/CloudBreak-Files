@@ -40,17 +40,27 @@ pub fn run() {
         .manage(LocalRoots::default())
         .setup(|app| {
             local_fs::restore_roots(app.handle(), &app.state::<LocalRoots>());
+            // Build the tray after the event loop starts so the main window can appear first.
             #[cfg(desktop)]
             {
-                if let Err(err) = tray::build_tray(app.handle()) {
-                    eprintln!("tray icon failed: {err}");
-                }
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                    let for_tray = handle.clone();
+                    let _ = handle.run_on_main_thread(move || {
+                        if let Err(err) = tray::build_tray(&for_tray) {
+                            eprintln!("tray icon failed: {err}");
+                        }
+                    });
+                });
             }
             // macOS privacy: Local Network, Files and Folders prompts, then Full Disk Access Settings.
+            // Delay past first paint so TCC dialogs do not compete with window show.
             #[cfg(target_os = "macos")]
             {
                 let handle = app.handle().clone();
                 std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(1500));
                     let data_dir = handle.path().app_data_dir().ok();
                     let write_marker = |name: &str| {
                         if let Some(dir) = &data_dir {

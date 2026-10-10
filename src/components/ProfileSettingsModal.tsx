@@ -23,7 +23,6 @@ import { fullDiskAccessGranted, requestFullDiskAccess } from '../services/permis
 export interface UserProfile {
   name: string;
   email: string;
-  role: string;
   avatarUrl?: string;
 }
 
@@ -144,7 +143,6 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
   userProfile = {
     name: 'User',
     email: 'you@example.com',
-    role: 'Vault Administrator',
   },
   onUpdateProfile,
   preferences: preferencesProp,
@@ -163,7 +161,6 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
   const [name, setName] = useState(userProfile.name);
   const [email, setEmail] = useState(userProfile.email);
-  const [role, setRole] = useState(userProfile.role);
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>(userProfile.avatarUrl);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -179,7 +176,6 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     if (!isOpen) return;
     setName(userProfile.name);
     setEmail(userProfile.email);
-    setRole(userProfile.role);
     setAvatarUrl(userProfile.avatarUrl);
     setPrefs(preferencesProp ?? loadPreferences());
     setPassphrase('');
@@ -214,7 +210,6 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     const profile: UserProfile = {
       name: name.trim() || userProfile.name,
       email: email.trim(),
-      role: role.trim(),
       avatarUrl: avatarUrl || undefined,
     };
     saveProfile(profile);
@@ -373,9 +368,6 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                     )}
                   </div>
                   <div className="mt-1.5 flex items-center gap-2 flex-wrap">
-                    <span className="text-[10px] px-2 py-0.5 rounded-md bg-sky-500/15 text-sky-300 border border-sky-400/20 font-medium">
-                      {role || 'Member'}
-                    </span>
                     <span className="text-[10px] text-neutral-500">
                       {accounts.length} cloud {accounts.length === 1 ? 'account' : 'accounts'}
                     </span>
@@ -399,16 +391,6 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                     type="email"
                     value={email}
                     onChange={e => setEmail(e.target.value)}
-                    className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-sky-400/60"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-neutral-300 block mb-1.5">Role / title</label>
-                  <input
-                    type="text"
-                    value={role}
-                    onChange={e => setRole(e.target.value)}
-                    placeholder="e.g. Vault Administrator"
                     className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-sky-400/60"
                   />
                 </div>
@@ -447,16 +429,8 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                 </select>
               </PrefRow>
 
-              <PrefRow title="Show inspector on launch" description="Open the right-hand file inspector panel by default">
-                <Toggle on={prefs.showInspectorOnLaunch} onChange={() => patchPrefs('showInspectorOnLaunch', !prefs.showInspectorOnLaunch)} />
-              </PrefRow>
-
               <PrefRow title="Compact sidebar" description="Tighter spacing in the account and folder list">
                 <Toggle on={prefs.compactSidebar} onChange={() => patchPrefs('compactSidebar', !prefs.compactSidebar)} />
-              </PrefRow>
-
-              <PrefRow title="Confirm before delete" description="Ask before removing files from the library">
-                <Toggle on={prefs.confirmBeforeDelete} onChange={() => patchPrefs('confirmBeforeDelete', !prefs.confirmBeforeDelete)} />
               </PrefRow>
 
               <PrefRow title="Show transfer speeds" description="Display MB/s on uploads, downloads, and P2P seeding">
