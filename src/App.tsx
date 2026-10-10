@@ -544,6 +544,7 @@ export default function App() {
     setSelectedFileId(next.id);
     setPlayingVideoFile(next);
   };
+  const nextVideoFile = canNextMedia ? videoFiles[videoIndex + 1] ?? null : null;
   const onPreviousMedia = () => playVideoAt(videoIndex - 1);
   const onNextMedia = () => playVideoAt(videoIndex + 1);
 
@@ -1106,6 +1107,7 @@ export default function App() {
         videoPlayerInitialTab={videoPlayerInitialTab}
         canPreviousMedia={canPreviousMedia}
         canNextMedia={canNextMedia}
+        nextVideoFile={nextVideoFile}
         onPreviousMedia={onPreviousMedia}
         onNextMedia={onNextMedia}
         sharingLibrary={sharingLibrary}

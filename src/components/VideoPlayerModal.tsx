@@ -8,6 +8,17 @@ import { PlayerHeader } from './video-player/PlayerHeader';
 import { TrimPanel } from './video-player/TrimPanel';
 import { ConvertPanel, SaveDestination } from './video-player/ConvertPanel';
 import { PlaybackControls } from './video-player/PlaybackControls';
+import { AUTOPLAY_DELAY_SECONDS, UpNextPanel } from './video-player/UpNextPanel';
+
+const AUTOPLAY_KEY = 'cloudbreak.video.autoplay';
+
+function loadAutoplay(): boolean {
+  try {
+    return localStorage.getItem(AUTOPLAY_KEY) !== 'off';
+  } catch {
+    return true;
+  }
+}
 
 interface LocalDirectoryHandle {
   name: string;
@@ -26,6 +37,8 @@ interface VideoPlayerModalProps {
   folders: FolderItem[];
   canPreviousMedia?: boolean;
   canNextMedia?: boolean;
+  /** The video that follows this one in the current list, shown in the Up next panel. */
+  nextMedia?: FileItem | null;
   onPreviousMedia?: () => void;
   onNextMedia?: () => void;
 }
@@ -40,6 +53,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   folders,
   canPreviousMedia = false,
   canNextMedia = false,
+  nextMedia = null,
   onPreviousMedia,
   onNextMedia,
 }) => {
@@ -55,6 +69,9 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const [volume, setVolume] = useState<number>(0.8);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isLooping, setIsLooping] = useState<boolean>(false);
+  const [autoplay, setAutoplay] = useState<boolean>(loadAutoplay);
+  const [ended, setEnded] = useState<boolean>(false);
+  const [countdown, setCountdown] = useState<number | null>(null);
   const [controlsVisible, setControlsVisible] = useState<boolean>(true);
   const [playError, setPlayError] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
@@ -122,6 +139,25 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   }, [file.id, isOpen, initialTab]);
 
   useEffect(() => dropOutput, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(AUTOPLAY_KEY, autoplay ? 'on' : 'off');
+    } catch { /* storage unavailable */ }
+    if (!autoplay) setCountdown(null);
+  }, [autoplay]);
+
+  // Count down to the next video after this one ends.
+  useEffect(() => {
+    if (countdown === null) return;
+    if (countdown <= 0) {
+      setCountdown(null);
+      onNextMedia?.();
+      return;
+    }
+    const timer = setTimeout(() => setCountdown(c => (c === null ? null : c - 1)), 1000);
+    return () => clearTimeout(timer);
+  }, [countdown]);
 
   useEffect(() => {
     if (!isOpen || !isTauri()) {
@@ -193,6 +229,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       setTrimStart(0);
       setTrimEnd(dur);
       setConvertOptions(prev => ({ ...prev, trimEnd: dur }));
+      videoRef.current.volume = volume;
     }
   };
 
@@ -231,6 +268,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const seek = (time: number) => {
     if (!videoRef.current) return;
     const bounded = Math.max(0, Math.min(duration, time));
+    setEnded(false);
+    setCountdown(null);
     videoRef.current.currentTime = bounded;
     setCurrentTime(bounded);
   };
@@ -499,7 +538,13 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                 className="w-full max-h-full rounded object-contain shadow-2xl"
                 onLoadedMetadata={handleLoadedMetadata}
                 onTimeUpdate={handleTimeUpdate}
-                onPlay={() => setIsPlaying(true)}
+                autoPlay={autoplay && initialTab === 'player'}
+                onPlay={() => {
+                  setIsPlaying(true);
+                  setEnded(false);
+                  setCountdown(null);
+                  revealControls();
+                }}
                 onPause={() => setIsPlaying(false)}
                 onError={() => setPlayError("This video couldn't be loaded. Its format may not be supported yet.")}
                 onEnded={() => {
@@ -508,6 +553,10 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                     startPlayback();
                   } else {
                     setIsPlaying(false);
+                    setEnded(true);
+                    if (autoplay && nextMedia && onNextMedia && activeTab === 'player') {
+                      setCountdown(AUTOPLAY_DELAY_SECONDS);
+                    }
                   }
                 }}
                 playsInline
@@ -547,6 +596,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                   volume={volume}
                   isMuted={isMuted}
                   isLooping={isLooping}
+                  autoplay={autoplay}
+                  onToggleAutoplay={() => setAutoplay(a => !a)}
                   playbackRate={playbackRate}
                   isFullscreen={isFullscreen}
                   onTogglePlay={togglePlay}
@@ -578,6 +629,21 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                   setTrimEnd={setTrimEnd}
                   playTrimLoop={playTrimLoop}
                   onContinue={activeTab === 'trim' ? continueToConvert : undefined}
+                />
+              )}
+
+              {activeTab === 'player' && nextMedia && (
+                <UpNextPanel
+                  next={nextMedia}
+                  // Hidden while the pointer is moving over the player; shown when idle or finished.
+                  visible={!playError && (ended || !(controlsVisible || !isPlaying))}
+                  interactive={ended}
+                  countdown={countdown}
+                  onPlayNow={() => {
+                    setCountdown(null);
+                    onNextMedia?.();
+                  }}
+                  onCancel={() => setCountdown(null)}
                 />
               )}
             </div>
