@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Build a Linux .deb with Tauri, then wrap it in a Flatpak (com.cloudbreak.files).
-# Requires Linux with: rust, node, webkitgtk, flatpak, flatpak-builder, and the GNOME 47 runtime.
+# Requires Linux with: rust, node, webkitgtk, flatpak, and the GNOME 48 runtime.
+# Prefers Flathub's org.flatpak.Builder (has appstreamcli); falls back to host flatpak-builder.
 # See docs/flatpak.md.
 #
 # Env:
@@ -24,17 +25,35 @@ FLATPAK_DIR="$ROOT/flatpak"
 BUILD_DIR="${FLATPAK_BUILD_DIR:-/tmp/cloudbreak-flatpak-build}"
 REPO_DIR="${FLATPAK_REPO_DIR:-/tmp/cloudbreak-flatpak-repo}"
 BUNDLE_OUT="${FLATPAK_BUNDLE:-$ROOT/dist-flatpak/com.cloudbreak.files.flatpak}"
+GNOME_RUNTIME_VERSION="${GNOME_RUNTIME_VERSION:-48}"
 
-for cmd in flatpak flatpak-builder ar tar npm; do
+for cmd in flatpak ar tar npm; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
     echo "error: missing required command: $cmd" >&2
     exit 1
   fi
 done
 
-echo "Ensuring GNOME 47 Flatpak runtime/SDK…"
+echo "Ensuring Flathub + GNOME ${GNOME_RUNTIME_VERSION} runtime/SDK + Flatpak Builder…"
 flatpak remote-add --if-not-exists --user flathub https://dl.flathub.org/repo/flathub.flatpakrepo || true
-flatpak install -y --user flathub org.gnome.Platform//47 org.gnome.Sdk//47
+flatpak install -y --user flathub \
+  "org.gnome.Platform//${GNOME_RUNTIME_VERSION}" \
+  "org.gnome.Sdk//${GNOME_RUNTIME_VERSION}" \
+  org.flatpak.Builder
+
+run_flatpak_builder() {
+  # Prefer org.flatpak.Builder — Ubuntu's apt flatpak-builder still calls
+  # appstream-compose, which GNOME Sdk 47+ no longer ships.
+  if flatpak info --user org.flatpak.Builder >/dev/null 2>&1 \
+    || flatpak info org.flatpak.Builder >/dev/null 2>&1; then
+    flatpak run org.flatpak.Builder "$@"
+  elif command -v flatpak-builder >/dev/null 2>&1; then
+    flatpak-builder "$@"
+  else
+    echo "error: install org.flatpak.Builder (Flathub) or flatpak-builder" >&2
+    exit 1
+  fi
+}
 
 if [[ "${SKIP_NPM_CI:-0}" != "1" ]]; then
   echo "Installing npm dependencies…"
@@ -63,7 +82,8 @@ mkdir -p "$(dirname "$BUNDLE_OUT")"
 # Run from flatpak/ so relative source paths in the yaml resolve.
 (
   cd "$FLATPAK_DIR"
-  flatpak-builder --force-clean --user --repo="$REPO_DIR" "$BUILD_DIR" com.cloudbreak.files.yml
+  run_flatpak_builder --force-clean --user --install-deps-from=flathub \
+    --repo="$REPO_DIR" "$BUILD_DIR" com.cloudbreak.files.yml
 )
 flatpak build-bundle "$REPO_DIR" "$BUNDLE_OUT" com.cloudbreak.files
 

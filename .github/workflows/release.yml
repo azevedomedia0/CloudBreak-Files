@@ -164,6 +164,7 @@ jobs:
             libayatana-appindicator3-dev \
             flatpak \
             flatpak-builder \
+            appstream \
             elfutils \
             binutils \
             zstd \
