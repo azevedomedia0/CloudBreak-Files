@@ -23,8 +23,11 @@ fi
 
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/tmp/cloudbreak-cargo-target}"
 FLATPAK_DIR="$ROOT/flatpak"
+# flatpak-builder requires state-dir and build-dir on the same filesystem.
+# Keep all three under /tmp so CI workspace (often a different mount) is fine.
 BUILD_DIR="${FLATPAK_BUILD_DIR:-/tmp/cloudbreak-flatpak-build}"
 REPO_DIR="${FLATPAK_REPO_DIR:-/tmp/cloudbreak-flatpak-repo}"
+STATE_DIR="${FLATPAK_STATE_DIR:-/tmp/cloudbreak-flatpak-state}"
 BUNDLE_OUT="${FLATPAK_BUNDLE:-$ROOT/dist-flatpak/com.cloudbreak.files.flatpak}"
 GNOME_RUNTIME_VERSION="${GNOME_RUNTIME_VERSION:-49}"
 
@@ -78,14 +81,15 @@ ls -lh "$DEB"
 cp -f "$DEB" "$FLATPAK_DIR/cloudbreak-files.deb"
 
 echo "Building Flatpak…"
-rm -rf "$BUILD_DIR" "$REPO_DIR"
-mkdir -p "$(dirname "$BUNDLE_OUT")"
+rm -rf "$BUILD_DIR" "$REPO_DIR" "$STATE_DIR"
+mkdir -p "$(dirname "$BUNDLE_OUT")" "$STATE_DIR"
 # Run from flatpak/ so relative source paths in the yaml resolve.
 (
   cd "$FLATPAK_DIR"
   # Runtime/SDK are preinstalled above. Do not pass --install-deps-from=flathub:
   # nested flatpak install from org.flatpak.Builder needs a D-Bus session (fails in CI).
   run_flatpak_builder --force-clean --user \
+    --state-dir="$STATE_DIR" \
     --repo="$REPO_DIR" "$BUILD_DIR" com.cloudbreak.files.yml
 )
 flatpak build-bundle "$REPO_DIR" "$BUNDLE_OUT" com.cloudbreak.files
