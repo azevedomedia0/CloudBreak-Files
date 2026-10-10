@@ -6,7 +6,7 @@ Cloudbreak Files ships a Flatpak (`com.cloudbreak.files`) built from the Tauri `
 
 | Artifact | How |
 |----------|-----|
-| `.deb` | `npm run tauri build -- --config tauri.linux.conf.json --bundles deb` |
+| `.deb` | `npm run tauri build -- --config src-tauri/tauri.linux.conf.json --bundles deb` |
 | `.flatpak` bundle | `npm run build:flatpak` (Linux) or `npm run build:flatpak:docker` (macOS/Windows with Docker) |
 | CI | Release workflow job `linux-flatpak` on `v*` tags / `workflow_dispatch` |
 

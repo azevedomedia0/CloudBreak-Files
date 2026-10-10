@@ -44,7 +44,7 @@ else
 fi
 
 echo "Building Tauri .deb (CARGO_TARGET_DIR=${CARGO_TARGET_DIR})…"
-npm run tauri build -- --config tauri.linux.conf.json --bundles deb
+npm run tauri build -- --config src-tauri/tauri.linux.conf.json --bundles deb
 
 DEB="$(find "${CARGO_TARGET_DIR}" src-tauri/target -path '*/release/bundle/deb/*.deb' 2>/dev/null | head -1 || true)"
 if [[ -z "$DEB" || ! -f "$DEB" ]]; then
