@@ -13,7 +13,7 @@ export const FileInspectorIcon: React.FC<{
     role={title ? 'img' : undefined}
     aria-label={title}
     aria-hidden={title ? undefined : true}
-    className={`inline-block shrink-0 bg-current ${className}`}
+    className={`inline-block shrink-0 align-middle bg-current ${className}`}
     style={{
       WebkitMaskImage: `url(${fileInspectorPng})`,
       maskImage: `url(${fileInspectorPng})`,

@@ -1,32 +1,36 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ChevronRight, Check } from '@/src/icons';
-import { FileItem } from '../../types';
-import { isEditableDocument, isMacAppBundle } from '../../utils/documentKind';
-import { isZipArchive } from '../../utils/unzipArchive';
+import { ChevronRight, Check, X } from '@/src/icons';
+import { FolderItem } from '../../types';
+import { FinderFolderIcon } from './FinderFolderIcon';
 
 const SUGGESTED_TAGS = ['Favorite', 'Work', 'Personal', 'Review', 'Final'];
 
-export interface FileContextMenuProps {
-  file: FileItem;
-  targets: FileItem[];
+export function localPathFromFolderId(id: string): string | null {
+  const prefix = 'folder-local-';
+  if (!id.startsWith(prefix)) return null;
+  const rest = id.slice(prefix.length);
+  return rest.startsWith('/') ? rest : null;
+}
+
+export interface FolderContextMenuProps {
+  folder: FolderItem;
+  targets: FolderItem[];
   x: number;
   y: number;
   onClose: () => void;
-  onOpen: (file: FileItem) => void;
-  onQuickLook: (file: FileItem) => void;
-  onGetInfo: (file: FileItem) => void;
-  onRename: (file: FileItem) => void;
-  onDuplicate: (files: FileItem[]) => void;
-  onCopy: (files: FileItem[]) => void;
-  onShare: (file: FileItem) => void;
-  onUnzip?: (file: FileItem) => void;
-  onTrash: (files: FileItem[]) => void;
-  onToggleTag: (files: FileItem[], tag: string) => void;
-  onToggleEncrypt?: (file: FileItem) => void;
+  onOpen: (folder: FolderItem) => void;
+  onQuickLook: (folder: FolderItem) => void;
+  onGetInfo: (folder: FolderItem) => void;
+  onRename: (folder: FolderItem) => void;
+  onDuplicate: (folders: FolderItem[]) => void;
+  onCopy: (folders: FolderItem[]) => void;
+  onShare: (folder: FolderItem) => void;
+  onTrash: (folders: FolderItem[]) => void;
+  onToggleTag: (folders: FolderItem[], tag: string) => void;
 }
 
-export const FileContextMenu: React.FC<FileContextMenuProps> = ({
-  file,
+export const FolderContextMenu: React.FC<FolderContextMenuProps> = ({
+  folder,
   targets,
   x,
   y,
@@ -38,10 +42,8 @@ export const FileContextMenu: React.FC<FileContextMenuProps> = ({
   onDuplicate,
   onCopy,
   onShare,
-  onUnzip,
   onTrash,
   onToggleTag,
-  onToggleEncrypt,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ x, y });
@@ -82,23 +84,15 @@ export const FileContextMenu: React.FC<FileContextMenuProps> = ({
     onClose();
   };
 
-  const isApp = isMacAppBundle(file);
   const openWith = [
-    { id: 'quick-look', label: 'Quick Look', enabled: true, action: () => onQuickLook(file) },
-    { id: 'app', label: 'Open Application', enabled: isApp, action: () => onOpen(file) },
-    { id: 'photo', label: 'Photo Studio', enabled: file.category === 'photo' && !isApp, action: () => onOpen(file) },
-    { id: 'video', label: 'Video Player', enabled: file.category === 'video', action: () => onOpen(file) },
-    { id: 'audio', label: 'Audio Player', enabled: file.category === 'audio', action: () => onOpen(file) },
-    { id: 'document', label: 'Document Editor', enabled: isEditableDocument(file), action: () => onOpen(file) },
-    {
-      id: 'archive',
-      label: 'Extract Archive',
-      enabled: !!onUnzip && isZipArchive(file) && !multiple,
-      action: () => onUnzip?.(file),
-    },
-  ].filter(item => item.enabled);
+    { id: 'quick-look', label: 'Quick Look', action: () => onQuickLook(folder) },
+    { id: 'folder', label: 'Open Folder', action: () => onOpen(folder) },
+  ];
 
-  const tags = Array.from(new Set([...targets.flatMap(item => item.tags), ...SUGGESTED_TAGS]));
+  const tags = Array.from(new Set([
+    ...targets.flatMap(item => item.tags ?? []),
+    ...SUGGESTED_TAGS,
+  ]));
 
   return (
     <div
@@ -110,7 +104,7 @@ export const FileContextMenu: React.FC<FileContextMenuProps> = ({
       onKeyDown={event => event.stopPropagation()}
       onContextMenu={event => event.preventDefault()}
     >
-      <MenuItem label="Open" onClick={() => run(() => onOpen(file))} />
+      <MenuItem label="Open" onClick={() => run(() => onOpen(folder))} />
       <SubmenuItem
         label="Open With"
         open={submenu === 'open'}
@@ -122,26 +116,17 @@ export const FileContextMenu: React.FC<FileContextMenuProps> = ({
           <MenuItem key={item.id} label={item.label} onClick={() => run(item.action)} />
         ))}
       </SubmenuItem>
-      {onUnzip && isZipArchive(file) && !multiple && (
-        <MenuItem label="Unzip / Extract" onClick={() => run(() => onUnzip(file))} />
-      )}
 
       <Separator />
       <MenuItem label="Move to Trash" onClick={() => run(() => onTrash(targets))} />
       <Separator />
-      <MenuItem label="Get Info" shortcut="⌘I" onClick={() => run(() => onGetInfo(file))} />
-      <MenuItem label="Rename" disabled={multiple} onClick={() => run(() => onRename(file))} />
+      <MenuItem label="Get Info" shortcut="⌘I" onClick={() => run(() => onGetInfo(folder))} />
+      <MenuItem label="Rename" disabled={multiple} onClick={() => run(() => onRename(folder))} />
       <MenuItem label="Duplicate" shortcut="⌘D" onClick={() => run(() => onDuplicate(targets))} />
-      <MenuItem label="Quick Look" shortcut="Space" onClick={() => run(() => onQuickLook(file))} />
+      <MenuItem label="Quick Look" shortcut="Space" onClick={() => run(() => onQuickLook(folder))} />
       <Separator />
       <MenuItem label="Copy" shortcut="⌘C" onClick={() => run(() => onCopy(targets))} />
-      <MenuItem label="Share…" onClick={() => run(() => onShare(file))} />
-      {onToggleEncrypt && !multiple && (
-        <MenuItem
-          label={file.encryption.isEncrypted ? 'Decrypt with Vault' : 'Encrypt with Vault'}
-          onClick={() => run(() => onToggleEncrypt(file))}
-        />
-      )}
+      <MenuItem label="Share…" onClick={() => run(() => onShare(folder))} />
       <Separator />
       <SubmenuItem
         label="Tags"
@@ -151,7 +136,7 @@ export const FileContextMenu: React.FC<FileContextMenuProps> = ({
         onClose={() => setSubmenu(current => current === 'tags' ? null : current)}
       >
         {tags.map(tag => {
-          const checked = targets.every(item => item.tags.includes(tag));
+          const checked = targets.every(item => (item.tags ?? []).includes(tag));
           return (
             <MenuItem
               key={tag}
@@ -166,13 +151,13 @@ export const FileContextMenu: React.FC<FileContextMenuProps> = ({
   );
 };
 
-export const FileRenameField: React.FC<{
-  file: FileItem;
+export const FolderRenameField: React.FC<{
+  folder: FolderItem;
   x: number;
   y: number;
   onCommit: (name: string) => void;
   onCancel: () => void;
-}> = ({ file, x, y, onCommit, onCancel }) => {
+}> = ({ folder, x, y, onCommit, onCancel }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [pos, setPos] = useState({ x, y });
 
@@ -183,22 +168,21 @@ export const FileRenameField: React.FC<{
     const nextX = x + rect.width > window.innerWidth - 8 ? Math.max(8, window.innerWidth - rect.width - 8) : x;
     const nextY = y + rect.height > window.innerHeight - 8 ? Math.max(8, window.innerHeight - rect.height - 8) : y;
     setPos({ x: nextX, y: nextY });
-    const dot = input.value.lastIndexOf('.');
     input.focus();
-    input.setSelectionRange(0, dot > 0 ? dot : input.value.length);
+    input.setSelectionRange(0, input.value.length);
   }, [x, y]);
 
   const commit = () => {
     const next = inputRef.current?.value.trim() ?? '';
-    if (!next || next === file.name) onCancel();
+    if (!next || next === folder.name) onCancel();
     else onCommit(next);
   };
 
   return (
     <input
       ref={inputRef}
-      defaultValue={file.name}
-      aria-label="Rename"
+      defaultValue={folder.name}
+      aria-label="Rename folder"
       className="fixed z-[80] w-64 px-2 py-1 rounded-md border border-sky-400 bg-neutral-950 text-sm text-neutral-100 shadow-2xl outline-none"
       style={{ left: pos.x, top: pos.y }}
       onMouseDown={event => event.stopPropagation()}
@@ -213,6 +197,66 @@ export const FileRenameField: React.FC<{
       }}
       onBlur={commit}
     />
+  );
+};
+
+export const FolderGetInfo: React.FC<{
+  folder: FolderItem;
+  onClose: () => void;
+}> = ({ folder, onClose }) => {
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const localPath = localPathFromFolderId(folder.id);
+  const rows: [string, string][] = [
+    ['Kind', 'Folder'],
+    ['Name', folder.name],
+    ['Items', String(folder.itemCount)],
+    ['Where', localPath || folder.parentId || 'Local Files'],
+  ];
+  if (folder.tags?.length) {
+    rows.push(['Tags', folder.tags.join(', ')]);
+  }
+
+  return (
+    <div className="fixed inset-0 z-[75] flex items-start justify-center pt-[12vh]" onMouseDown={onClose}>
+      <div
+        role="dialog"
+        aria-label={`Info for ${folder.name}`}
+        className="w-[340px] rounded-xl border border-white/15 bg-neutral-900/95 text-neutral-100 shadow-2xl backdrop-blur-xl overflow-hidden"
+        onMouseDown={event => event.stopPropagation()}
+        onKeyDown={event => event.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 bg-neutral-950/80">
+          <span className="text-[12px] font-medium text-neutral-300">Get Info</span>
+          <button type="button" onClick={onClose} className="p-1 rounded hover:bg-white/10 text-neutral-400 hover:text-white" aria-label="Close">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+        <div className="p-4">
+          <div className="flex items-center gap-3 mb-4">
+            <FinderFolderIcon className="w-14 h-11 shrink-0 drop-shadow-md" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold break-words">{folder.name}</p>
+              <p className="text-[11px] text-neutral-400 mt-0.5">Folder</p>
+            </div>
+          </div>
+          <dl className="space-y-1.5 text-[12px]">
+            {rows.map(([label, value]) => (
+              <div key={label} className="flex justify-between gap-3">
+                <dt className="text-neutral-400 shrink-0">{label}</dt>
+                <dd className="text-neutral-100 text-right truncate" title={value}>{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </div>
+    </div>
   );
 };
 

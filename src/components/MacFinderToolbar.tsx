@@ -39,6 +39,10 @@ interface MacFinderToolbarProps {
   onOpenAddAccount: () => void;
   activePathTitle: string;
   activeAccount: CloudAccount | undefined;
+  canGoBack?: boolean;
+  canGoForward?: boolean;
+  onGoBack?: () => void;
+  onGoForward?: () => void;
   isSidebarCollapsed?: boolean;
   onToggleSidebar?: () => void;
   isInspectorOpen?: boolean;
@@ -100,6 +104,10 @@ export const MacFinderToolbar: React.FC<MacFinderToolbarProps> = ({
   sortDirection,
   onSortDirectionChange,
   activePathTitle,
+  canGoBack = false,
+  canGoForward = false,
+  onGoBack,
+  onGoForward,
   isSidebarCollapsed = false,
   onToggleSidebar,
   isInspectorOpen = true,
@@ -160,20 +168,33 @@ export const MacFinderToolbar: React.FC<MacFinderToolbarProps> = ({
 
       {/* Left Section: Navigation — native traffic lights sit in this row (see trafficLightPosition). */}
       <div data-tauri-drag-region className="flex items-center gap-2.5 sm:gap-3 shrink-0">
-        {isTauri() && <div data-tauri-drag-region className="w-[52px] self-stretch shrink-0" aria-hidden="true" />}
+        {/* Native traffic lights overlay this inset; width clears the cluster before the title. */}
+        {isTauri() && <div data-tauri-drag-region className="w-[60px] self-stretch shrink-0" aria-hidden="true" />}
 
         <span
           data-tauri-drag-region
-          className="pointer-events-none select-none text-sm font-semibold tracking-tight text-white shrink-0"
+          className="pointer-events-none select-none text-sm font-semibold tracking-tight text-white shrink-0 leading-none"
         >
           CloudBreak
         </span>
 
         <div className="flex items-center gap-0.5 text-neutral-300">
-          <button className="p-1 rounded-md hover:bg-white/10 hover:text-white transition-colors" title="Back">
+          <button
+            type="button"
+            disabled={!canGoBack}
+            onClick={() => onGoBack?.()}
+            className="p-1 rounded-md hover:bg-white/10 hover:text-white transition-colors disabled:opacity-30 disabled:pointer-events-none disabled:hover:bg-transparent"
+            title="Back"
+          >
             <ChevronLeft className="w-5 h-5" />
           </button>
-          <button className="p-1 rounded-md hover:bg-white/10 hover:text-white transition-colors" title="Forward">
+          <button
+            type="button"
+            disabled={!canGoForward}
+            onClick={() => onGoForward?.()}
+            className="p-1 rounded-md hover:bg-white/10 hover:text-white transition-colors disabled:opacity-30 disabled:pointer-events-none disabled:hover:bg-transparent"
+            title="Forward"
+          >
             <ChevronRight className="w-5 h-5" />
           </button>
         </div>
@@ -532,7 +553,7 @@ export const MacFinderToolbar: React.FC<MacFinderToolbarProps> = ({
             <button
               type="button"
               onClick={onToggleInspector}
-              className={`p-1.5 rounded-lg transition-all ${
+              className={`inline-flex items-center justify-center p-1.5 rounded-lg transition-all ${
                 isInspectorOpen && sidePanelMode === 'inspector'
                   ? 'text-sky-300 bg-sky-400/15 hover:bg-sky-400/25 border border-sky-400/30'
                   : 'text-neutral-400 hover:text-white hover:bg-white/10'

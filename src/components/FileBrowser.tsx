@@ -8,6 +8,7 @@ import { ListView } from './file-browser/ListView';
 import { ColumnsView } from './file-browser/ColumnsView';
 import { GalleryView } from './file-browser/GalleryView';
 import { FileContextMenu, FileRenameField } from './file-browser/FileContextMenu';
+import { FolderContextMenu, FolderGetInfo, FolderRenameField } from './file-browser/FolderContextMenu';
 import { FileGetInfo } from './file-browser/FileGetInfo';
 import { isEditableDocument, isMacAppBundle, isSystemPreviewDocument } from '../utils/documentKind';
 import { getFolderIcon } from '../utils/folderIcons';
@@ -53,6 +54,12 @@ interface FileBrowserProps {
   onOpenQuickLook: () => void;
   folders: FolderItem[];
   onSelectFolder: (folderId: string | null) => void;
+  onRenameFolder: (folderId: string, name: string) => void;
+  onDuplicateFolders: (folders: FolderItem[]) => void;
+  onCopyFolders: (folders: FolderItem[]) => void;
+  onDeleteFolders: (folders: FolderItem[]) => void;
+  onToggleFolderTag: (folderIds: string[], tag: string) => void;
+  onShareFolder: (folder: FolderItem) => void;
   swarmStatus?: SwarmStatus | null;
   onCopyLibraryInvite?: () => void;
   onRefreshSwarm?: () => void;
@@ -95,6 +102,12 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   onOpenQuickLook,
   folders,
   onSelectFolder,
+  onRenameFolder,
+  onDuplicateFolders,
+  onCopyFolders,
+  onDeleteFolders,
+  onToggleFolderTag,
+  onShareFolder,
   swarmStatus = null,
   onCopyLibraryInvite,
   onRefreshSwarm,
@@ -106,8 +119,11 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [iconScale, setIconScale] = useState<number>(100); // 75 to 150%
   const [contextMenu, setContextMenu] = useState<{ file: FileItem; x: number; y: number } | null>(null);
+  const [folderMenu, setFolderMenu] = useState<{ folder: FolderItem; x: number; y: number } | null>(null);
   const [renaming, setRenaming] = useState<{ file: FileItem; x: number; y: number } | null>(null);
+  const [renamingFolder, setRenamingFolder] = useState<{ folder: FolderItem; x: number; y: number } | null>(null);
   const [infoFileId, setInfoFileId] = useState<string | null>(null);
+  const [infoFolderId, setInfoFolderId] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const browseScrollRef = useRef<HTMLDivElement>(null);
 
@@ -159,6 +175,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
 
   const totalSize = files.reduce((acc, f) => acc + f.sizeBytes, 0);
   const infoFile = infoFileId ? files.find(file => file.id === infoFileId) || null : null;
+  const infoFolder = infoFolderId ? folders.find(folder => folder.id === infoFolderId) || null : null;
 
   const selectFile = (file: FileItem) => {
     onSelectFile(file);
@@ -215,8 +232,25 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   const openContextMenu = (file: FileItem, event: React.MouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
+    setFolderMenu(null);
     openContextMenuAt(file, event.clientX, event.clientY);
   };
+
+  const openFolderContextMenu = (folder: FolderItem, event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setContextMenu(null);
+    setRenaming(null);
+    setRenamingFolder(null);
+    if (!selectedIds.has(folder.id)) setSelectedIds(new Set([folder.id]));
+    setFolderMenu({ folder, x: event.clientX, y: event.clientY });
+  };
+
+  const folderTargetsFor = (folder: FolderItem) => (
+    selectedIds.has(folder.id) && selectedIds.size > 1
+      ? folders.filter(item => selectedIds.has(item.id))
+      : [folder]
+  );
 
   useEffect(() => {
     const onExternalMenu = (event: Event) => {
@@ -312,6 +346,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
             onOpenAudio={onOpenAudio}
             onOpenQuickLook={onOpenQuickLook}
             onFileContextMenu={openContextMenu}
+            onFolderContextMenu={openFolderContextMenu}
             toggleSelectOne={toggleSelectOne}
           />
         )}
@@ -331,6 +366,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
             onShareFile={onShareFile}
             onOpenQuickLook={onOpenQuickLook}
             onFileContextMenu={openContextMenu}
+            onFolderContextMenu={openFolderContextMenu}
             toggleSelectOne={toggleSelectOne}
             toggleSelectAll={toggleSelectAll}
             getAccount={getAccount}
@@ -375,10 +411,12 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     >
       
       {/* Batch Selection Banner */}
-      {selectedIds.size > 0 && (
+      {selectedIds.size > 0 && (() => {
+        const selectedFileIds = Array.from(selectedIds).filter(id => files.some(f => f.id === id));
+        return (
         <div className="px-4 py-2 bg-sky-950/60 border-b border-sky-500/30 backdrop-blur-md flex items-center justify-between text-xs text-white z-20">
           <div className="flex items-center gap-3">
-            <span className="font-semibold">{selectedIds.size} assets selected</span>
+            <span className="font-semibold">{selectedIds.size} selected</span>
             <button
               onClick={() => setSelectedIds(new Set())}
               className="text-[11px] underline text-white/80 hover:text-white"
@@ -386,24 +424,27 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
               Clear
             </button>
           </div>
+          {selectedFileIds.length > 0 && (
           <div className="flex items-center gap-2">
             <button
-              onClick={() => onBatchRestore(Array.from(selectedIds))}
+              onClick={() => onBatchRestore(selectedFileIds)}
               className="px-2.5 py-1 rounded-md bg-white/10 hover:bg-white/20 border border-white/10 text-xs text-white flex items-center gap-1.5 transition-colors"
             >
               <RotateCcw className="w-3 h-3 text-white" />
               <span>Restore</span>
             </button>
             <button
-              onClick={() => onBatchDelete(Array.from(selectedIds))}
+              onClick={() => onBatchDelete(selectedFileIds)}
               className="px-2.5 py-1 rounded-md bg-red-950/50 hover:bg-red-900/60 border border-red-800/60 text-red-300 text-xs flex items-center gap-1.5 transition-colors"
             >
               <Trash2 className="w-3 h-3" />
               <span>Delete</span>
             </button>
           </div>
+          )}
         </div>
-      )}
+        );
+      })()}
 
       {systemSearchActive && (
         <div className="px-4 py-2 border-b border-cyan-500/20 bg-cyan-950/30 flex items-center justify-between gap-3 text-xs text-cyan-100/90 shrink-0">
@@ -462,6 +503,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                     <button
                       type="button"
                       onClick={() => onSelectFolder(section.folder!.id)}
+                      onContextMenu={e => openFolderContextMenu(section.folder!, e)}
                       className="flex items-center gap-2 min-w-0 rounded-md hover:bg-white/6 px-1 -mx-1 py-0.5 transition-colors group/folder group"
                       title={`Open ${section.title}`}
                     >
@@ -487,14 +529,14 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         ) : (
           <>
             {viewMode === 'icons' && (files.length > 0 || browseSubfolders.length > 0) && (
-              <IconsView accent={accent} files={files} folders={browseSubfolders} selectedFileId={selectedFileId} selectedIds={selectedIds} iconScale={iconScale} onSelectFile={selectFile} onOpenFolder={onSelectFolder} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenAudio={onOpenAudio} onOpenQuickLook={onOpenQuickLook} onFileContextMenu={openContextMenu} toggleSelectOne={toggleSelectOne} />
+              <IconsView accent={accent} files={files} folders={browseSubfolders} selectedFileId={selectedFileId} selectedIds={selectedIds} iconScale={iconScale} onSelectFile={selectFile} onOpenFolder={onSelectFolder} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenAudio={onOpenAudio} onOpenQuickLook={onOpenQuickLook} onFileContextMenu={openContextMenu} onFolderContextMenu={openFolderContextMenu} toggleSelectOne={toggleSelectOne} />
             )}
             {viewMode === 'list' && (files.length > 0 || browseSubfolders.length > 0) && (
-              <ListView accent={accent} files={files} folders={browseSubfolders} selectedFileId={selectedFileId} selectedIds={selectedIds} scrollParentRef={browseScrollRef} onSelectFile={selectFile} onOpenFolder={onSelectFolder} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenAudio={onOpenAudio} onShareFile={onShareFile} onOpenQuickLook={onOpenQuickLook} onFileContextMenu={openContextMenu} toggleSelectOne={toggleSelectOne} toggleSelectAll={toggleSelectAll} getAccount={getAccount} />
+              <ListView accent={accent} files={files} folders={browseSubfolders} selectedFileId={selectedFileId} selectedIds={selectedIds} scrollParentRef={browseScrollRef} onSelectFile={selectFile} onOpenFolder={onSelectFolder} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenAudio={onOpenAudio} onShareFile={onShareFile} onOpenQuickLook={onOpenQuickLook} onFileContextMenu={openContextMenu} onFolderContextMenu={openFolderContextMenu} toggleSelectOne={toggleSelectOne} toggleSelectAll={toggleSelectAll} getAccount={getAccount} />
             )}
             {viewMode === 'columns' && (
-              <ColumnsView accent={accent} files={files} selectedFolder={selectedFolder} selectedFileId={selectedFileId} selectedIds={selectedIds} folders={folders.filter(f => f.accountId === 'all' ? !f.parentId : true)} totalSize={totalSize} onSelectFile={selectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenAudio={onOpenAudio} onOpenQuickLook={onOpenQuickLook} onFileContextMenu={openContextMenu} onSelectFolder={onSelectFolder} toggleSelectOne={toggleSelectOne} />
-              )}
+              <ColumnsView accent={accent} files={files} selectedFolder={selectedFolder} selectedFileId={selectedFileId} selectedIds={selectedIds} folders={folders.filter(f => f.accountId === 'all' ? !f.parentId : true)} totalSize={totalSize} onSelectFile={selectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenAudio={onOpenAudio} onOpenQuickLook={onOpenQuickLook} onFileContextMenu={openContextMenu} onFolderContextMenu={openFolderContextMenu} onSelectFolder={onSelectFolder} toggleSelectOne={toggleSelectOne} />
+            )}
               {viewMode === 'gallery' && selectedFile && (
               <GalleryView accent={accent} files={files} selectedFile={selectedFile} selectedIds={selectedIds} onSelectFile={selectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onFileContextMenu={openContextMenu} toggleSelectOne={toggleSelectOne} />
               )}
@@ -561,7 +603,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
           
           {viewMode === 'icons' && (
             <div className="hidden sm:flex items-center gap-1.5">
-              <span className="text-[10px] text-neutral-400">Icon Size</span>
+              <span className="text-[10px] text-neutral-500">Icon Size</span>
               <input
                 type="range"
                 min={75}
@@ -569,6 +611,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                 value={iconScale}
                 onChange={e => setIconScale(parseInt(e.target.value, 10))}
                 className="w-28 custom-range"
+                aria-label="Icon size"
               />
             </div>
           )}
@@ -596,6 +639,25 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         />
       )}
 
+      {folderMenu && (
+        <FolderContextMenu
+          folder={folderMenu.folder}
+          targets={folderTargetsFor(folderMenu.folder)}
+          x={folderMenu.x}
+          y={folderMenu.y}
+          onClose={() => setFolderMenu(null)}
+          onOpen={folder => onSelectFolder(folder.id)}
+          onQuickLook={folder => setInfoFolderId(folder.id)}
+          onGetInfo={folder => setInfoFolderId(folder.id)}
+          onRename={folder => setRenamingFolder({ folder, x: folderMenu.x, y: folderMenu.y })}
+          onDuplicate={onDuplicateFolders}
+          onCopy={onCopyFolders}
+          onShare={onShareFolder}
+          onTrash={onDeleteFolders}
+          onToggleTag={(items, tag) => onToggleFolderTag(items.map(item => item.id), tag)}
+        />
+      )}
+
       {renaming && (
         <FileRenameField
           file={renaming.file}
@@ -609,7 +671,21 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         />
       )}
 
+      {renamingFolder && (
+        <FolderRenameField
+          folder={renamingFolder.folder}
+          x={renamingFolder.x}
+          y={renamingFolder.y}
+          onCommit={name => {
+            onRenameFolder(renamingFolder.folder.id, name);
+            setRenamingFolder(null);
+          }}
+          onCancel={() => setRenamingFolder(null)}
+        />
+      )}
+
       {infoFile && <FileGetInfo file={infoFile} onClose={() => setInfoFileId(null)} />}
+      {infoFolder && <FolderGetInfo folder={infoFolder} onClose={() => setInfoFolderId(null)} />}
 
     </div>
   );

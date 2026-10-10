@@ -49,7 +49,7 @@ const DocumentPage: React.FC<{ name: string; compact: boolean }> = ({ name, comp
   const style = DOC_STYLES[ext] ?? { badge: 'bg-sky-500', label: ext.slice(0, 4).toUpperCase() || 'FILE' };
 
   return (
-    <div className="w-full h-full flex items-center justify-center bg-gradient-to-b from-neutral-800/70 to-neutral-900/70">
+    <div className="w-full h-full flex items-center justify-center bg-neutral-900/80">
       <div className="relative h-[84%] aspect-[3/4] rounded-[3px] bg-neutral-100 shadow-lg shadow-black/50 overflow-hidden">
         <div className="absolute top-0 right-0 w-[22%] aspect-square bg-neutral-300" style={{ clipPath: 'polygon(0 0, 100% 100%, 0 100%)' }} />
         <div className="absolute top-0 right-0 w-[22%] aspect-square bg-neutral-900/80" style={{ clipPath: 'polygon(0 0, 100% 0, 100% 100%)' }} />
@@ -171,7 +171,7 @@ export const FileThumbnail: React.FC<FileThumbnailProps> = ({
     );
   } else if (isZipArchive(file) || file.category === 'archive') {
     content = (
-      <div className="w-full h-full flex items-center justify-center bg-gradient-to-b from-pink-950/40 to-neutral-950/80">
+      <div className="w-full h-full flex items-center justify-center bg-neutral-950/80">
         <ZipFileIcon className={`${iconClassName} text-pink-400`} title="ZIP archive" />
       </div>
     );

@@ -198,7 +198,7 @@ main,
 .brand-line {
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: clamp(3.4rem, 11vw, 8rem);
+  font-size: clamp(1.85rem, 5vw, 3.25rem);
   line-height: 0.95;
   letter-spacing: -0.03em;
   color: var(--ink);
@@ -207,7 +207,7 @@ main,
 .slogan-line {
   font-family: var(--font-display);
   font-weight: 500;
-  font-size: clamp(1.55rem, 4.2vw, 2.75rem);
+  font-size: clamp(1.2rem, 3.2vw, 1.85rem);
   line-height: 1.15;
   color: var(--ink-soft);
   font-variation-settings: "opsz" 72;

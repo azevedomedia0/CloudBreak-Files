@@ -3,9 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { MacFinderToolbar, MacViewMode } from './components/MacFinderToolbar';
-import { MacMenuBar } from './components/MacMenuBar';
 import { Sidebar } from './components/Sidebar';
 import { useResizablePanel } from './hooks/useResizablePanel';
 import { DateFilter, FileSortDirection, FileSortKey, filterFiles, sortFiles } from './utils/filterFiles';
@@ -18,7 +17,9 @@ import { useP2pLibraries } from './hooks/useP2pLibraries';
 import { useCloudAccounts } from './hooks/useCloudAccounts';
 import { useNotifications } from './hooks/useNotifications';
 import { useSidebarSources } from './hooks/useSidebarSources';
+import { useNavHistory, type NavLocation } from './hooks/useNavHistory';
 import { useSystemSearch } from './hooks/useSystemSearch';
+import { localPathFromFolderId } from './components/file-browser/FolderContextMenu';
 import { FILE_MENU_ACTION_EVENT, type FileMenuActionDetail } from './utils/fileMenuBus';
 import { mergeSystemSearchResults, systemSearchBridge } from './services/systemSearchBridge';
 import { AppModals } from './components/AppModals';
@@ -143,8 +144,8 @@ export default function App() {
     useResizablePanel({ initial: 240, min: 180, max: 380, grow: 'right' });
   const { width: inspectorWidth, isResizing: isResizingInspector, startResize: startResizeInspector, reset: resetInspectorWidth } =
     useResizablePanel({ initial: 320, min: 260, max: () => Math.max(480, Math.round(window.innerWidth * 0.65)), grow: 'left' });
-  /** Columns view: equal-width columns hug content; inspector fills the leftover space. */
-  const columnsInspectorFill =
+  /** Columns view: equal-width columns hug content; inspector stays on the right (resizable). */
+  const columnsInspectorLayout =
     viewMode === 'columns' && isInspectorOpen && sidePanelMode === 'inspector' && !editingDocumentFile;
 
   const { toast: toastNotification, showToast } = useToast();
@@ -562,6 +563,154 @@ export default function App() {
     ? 'Private Vault'
     : activeAccount?.name || 'Cloud Bucket';
 
+  const navLocation = useMemo<NavLocation>(() => ({
+    accountId: selectedAccountId,
+    folderId: selectedFolderId,
+    libraryId: selectedLibraryId,
+    sourceId: selectedSourceId,
+    category: selectedCategory,
+  }), [selectedAccountId, selectedFolderId, selectedLibraryId, selectedSourceId, selectedCategory]);
+
+  const applyNavLocation = useCallback((location: NavLocation) => {
+    setSelectedAccountId(location.accountId);
+    setSelectedFolderId(location.folderId);
+    setSelectedLibraryId(location.libraryId);
+    setSelectedSourceId(location.sourceId);
+    setSelectedCategory(location.category);
+  }, []);
+
+  const { canGoBack, canGoForward, goBack, goForward } = useNavHistory(navLocation, applyNavLocation);
+
+  const collectDescendantFolderIds = useCallback((rootId: string): Set<string> => {
+    const ids = new Set<string>([rootId]);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const folder of folders) {
+        if (!folder.parentId || ids.has(folder.id)) continue;
+        if (ids.has(folder.parentId)) {
+          ids.add(folder.id);
+          grew = true;
+        }
+      }
+    }
+    return ids;
+  }, [folders]);
+
+  const handleRenameFolder = useCallback(async (folderId: string, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const folder = folders.find(f => f.id === folderId);
+    if (!folder) return;
+    const diskPath = localPathFromFolderId(folder.id);
+    if (diskPath && localFs.available()) {
+      try {
+        const info = await localFs.rename(diskPath, trimmed);
+        const newId = `folder-local-${info.path}`;
+        setFolders(prev => prev.map(f => {
+          if (f.id === folderId) return { ...f, id: newId, name: info.name };
+          if (f.parentId === folderId) return { ...f, parentId: newId };
+          return f;
+        }));
+        setFiles(prev => prev.map(f => (
+          f.folderId === folderId
+            ? {
+                ...f,
+                folderId: newId,
+                folderPath: f.folderPath.replace(folder.name, info.name),
+                localPath: f.localPath?.startsWith(diskPath)
+                  ? `${info.path}${f.localPath.slice(diskPath.length)}`
+                  : f.localPath,
+              }
+            : f
+        )));
+        if (selectedFolderId === folderId) setSelectedFolderId(newId);
+        showToast(`Renamed to “${info.name}”`);
+      } catch (err) {
+        showToast(`Could not rename: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      return;
+    }
+    setFolders(prev => prev.map(f => (f.id === folderId ? { ...f, name: trimmed } : f)));
+  }, [folders, selectedFolderId, showToast]);
+
+  const handleDuplicateFolders = useCallback((sources: FolderItem[]) => {
+    setFolders(prev => {
+      const names = new Set(prev.map(f => f.name));
+      const copies: FolderItem[] = [];
+      for (const folder of sources) {
+        let name = `${folder.name} copy`;
+        if (names.has(name)) {
+          let n = 2;
+          while (names.has(`${folder.name} copy ${n}`)) n += 1;
+          name = `${folder.name} copy ${n}`;
+        }
+        names.add(name);
+        copies.push({
+          ...folder,
+          id: `folder-copy-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          name,
+          tags: [...(folder.tags ?? [])],
+          itemCount: 0,
+        });
+      }
+      if (!copies.length) return prev;
+      const insertAt = Math.max(0, ...sources.map(source => prev.findIndex(f => f.id === source.id)));
+      const next = [...prev];
+      next.splice(insertAt + 1, 0, ...copies);
+      return next;
+    });
+    showToast(sources.length === 1 ? `Duplicated “${sources[0].name}”` : `Duplicated ${sources.length} folders`);
+  }, [showToast]);
+
+  const handleCopyFolders = useCallback(async (sources: FolderItem[]) => {
+    const text = sources.map(folder => folder.name).join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch { /* ignore */ }
+    showToast(sources.length === 1 ? `Copied “${sources[0].name}”` : `Copied ${sources.length} folders`);
+  }, [showToast]);
+
+  const handleDeleteFolders = useCallback(async (sources: FolderItem[]) => {
+    if (!sources.length) return;
+    const label = sources.length === 1 ? `“${sources[0].name}”` : `${sources.length} folders`;
+    if (appPreferences.confirmBeforeDelete && !window.confirm(`Move ${label} to the Trash?`)) return;
+
+    const removeIds = new Set<string>();
+    for (const folder of sources) {
+      for (const id of collectDescendantFolderIds(folder.id)) removeIds.add(id);
+    }
+
+    for (const folder of sources) {
+      const diskPath = localPathFromFolderId(folder.id);
+      if (diskPath && localFs.available()) {
+        try {
+          await localFs.trashFile(diskPath);
+        } catch (err) {
+          showToast(`Could not trash “${folder.name}”: ${err instanceof Error ? err.message : String(err)}`);
+          return;
+        }
+      } else if (diskPath === null && localFs.available()) {
+        // Tracked local root without an absolute id — forget by display name match later via forget if remembered.
+      }
+    }
+
+    setFolders(prev => prev.filter(f => !removeIds.has(f.id)));
+    setFiles(prev => prev.filter(f => !removeIds.has(f.folderId)));
+    if (selectedFolderId && removeIds.has(selectedFolderId)) setSelectedFolderId(null);
+    showToast(sources.length === 1 ? `Moved “${sources[0].name}” to the Trash` : `Moved ${sources.length} folders to the Trash`);
+  }, [appPreferences.confirmBeforeDelete, collectDescendantFolderIds, selectedFolderId, showToast]);
+
+  const handleToggleFolderTag = useCallback((folderIds: string[], tag: string) => {
+    const idSet = new Set(folderIds);
+    setFolders(prev => prev.map(folder => {
+      if (!idSet.has(folder.id)) return folder;
+      const tags = folder.tags ?? [];
+      const next = tags.includes(tag) ? tags.filter(t => t !== tag) : [...tags, tag];
+      return { ...folder, tags: next };
+    }));
+  }, []);
+
   return (
     <div 
       className="relative flex flex-col h-screen w-screen overflow-hidden select-none"
@@ -597,17 +746,6 @@ export default function App() {
       <div className="flex-1 p-0 overflow-hidden flex flex-col z-10 w-full h-full">
         <div className="relative w-full h-full max-w-none rounded-none border-x-0 border-b-0 overflow-hidden flex flex-col macos-window">
 
-          <MacMenuBar
-            onOpenVaultSecurity={() => setIsVaultSecurityOpen(true)}
-            isVaultUnlocked={isVaultUnlocked}
-            activeAccountName={
-              activeAccount?.name
-              || (selectedAccountId === 'vault' ? 'Private Vault' : 'Local Files')
-            }
-            hasSelection={!!selectedFileId}
-            isEncrypted={!!selectedFileForMenu?.encryption?.isEncrypted}
-          />
-          
           {/* macOS Finder Toolbar & Titlebar */}
           <MacFinderToolbar
             viewMode={viewMode}
@@ -644,6 +782,10 @@ export default function App() {
             onOpenAddAccount={() => setIsAddAccountOpen(true)}
             activePathTitle={activePathTitle}
             activeAccount={activeAccount}
+            canGoBack={canGoBack}
+            canGoForward={canGoForward}
+            onGoBack={goBack}
+            onGoForward={goForward}
             isSidebarCollapsed={isSidebarCollapsed}
             onToggleSidebar={() => setIsSidebarCollapsed(prev => !prev)}
             isInspectorOpen={isInspectorOpen}
@@ -814,18 +956,31 @@ export default function App() {
                   }
                   selectFolder(id);
                 }}
+                onRenameFolder={(id, name) => { void handleRenameFolder(id, name); }}
+                onDuplicateFolders={handleDuplicateFolders}
+                onCopyFolders={foldersToCopy => { void handleCopyFolders(foldersToCopy); }}
+                onDeleteFolders={foldersToDelete => { void handleDeleteFolders(foldersToDelete); }}
+                onToggleFolderTag={handleToggleFolderTag}
+                onShareFolder={() => {
+                  const firstLib = sharedLibraries[0];
+                  if (firstLib) setSharingLibrary(firstLib);
+                  else showToast('Create a P2P library to share');
+                }}
                 swarmStatus={swarmStatus}
                 onCopyLibraryInvite={() => { void copyLibraryInvite(); }}
                 onRefreshSwarm={() => { void refreshSwarm(); }}
-                hugContent={columnsInspectorFill}
+                hugContent={columnsInspectorLayout}
                 systemSearchActive={searchQuery.trim().length >= 2 && systemSearchBridge.available()}
                 systemSearching={systemSearching}
                 systemHitCount={systemResults.length}
               />
             )}
 
+            {/* Spacer so Columns view keeps equal-width panes while the inspector sits on the right. */}
+            {columnsInspectorLayout && <div className="flex-1 min-w-4" aria-hidden="true" />}
+
             {/* Right panel stays visible on every file screen (browser + document editor) */}
-            {isInspectorOpen && !columnsInspectorFill && (
+            {isInspectorOpen && (
               <div
                 onMouseDown={startResizeInspector}
                 onDoubleClick={resetInspectorWidth}
@@ -895,7 +1050,6 @@ export default function App() {
                 onNewFolder={() => setIsNewFolderOpen(true)}
                 canPaste={clipboardFileIds.length > 0}
                 width={inspectorWidth}
-                expand={columnsInspectorFill}
               />
             )}
           </div>

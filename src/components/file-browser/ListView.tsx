@@ -44,6 +44,7 @@ export interface ListViewProps {
   onShareFile: (file: FileItem) => void;
   onOpenQuickLook: () => void;
   onFileContextMenu: (file: FileItem, event: React.MouseEvent) => void;
+  onFolderContextMenu?: (folder: FolderItem, event: React.MouseEvent) => void;
   toggleSelectOne: (id: string, e: React.MouseEvent) => void;
   toggleSelectAll: () => void;
   getAccount: (accountId: CloudProviderId) => CloudAccount | undefined;
@@ -51,7 +52,7 @@ export interface ListViewProps {
 
 export const ListView: React.FC<ListViewProps> = ({
   accent, files, folders = [], selectedFileId, selectedIds, scrollParentRef,
-  onSelectFile, onOpenFolder, onEditPhoto, onOpenDocument, onOpenVideo, onOpenAudio, onShareFile, onOpenQuickLook, onFileContextMenu, toggleSelectOne, toggleSelectAll, getAccount,
+  onSelectFile, onOpenFolder, onEditPhoto, onOpenDocument, onOpenVideo, onOpenAudio, onShareFile, onOpenQuickLook, onFileContextMenu, onFolderContextMenu, toggleSelectOne, toggleSelectAll, getAccount,
 }) => {
   const localScrollRef = useRef<HTMLDivElement>(null);
   const rows = useMemo<Row[]>(() => {
@@ -119,19 +120,38 @@ export const ListView: React.FC<ListViewProps> = ({
 
           if (row.kind === 'folder') {
             const { folder } = row;
+            const folderSelected = selectedIds.has(folder.id);
             return (
               <div
                 key={folder.id}
                 onClick={() => onOpenFolder?.(folder.id)}
                 onDoubleClick={() => onOpenFolder?.(folder.id)}
-                className="grid items-center px-3 cursor-pointer transition-colors hover:bg-white/5 border-b border-white/5 text-xs text-neutral-300"
+                onContextMenu={e => onFolderContextMenu?.(folder, e)}
+                className={`group grid items-center px-3 cursor-pointer transition-colors border-b border-white/5 text-xs ${
+                  folderSelected
+                    ? SELECTION_CLASSES[accent].rowMulti
+                    : 'hover:bg-white/5 text-neutral-300'
+                }`}
                 style={{
                   ...style,
                   gridTemplateColumns: '32px minmax(160px, 2fr) 120px 80px 100px 140px 120px',
                 }}
               >
-                <span />
-                <FolderTile folder={folder} compact onOpen={onOpenFolder!} />
+                <button
+                  type="button"
+                  onClick={e => toggleSelectOne(folder.id, e)}
+                  className={`flex items-center justify-center transition-opacity ${
+                    folderSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                  }`}
+                  aria-label={folderSelected ? 'Deselect folder' : 'Select folder'}
+                >
+                  {folderSelected ? (
+                    <CheckSquare className={`w-3.5 h-3.5 ${SELECTION_CLASSES[accent].checkIcon}`} />
+                  ) : (
+                    <Square className="w-3.5 h-3.5 text-neutral-400" />
+                  )}
+                </button>
+                <FolderTile folder={folder} compact onOpen={onOpenFolder!} onContextMenu={onFolderContextMenu} />
                 <span className="text-neutral-500">—</span>
                 <span className="text-neutral-500">—</span>
                 <span className="text-neutral-400 font-mono text-[11px]">FOLDER</span>

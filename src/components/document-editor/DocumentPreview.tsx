@@ -39,11 +39,6 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({ file, classNam
           dangerouslySetInnerHTML={{ __html: html }}
         />
       </div>
-      <div
-        className={`pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-neutral-950/70 to-transparent ${
-          compact ? 'h-5' : 'h-10'
-        }`}
-      />
     </div>
   );
 };

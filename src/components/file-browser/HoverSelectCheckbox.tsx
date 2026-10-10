@@ -24,13 +24,14 @@ export const HoverSelectCheckbox: React.FC<HoverSelectCheckboxProps> = ({
     <button
       type="button"
       onClick={onToggle}
+      onDoubleClick={e => e.stopPropagation()}
       aria-label={selected ? 'Deselect' : 'Select'}
-      className={`absolute z-20 rounded-md backdrop-blur-md transition-opacity pointer-events-auto ${
+      className={`absolute z-20 rounded-md backdrop-blur-md transition-opacity pointer-events-auto shadow-sm ${
         compact ? 'top-0.5 left-0.5 p-0.5' : 'top-1.5 left-1.5 p-0.5'
       } ${
         selected
-          ? `${SELECTION_CLASSES[accent].checkIcon} bg-black/70 opacity-100`
-          : 'text-neutral-200 bg-black/55 opacity-0 group-hover:opacity-100'
+          ? `${SELECTION_CLASSES[accent].checkIcon} bg-black/75 opacity-100`
+          : 'text-white bg-black/60 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
       } ${className}`}
     >
       {selected ? <CheckSquare className={iconCls} /> : <Square className={iconCls} />}

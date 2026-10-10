@@ -27,6 +27,7 @@ export interface ColumnsViewProps {
   onOpenAudio: (file: FileItem) => void;
   onOpenQuickLook: () => void;
   onFileContextMenu: (file: FileItem, event: React.MouseEvent) => void;
+  onFolderContextMenu?: (folder: FolderItem, event: React.MouseEvent) => void;
   onSelectFolder: (folderId: string | null) => void;
   toggleSelectOne: (id: string, e: React.MouseEvent) => void;
 }
@@ -36,7 +37,7 @@ const COLUMN_WIDTH_CLASS = 'w-64';
 
 export const ColumnsView: React.FC<ColumnsViewProps> = ({
   accent, files, selectedFolder, selectedFileId, selectedIds, folders, totalSize,
-  onSelectFile, onEditPhoto, onOpenDocument, onOpenVideo, onOpenAudio, onOpenQuickLook, onFileContextMenu, onSelectFolder, toggleSelectOne,
+  onSelectFile, onEditPhoto, onOpenDocument, onOpenVideo, onOpenAudio, onOpenQuickLook, onFileContextMenu, onFolderContextMenu, onSelectFolder, toggleSelectOne,
 }) => (
     <div className="h-full flex gap-3 overflow-x-auto min-h-[480px] w-max max-w-full">
       {/* Col 1: Local Files & Folders */}
@@ -74,10 +75,19 @@ export const ColumnsView: React.FC<ColumnsViewProps> = ({
               }
             };
             return (
-              <button
+              <div
                 key={f.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => onSelectFolder(f.id)}
-                className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs transition-colors ${
+                onContextMenu={e => onFolderContextMenu?.(f, e)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onSelectFolder(f.id);
+                  }
+                }}
+                className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs transition-colors cursor-pointer ${
                   isSel ? 'bg-sky-500/20 text-sky-200 font-medium' : 'text-neutral-300 hover:bg-white/5'
                 }`}
               >
@@ -86,7 +96,7 @@ export const ColumnsView: React.FC<ColumnsViewProps> = ({
                   <span className="truncate">{f.name}</span>
                 </div>
                 <ChevronRight className="w-3.5 h-3.5 text-neutral-500" />
-              </button>
+              </div>
             );
           })}
         </div>
@@ -103,13 +113,20 @@ export const ColumnsView: React.FC<ColumnsViewProps> = ({
             const isCurrent = selectedFileId === file.id;
             const isSelected = selectedIds.has(file.id);
             return (
-              <button
+              <div
                 key={file.id}
-                type="button"
+                role="button"
+                tabIndex={0}
                 draggable
                 onDragStart={e => setFileDragData(e.dataTransfer, file)}
                 onClick={() => onSelectFile(file)}
                 onContextMenu={event => onFileContextMenu(file, event)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onSelectFile(file);
+                  }
+                }}
                 onDoubleClick={() => {
                   if (isMacAppBundle(file) && file.localPath && previewBridge.available()) {
                     void previewBridge.openWithDefault(file.localPath).catch(() => {});
@@ -119,7 +136,7 @@ export const ColumnsView: React.FC<ColumnsViewProps> = ({
                   else if (isEditableDocument(file)) onOpenDocument(file);
                   else onOpenQuickLook();
                 }}
-                className={`group w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs transition-all ${
+                className={`group w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs transition-all cursor-pointer ${
                   isCurrent
                     ? SELECTION_CLASSES[accent].columnRow
                     : isSelected
@@ -141,7 +158,7 @@ export const ColumnsView: React.FC<ColumnsViewProps> = ({
                   <span className="truncate">{file.name}</span>
                 </div>
                 <ChevronRight className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
-              </button>
+              </div>
             );
           })}
         </div>

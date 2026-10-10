@@ -39,12 +39,13 @@ export interface IconsViewProps {
   onOpenAudio: (file: FileItem) => void;
   onOpenQuickLook: () => void;
   onFileContextMenu: (file: FileItem, event: React.MouseEvent) => void;
+  onFolderContextMenu?: (folder: FolderItem, event: React.MouseEvent) => void;
   toggleSelectOne: (id: string, e: React.MouseEvent) => void;
 }
 
 export const IconsView: React.FC<IconsViewProps> = ({
   accent, files, folders = [], selectedFileId, selectedIds, iconScale,
-  onSelectFile, onOpenFolder, onEditPhoto, onOpenDocument, onOpenVideo, onOpenAudio, onOpenQuickLook, onFileContextMenu, toggleSelectOne,
+  onSelectFile, onOpenFolder, onEditPhoto, onOpenDocument, onOpenVideo, onOpenAudio, onOpenQuickLook, onFileContextMenu, onFolderContextMenu, toggleSelectOne,
 }) => (
     <div
       className="grid gap-x-3 gap-y-5"
@@ -53,7 +54,16 @@ export const IconsView: React.FC<IconsViewProps> = ({
       }}
     >
       {onOpenFolder && folders.map(folder => (
-        <FolderTile key={folder.id} folder={folder} iconScale={iconScale} onOpen={onOpenFolder} />
+        <FolderTile
+          key={folder.id}
+          folder={folder}
+          iconScale={iconScale}
+          onOpen={onOpenFolder}
+          accent={accent}
+          selected={selectedIds.has(folder.id)}
+          onToggleSelect={e => toggleSelectOne(folder.id, e)}
+          onContextMenu={onFolderContextMenu}
+        />
       ))}
       {files.map(file => {
         const isSelected = selectedIds.has(file.id);
@@ -87,11 +97,6 @@ export const IconsView: React.FC<IconsViewProps> = ({
           >
             {/* Finder-style thumbnail: rounded preview, no glass card chrome */}
             <div className="aspect-[4/3] flex items-center justify-center relative">
-              <HoverSelectCheckbox
-                accent={accent}
-                selected={isSelected}
-                onToggle={e => toggleSelectOne(file.id, e)}
-              />
               <div
                 className={`relative overflow-hidden shadow-md shadow-black/40 ${
                   isApp
@@ -107,6 +112,11 @@ export const IconsView: React.FC<IconsViewProps> = ({
                     : 'bg-black/50 border border-white/8'
                 }`}
               >
+                <HoverSelectCheckbox
+                  accent={accent}
+                  selected={isSelected}
+                  onToggle={e => toggleSelectOne(file.id, e)}
+                />
                 <FileThumbnail
                   file={file}
                   hoverZoom={isPhoto}

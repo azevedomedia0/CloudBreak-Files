@@ -3,12 +3,13 @@ import {
   X, User, Settings, ShieldCheck, Bell,
   Sliders, Lock, Unlock, Radio, Copy, Check, Info,
   Eye, EyeOff, Trash2, PanelRight,
-  Cpu, Fingerprint, RefreshCw, Globe, Moon, Sun,
+  Cpu, Fingerprint, RefreshCw, Globe,
   Camera, ImagePlus, FolderLock, FolderOpen, Network,
 } from '@/src/icons';
 import { isTauri } from '@tauri-apps/api/core';
 import { CloudAccount } from '../types';
 import {
+  APP_THEMES,
   AppPreferences,
   AppTheme,
   DEFAULT_PREFERENCES,
@@ -420,70 +421,19 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
           )}
 
           {activeTab === 'preferences' && (
-            <div className="space-y-4">
-              <div>
-                <h4 className="text-xs font-semibold text-white mb-1">Theme</h4>
-                <p className="text-[11px] text-neutral-500 mb-3">
-                  Choose light or dark. Changes apply immediately; click Save to keep them.
-                </p>
-                <div className="grid grid-cols-2 gap-3">
-                  {([
-                    {
-                      id: 'dark' as AppTheme,
-                      label: 'Dark',
-                      icon: <Moon className="w-4 h-4" />,
-                      swatches: ['#0a0a0a', '#171717', '#262626', '#404040'],
-                    },
-                    {
-                      id: 'light' as AppTheme,
-                      label: 'Light',
-                      icon: <Sun className="w-4 h-4" />,
-                      swatches: ['#d2d2d8', '#c8c8ce', '#b0b0b6', '#8e8e94'],
-                    },
-                  ]).map(option => {
-                    const selected = prefs.theme === option.id;
-                    return (
-                      <button
-                        key={option.id}
-                        type="button"
-                        onClick={() => patchPrefs('theme', option.id)}
-                        className={`relative text-left rounded-2xl border p-3.5 transition-all ${
-                          selected
-                            ? 'border-sky-400/70 bg-sky-500/10 ring-1 ring-sky-400/30'
-                            : 'border-white/10 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/20'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-3">
-                          <span className={`flex items-center gap-1.5 text-xs font-semibold ${selected ? 'text-sky-300' : 'text-neutral-200'}`}>
-                            {option.icon}
-                            {option.label}
-                          </span>
-                          {selected && (
-                            <span className="w-5 h-5 rounded-full bg-sky-500 flex items-center justify-center">
-                              <Check className="w-3 h-3 text-white" />
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex gap-1.5">
-                          {option.swatches.map(color => (
-                            <span
-                              key={color}
-                              className="flex-1 h-8 rounded-lg border border-black/20"
-                              style={{ backgroundColor: color }}
-                            />
-                          ))}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="text-[11px] text-neutral-500 flex items-start gap-1.5 mt-3">
-                  <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                  Light mode uses medium gray surfaces with darker accent colors for contrast.
-                </p>
-              </div>
+            <div className="space-y-3">
+              <PrefRow title="Appearance" description="Window chrome and surface colors. Applies immediately; Save to keep.">
+                <select
+                  value={prefs.theme}
+                  onChange={e => patchPrefs('theme', e.target.value as AppTheme)}
+                  className="bg-black/60 border border-white/10 text-xs text-neutral-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-sky-400/50"
+                >
+                  {APP_THEMES.map(option => (
+                    <option key={option.id} value={option.id}>{option.label}</option>
+                  ))}
+                </select>
+              </PrefRow>
 
-              <div className="space-y-3 pt-1 border-t border-white/5">
               <PrefRow title="Default view mode" description="File browser layout used when the app launches">
                 <select
                   value={prefs.defaultView}
@@ -549,7 +499,6 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                   <RefreshCw className="w-3 h-3" />
                   Reset general defaults
                 </button>
-              </div>
               </div>
             </div>
           )}

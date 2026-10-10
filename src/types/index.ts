@@ -113,6 +113,8 @@ export interface FolderItem {
   parentId?: string;
   color?: string;
   itemCount: number;
+  /** Finder-style tags (same palette as files). */
+  tags?: string[];
 }
 
 export interface P2PPeer {

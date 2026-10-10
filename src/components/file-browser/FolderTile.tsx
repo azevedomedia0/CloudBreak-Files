@@ -4,12 +4,18 @@ import { FolderItem } from '../../types';
 import { previewBridge } from '../../services/previewBridge';
 import { useNearViewport } from '../../hooks/useNearViewport';
 import { FinderFolderIcon } from './FinderFolderIcon';
+import { HoverSelectCheckbox } from './HoverSelectCheckbox';
+import { SelectionAccent, SELECTION_CLASSES } from '../../utils/selectionAccent';
 
 export interface FolderTileProps {
   folder: FolderItem;
   iconScale?: number;
   compact?: boolean;
   onOpen: (folderId: string) => void;
+  accent?: SelectionAccent;
+  selected?: boolean;
+  onToggleSelect?: (e: React.MouseEvent) => void;
+  onContextMenu?: (folder: FolderItem, event: React.MouseEvent) => void;
 }
 
 function localPathFromFolderId(id: string): string | null {
@@ -24,10 +30,19 @@ function isAppFolder(folder: FolderItem): boolean {
 }
 
 /** Finder-style yellow folder for Icons / List grids. .app leftovers launch instead. */
-export const FolderTile: React.FC<FolderTileProps> = ({ folder, iconScale = 100, compact = false, onOpen }) => {
+export const FolderTile: React.FC<FolderTileProps> = ({
+  folder,
+  iconScale = 100,
+  compact = false,
+  onOpen,
+  accent = 'sky',
+  selected = false,
+  onToggleSelect,
+  onContextMenu,
+}) => {
   const appPath = isAppFolder(folder) ? localPathFromFolderId(folder.id) : null;
   const [appIcon, setAppIcon] = useState<string | null>(null);
-  const { ref, near } = useNearViewport<HTMLButtonElement>('200px');
+  const { ref, near } = useNearViewport<HTMLDivElement>('200px');
 
   useEffect(() => {
     if (!appPath || !previewBridge.available() || !near) {
@@ -53,12 +68,20 @@ export const FolderTile: React.FC<FolderTileProps> = ({ folder, iconScale = 100,
 
   if (compact) {
     return (
-      <button
+      <div
         ref={ref}
-        type="button"
+        role="button"
+        tabIndex={0}
         onClick={launchOrOpen}
         onDoubleClick={launchOrOpen}
-        className="flex items-center gap-2.5 min-w-0 text-left w-full"
+        onContextMenu={e => onContextMenu?.(folder, e)}
+        onKeyDown={e => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            launchOrOpen();
+          }
+        }}
+        className="flex items-center gap-2.5 min-w-0 text-left w-full cursor-pointer"
         title={`Open ${folder.name}`}
       >
         {appPath ? (
@@ -71,23 +94,45 @@ export const FolderTile: React.FC<FolderTileProps> = ({ folder, iconScale = 100,
           <FinderFolderIcon className="w-8 h-6 shrink-0 drop-shadow-sm" />
         )}
         <span className="truncate max-w-xs text-neutral-200">{folder.name}</span>
-      </button>
+      </div>
     );
   }
 
   const scale = Math.min(1.4, Math.max(0.75, iconScale / 100));
 
   return (
-    <button
+    <div
       ref={ref}
-      type="button"
+      role="button"
+      tabIndex={0}
       onClick={launchOrOpen}
       onDoubleClick={launchOrOpen}
-      className="group relative rounded-xl px-2 pt-3 pb-2 transition-all cursor-pointer hover:bg-white/5 text-left w-full"
+      onContextMenu={e => onContextMenu?.(folder, e)}
+      onKeyDown={e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          launchOrOpen();
+        }
+      }}
+      className={`group relative rounded-xl px-2 pt-3 pb-2 transition-all cursor-pointer text-left w-full ${
+        selected
+          ? SELECTION_CLASSES[accent].cardMulti
+          : 'hover:bg-white/5'
+      }`}
       title={`Open ${folder.name}`}
     >
-      <div className="aspect-[4/3] flex items-center justify-center">
-        <div style={{ transform: `scale(${scale})` }} className="origin-center">
+      <div className="aspect-[4/3] flex items-center justify-center relative">
+        {onToggleSelect && (
+          <HoverSelectCheckbox
+            accent={accent}
+            selected={selected}
+            onToggle={onToggleSelect}
+          />
+        )}
+        <div
+          style={{ transform: `scale(${scale})` }}
+          className="relative origin-center"
+        >
           {appPath ? (
             appIcon ? (
               <img
@@ -108,6 +153,6 @@ export const FolderTile: React.FC<FolderTileProps> = ({ folder, iconScale = 100,
           {folder.name}
         </p>
       </div>
-    </button>
+    </div>
   );
 };
