@@ -12,6 +12,12 @@ export interface ProviderCredentials {
   provider: CloudProviderKind;
   /** OAuth / API bearer token (Drive, Dropbox, OneDrive). */
   accessToken?: string;
+  /** OAuth refresh token (Google Drive Sign in with Google). */
+  refreshToken?: string;
+  /** rclone's JSON token (Google Drive signed in through the bundled rclone). */
+  rcloneToken?: string;
+  /** ISO-8601 expiry for `accessToken` when known. */
+  expiresAt?: string;
   /** Nextcloud / MEGA username or email. */
   username?: string;
   /** Nextcloud app password or MEGA password. */

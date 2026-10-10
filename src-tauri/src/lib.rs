@@ -1,6 +1,9 @@
 pub mod cloud_http;
 pub mod commands;
 pub mod credentials_store;
+pub mod oauth_google;
+pub mod oauth_pkce;
+pub mod rclone;
 pub mod crypto;
 pub mod local_fs;
 pub mod macos_full_disk_access;
@@ -113,6 +116,15 @@ pub fn run() {
             commands::media_read_temp,
             commands::media_cleanup_temp,
             cloud_http::cloud_http,
+            oauth_google::google_oauth_sign_in,
+            oauth_google::google_oauth_refresh,
+            oauth_pkce::oauth_sign_in,
+            oauth_pkce::oauth_refresh,
+            oauth_pkce::nextcloud_login_flow,
+            rclone::rclone_status,
+            rclone::rclone_google_authorize,
+            rclone::rclone_drive_info,
+            rclone::rclone_drive_list,
             credentials_store::credentials_list,
             credentials_store::credentials_get,
             credentials_store::credentials_save,

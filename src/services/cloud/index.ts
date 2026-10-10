@@ -18,6 +18,13 @@ import {
 export type { CloudProviderKind, ProviderCredentials, ProviderSyncResult } from './types';
 export { accountIdForProvider, defaultEndpoint } from './types';
 export { credentialStore } from './credentials';
+export {
+  credentialsFromGoogleTokens,
+  googleOAuthClientId,
+  isGoogleOAuthAvailable,
+  isGoogleOAuthConfigured,
+  signInWithGoogle,
+} from './oauth/google';
 
 async function testWith(creds: ProviderCredentials): Promise<ProviderAccountInfo> {
   switch (creds.provider) {
@@ -75,6 +82,9 @@ export const cloudService = {
       accountId,
       provider: input.provider,
       accessToken: input.accessToken,
+      refreshToken: input.refreshToken,
+      rcloneToken: input.rcloneToken,
+      expiresAt: input.expiresAt,
       username: input.username,
       password: input.password,
       endpoint: input.endpoint || defaultEndpoint(input.provider),
@@ -82,7 +92,14 @@ export const cloudService = {
     };
 
     const result = await syncWith(creds);
-    await credentialStore.save(creds);
+    // Prefer tokens refreshed mid-sync (Google) over the pre-sync snapshot.
+    const after = credentialStore.get(accountId);
+    await credentialStore.save({
+      ...creds,
+      accessToken: after?.accessToken ?? creds.accessToken,
+      refreshToken: after?.refreshToken ?? creds.refreshToken,
+      expiresAt: after?.expiresAt ?? creds.expiresAt,
+    });
     const library = mapRemoteEntries(accountId, result.entries);
 
     const note = input.provider === 'MEGA Drive'

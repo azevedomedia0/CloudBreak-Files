@@ -1,4 +1,5 @@
 import { cloudJson } from '../http';
+import { ensureOAuthAccessToken } from '../oauth/pkce';
 import { ProviderAccountInfo, ProviderCredentials, ProviderSyncResult, RemoteEntry } from '../types';
 
 interface GraphDrive {
@@ -33,7 +34,8 @@ function graphBase(creds: ProviderCredentials): string {
   return (creds.endpoint || 'https://graph.microsoft.com/v1.0').replace(/\/+$/, '');
 }
 
-export async function testOneDrive(creds: ProviderCredentials): Promise<ProviderAccountInfo> {
+export async function testOneDrive(input: ProviderCredentials): Promise<ProviderAccountInfo> {
+  const creds = await ensureOAuthAccessToken(input);
   const token = requireToken(creds);
   const drive = await cloudJson<GraphDrive>({
     method: 'GET',
@@ -48,7 +50,8 @@ export async function testOneDrive(creds: ProviderCredentials): Promise<Provider
   };
 }
 
-export async function syncOneDrive(creds: ProviderCredentials): Promise<ProviderSyncResult> {
+export async function syncOneDrive(input: ProviderCredentials): Promise<ProviderSyncResult> {
+  const creds = await ensureOAuthAccessToken(input);
   const token = requireToken(creds);
   const account = await testOneDrive(creds);
   const entries: RemoteEntry[] = [];

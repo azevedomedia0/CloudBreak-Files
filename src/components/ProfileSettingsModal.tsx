@@ -748,7 +748,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
               <div className="p-3 rounded-xl bg-black/40 border border-white/5 text-[11px] text-neutral-400 flex gap-2">
                 <Globe className="w-3.5 h-3.5 text-sky-400 shrink-0 mt-0.5" />
                 <span>
-                  Cloud providers authenticate with tokens you paste in each account’s integration panel. Credentials are stored in local browser storage under a Cloudbreak key.
+                  Google Drive uses Sign in with Google (desktop OAuth). Other providers use tokens or passwords from each account’s integration panel. On desktop, secrets go in the OS keychain; the browser preview uses local storage.
                 </span>
               </div>
 

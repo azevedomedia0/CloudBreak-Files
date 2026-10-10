@@ -69,6 +69,15 @@ pub struct ProviderCredentials {
     pub provider: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub access_token: Option<String>,
+    /// Google OAuth refresh token (and future providers).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refresh_token: Option<String>,
+    /// ISO-8601 expiry for `access_token` when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<String>,
+    /// rclone's JSON token for a Google Drive account signed in through the bundled rclone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rclone_token: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub username: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

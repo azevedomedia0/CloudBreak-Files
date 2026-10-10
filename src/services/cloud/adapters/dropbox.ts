@@ -1,4 +1,5 @@
 import { cloudJson } from '../http';
+import { ensureOAuthAccessToken } from '../oauth/pkce';
 import { ProviderAccountInfo, ProviderCredentials, ProviderSyncResult, RemoteEntry } from '../types';
 
 interface DropboxAccount {
@@ -37,7 +38,8 @@ function apiBase(creds: ProviderCredentials): string {
   return (creds.endpoint || 'https://api.dropboxapi.com/2').replace(/\/+$/, '');
 }
 
-export async function testDropbox(creds: ProviderCredentials): Promise<ProviderAccountInfo> {
+export async function testDropbox(input: ProviderCredentials): Promise<ProviderAccountInfo> {
+  const creds = await ensureOAuthAccessToken(input);
   const token = requireToken(creds);
   const headers = {
     Authorization: `Bearer ${token}`,
@@ -63,7 +65,8 @@ export async function testDropbox(creds: ProviderCredentials): Promise<ProviderA
   };
 }
 
-export async function syncDropbox(creds: ProviderCredentials): Promise<ProviderSyncResult> {
+export async function syncDropbox(input: ProviderCredentials): Promise<ProviderSyncResult> {
+  const creds = await ensureOAuthAccessToken(input);
   const token = requireToken(creds);
   const account = await testDropbox(creds);
   const headers = {

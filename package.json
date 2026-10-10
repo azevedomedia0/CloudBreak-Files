@@ -17,6 +17,7 @@
     "build:flatpak": "bash scripts/build-flatpak.sh",
     "build:flatpak:docker": "bash scripts/build-flatpak-docker.sh",
     "fetch:ffmpeg": "bash scripts/fetch-ffmpeg.sh",
+    "fetch:rclone": "bash scripts/fetch-rclone.sh",
     "updater:keys": "bash scripts/generate-updater-keys.sh",
     "test:app": "bash scripts/run-app-selftest.sh"
   },

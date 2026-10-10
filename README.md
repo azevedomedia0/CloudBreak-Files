@@ -44,7 +44,7 @@ Manage local folders, network volumes, multiple cloud accounts, a client-side en
 - Rust and Web Crypto share the same ciphertext format (interop tests included)
 
 ### Cloud accounts
-- Google Drive, Dropbox, OneDrive, MEGA, and Nextcloud
+- Official sign-in: Google Drive, Dropbox and OneDrive (OAuth with PKCE, refresh tokens), Nextcloud (Login Flow v2, revocable app password); MEGA uses email + password. Google Drive also offers a no-setup sign-in through a bundled rclone. See [`docs/cloud-oauth.md`](docs/cloud-oauth.md)
 - Connections re-synced at launch; unreachable accounts show as offline
 - Provider tokens and passwords stored in the **OS keychain** on desktop (legacy localStorage migrated once and cleared)
 - Browser preview still uses localStorage for credentials
@@ -112,6 +112,14 @@ npm run build:flatpak:docker  # same via Docker Desktop
 See [`docs/notarized-distribution.md`](docs/notarized-distribution.md), [`docs/auto-updates.md`](docs/auto-updates.md), and [`docs/flatpak.md`](docs/flatpak.md).  
 Never commit Apple API keys, updater private keys, or `.p8` / `.p12` files.
 
+## Privacy and terms
+
+- [Privacy Policy](PRIVACY.md): what stays on your device and the few services the app contacts.
+- [Terms of Use and Disclaimer](TERMS.md): no warranty, back up your data, security is not guaranteed.
+
+After editing either, run `python3 scripts/docs-to-html.py` to refresh the website pages.
+
 ## License
 
-Licensed under the [Apache License, Version 2.0](LICENSE).
+Licensed under the [Apache License, Version 2.0](LICENSE).  
+Bundled third-party software (rclone, MIT) is listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
