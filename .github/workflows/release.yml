@@ -211,7 +211,10 @@ jobs:
               --title "Cloudbreak Files ${TAG}" \
               --notes "Beta build. See the assets below to download."
           fi
-          IMMUTABLE="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq '.immutable // false')"
+          # Draft releases are not always addressable via /releases/tags/{tag}.
+          IMMUTABLE="$(gh release view "$TAG" --json isDraft,isImmutable 2>/dev/null \
+            | jq -r 'if .isDraft then "false" else (.isImmutable // false | tostring) end' \
+            || echo false)"
           if [[ "$IMMUTABLE" == "true" ]]; then
             echo "::error::Release ${TAG} is immutable — cannot upload Flatpak. Recreate the release without immutability, then re-run."
             exit 1
