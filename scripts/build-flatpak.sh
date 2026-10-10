@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build a Linux .deb with Tauri, then wrap it in a Flatpak (com.cloudbreak.files).
-# Requires Linux with: rust, node, webkitgtk, flatpak, and the GNOME 48 runtime.
+# Requires Linux with: rust, node, webkitgtk, flatpak, and the GNOME 49 runtime.
 # Prefers Flathub's org.flatpak.Builder (has appstreamcli); falls back to host flatpak-builder.
 # See docs/flatpak.md.
 #
@@ -8,6 +8,7 @@
 #   SKIP_NPM_CI=1     — skip npm ci (CI already installed deps)
 #   CARGO_TARGET_DIR  — Rust output dir (default /tmp/cloudbreak-cargo-target)
 #   FLATPAK_BUNDLE    — output .flatpak path
+#   GNOME_RUNTIME_VERSION — default 49 (must match flatpak/com.cloudbreak.files.yml)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -25,7 +26,7 @@ FLATPAK_DIR="$ROOT/flatpak"
 BUILD_DIR="${FLATPAK_BUILD_DIR:-/tmp/cloudbreak-flatpak-build}"
 REPO_DIR="${FLATPAK_REPO_DIR:-/tmp/cloudbreak-flatpak-repo}"
 BUNDLE_OUT="${FLATPAK_BUNDLE:-$ROOT/dist-flatpak/com.cloudbreak.files.flatpak}"
-GNOME_RUNTIME_VERSION="${GNOME_RUNTIME_VERSION:-48}"
+GNOME_RUNTIME_VERSION="${GNOME_RUNTIME_VERSION:-49}"
 
 for cmd in flatpak ar tar npm; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
@@ -82,7 +83,9 @@ mkdir -p "$(dirname "$BUNDLE_OUT")"
 # Run from flatpak/ so relative source paths in the yaml resolve.
 (
   cd "$FLATPAK_DIR"
-  run_flatpak_builder --force-clean --user --install-deps-from=flathub \
+  # Runtime/SDK are preinstalled above. Do not pass --install-deps-from=flathub:
+  # nested flatpak install from org.flatpak.Builder needs a D-Bus session (fails in CI).
+  run_flatpak_builder --force-clean --user \
     --repo="$REPO_DIR" "$BUILD_DIR" com.cloudbreak.files.yml
 )
 flatpak build-bundle "$REPO_DIR" "$BUNDLE_OUT" com.cloudbreak.files

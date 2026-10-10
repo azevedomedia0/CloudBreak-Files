@@ -14,7 +14,7 @@ App id: **`com.cloudbreak.files`** (matches `tauri.conf.json` `identifier`). Bin
 
 ## Local build (Linux)
 
-Needs: Node 22+, Rust stable, WebKitGTK / Tauri Linux deps, `flatpak`, and the GNOME 48 runtime from Flathub. The build script installs Flathub’s `org.flatpak.Builder` (preferred over apt `flatpak-builder`, which still expects the removed `appstream-compose` binary).
+Needs: Node 22+, Rust stable, WebKitGTK / Tauri Linux deps, `flatpak`, and the GNOME 49 runtime from Flathub. The build script installs Flathub’s `org.flatpak.Builder` (preferred over apt `flatpak-builder`, which still expects the removed `appstream-compose` binary).
 
 ```bash
 # Debian/Ubuntu example
