@@ -183,6 +183,16 @@ jobs:
           chmod +x scripts/build-flatpak.sh
           npm run build:flatpak
 
+      # Artifact first so a later immutable-release upload failure still preserves the .flatpak.
+      - name: Upload Flatpak artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudbreak-files-flatpak
+          path: |
+            dist-flatpak/com.cloudbreak.files.flatpak
+            flatpak/cloudbreak-files.deb
+          if-no-files-found: error
+
       - name: Upload Flatpak to release
         if: startsWith(github.ref, 'refs/tags/') || inputs.upload_release_tag != ''
         env:
@@ -201,19 +211,18 @@ jobs:
               --title "Cloudbreak Files ${TAG}" \
               --notes "Beta build. See the assets below to download."
           fi
+          IMMUTABLE="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq '.immutable // false')"
+          if [[ "$IMMUTABLE" == "true" ]]; then
+            echo "::error::Release ${TAG} is immutable — cannot upload Flatpak. Recreate the release without immutability, then re-run."
+            exit 1
+          fi
           gh release upload "$TAG" \
             dist-flatpak/com.cloudbreak.files.flatpak \
             --clobber
           DEB="$(find "${CARGO_TARGET_DIR}" -path '*/release/bundle/deb/*.deb' | head -1)"
           if [[ -n "$DEB" ]]; then
-            gh release upload "$TAG" "$DEB" --clobber
+            # GitHub release asset names cannot contain spaces.
+            DEB_UPLOAD="${RUNNER_TEMP}/Cloudbreak.Files_${TAG#v}_amd64.deb"
+            cp -f "$DEB" "$DEB_UPLOAD"
+            gh release upload "$TAG" "$DEB_UPLOAD" --clobber
           fi
-
-      - name: Upload Flatpak artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: cloudbreak-files-flatpak
-          path: |
-            dist-flatpak/com.cloudbreak.files.flatpak
-            flatpak/cloudbreak-files.deb
-          if-no-files-found: error
