@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, type RefObject } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Share2, Edit3, CheckSquare, Square, Play } from '@/src/icons';
+import { EditPhotoIcon } from './EditPhotoIcon';
 import { VideoTrimIcon } from '../video-player/VideoTrimIcon';
 import { FileItem, FolderItem, CloudAccount, CloudProviderId } from '../../types';
 import { isEditableDocument, isMacAppBundle } from '../../utils/documentKind';
@@ -240,7 +241,7 @@ export const ListView: React.FC<ListViewProps> = ({
                     className="p-1 rounded hover:bg-white/10 text-cyan-400"
                     title="Edit in Studio"
                   >
-                    <Edit3 className="w-3.5 h-3.5" />
+                    <EditPhotoIcon className="w-3.5 h-3.5" title="Edit in Studio" />
                   </button>
                 )}
                 {isEditableDocument(file) && (

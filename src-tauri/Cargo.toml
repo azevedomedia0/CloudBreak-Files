@@ -1,6 +1,6 @@
 [package]
 name = "cloudbreak-files"
-version = "0.1.4"
+version = "0.1.5"
 description = "Cloudbreak Files — multi-cloud storage with E2EE vault, photo studio, video tools, and private P2P libraries"
 authors = ["Steven Azevedo <stevenazevedodesign@gmail.com>"]
 edition = "2021"
@@ -52,8 +52,8 @@ tauri-plugin-process = "2.4.0"
 keyring = { version = "3", features = ["apple-native"] }
 libc = "0.2"
 objc2 = "0.6"
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSWindow", "NSButton", "NSControl", "NSView", "NSResponder"] }
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSGeometry"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSWindow", "NSButton", "NSControl", "NSView", "NSResponder", "NSWorkspace", "NSImage", "NSImageRep", "NSBitmapImageRep"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSGeometry", "NSString", "NSData", "NSDictionary", "NSObject"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 keyring = { version = "3", features = ["windows-native"] }

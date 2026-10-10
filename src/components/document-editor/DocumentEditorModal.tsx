@@ -1,17 +1,19 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   AlignCenter, AlignLeft, AlignRight, AlignVerticalSpaceAround, Bold, ChevronDown, ChevronUp,
-  Download, FileText, Highlighter, ImagePlus, Italic, Link, List, ListOrdered, Minus,
+  Download, ExternalLink, FileText, Highlighter, ImagePlus, Italic, Link, List, ListOrdered, Minus,
   PanelLeft, Plus, Printer, Redo2, Save, Search, ShieldAlert, Table2,
   Underline, Undo2, X, ZoomIn, ZoomOut,
 } from '@/src/icons';
 import { FileItem } from '../../types';
 import {
-  countWords, editorHtmlFromFile, fileExtension, formatBadgeClasses, htmlWithoutFindMarks, isPlainTextDocument,
+  countWords, editorHtmlFromFile, fileExtension, formatBadgeClasses, htmlWithoutFindMarks,
+  isPdfDocument, isPlainTextDocument,
 } from '../../utils/documentKind';
 import {
   DEFAULT_DOC_FONT, ensureGoogleFontLoaded, fontStackFor, normalizeFontFamily,
 } from '../../utils/googleFonts';
+import { previewBridge } from '../../services/previewBridge';
 import { FontPicker } from './FontPicker';
 
 interface DocumentEditorModalProps {
@@ -22,6 +24,123 @@ interface DocumentEditorModalProps {
   /** Fill the main browser pane instead of covering the whole window. */
   embedded?: boolean;
 }
+
+const toolButton =
+  'w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-neutral-300 hover:text-neutral-100 hover:bg-white/8 disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-neutral-300 transition-colors';
+const toolOn = 'bg-orange-500/20 text-orange-200 hover:bg-orange-500/25 hover:text-orange-100';
+const fieldClass =
+  'h-8 px-2 rounded-lg bg-neutral-950/80 border border-white/10 text-xs text-neutral-100 focus:outline-none focus:border-orange-400/50';
+
+/** PDF opens in the document-editor shell as a read-only viewer (never rewritten on Save). */
+const PdfDocumentViewer: React.FC<DocumentEditorModalProps> = ({
+  file, isOpen, onClose, embedded = false,
+}) => {
+  if (!isOpen) return null;
+
+  const hasUrl = !!file.url && file.url !== '#';
+  const formatBadgeTone = formatBadgeClasses('pdf');
+
+  const openExternally = () => {
+    if (!file.localPath || !previewBridge.available()) return;
+    void previewBridge.openWithDefault(file.localPath).catch(() => {});
+  };
+
+  const download = () => {
+    if (!hasUrl) return;
+    const link = document.createElement('a');
+    link.href = file.url;
+    link.download = file.name;
+    link.click();
+  };
+
+  return (
+    <div
+      data-document-editor
+      className={
+        embedded
+          ? 'doc-editor-shell relative flex-1 h-full w-full min-h-0 min-w-0 flex flex-col text-neutral-100 select-none overflow-hidden'
+          : 'doc-editor-shell fixed inset-0 z-50 flex flex-col text-neutral-100 select-none'
+      }
+    >
+      <div className="h-12 shrink-0 flex items-center gap-1.5 px-3 border-b border-white/8 bg-neutral-950/80 backdrop-blur-md">
+        <div className="flex items-center gap-2.5 min-w-0 px-2">
+          <div
+            className={`h-7 shrink-0 pl-1.5 pr-2 rounded-lg border flex items-center gap-1.5 ${formatBadgeTone}`}
+            title="pdf"
+          >
+            <FileText className="w-3.5 h-3.5 shrink-0" />
+            <span className="text-[10px] font-mono font-semibold uppercase tracking-wide">pdf</span>
+          </div>
+          <div className="min-w-0">
+            <div className="text-xs font-semibold text-neutral-100 truncate max-w-[320px]">{file.name}</div>
+            <div className="text-[10px] text-neutral-500 font-mono truncate">
+              PDF · Document viewer
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-1" />
+
+        {file.localPath && previewBridge.available() && (
+          <button
+            type="button"
+            onClick={openExternally}
+            className="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 border border-white/15 text-neutral-100 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+            title="Open with default app"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            <span>Open Externally</span>
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={download}
+          disabled={!hasUrl}
+          className={toolButton}
+          title="Download"
+        >
+          <Download className="w-4 h-4" />
+        </button>
+        <button type="button" onClick={onClose} className={toolButton} title="Close">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      <div className="flex-1 min-h-0 bg-neutral-950/60 p-3 sm:p-4">
+        {hasUrl ? (
+          <iframe
+            title={file.name}
+            src={file.url}
+            sandbox="allow-same-origin"
+            referrerPolicy="no-referrer"
+            className="w-full h-full rounded-xl bg-white shadow-2xl border border-white/10"
+          />
+        ) : (
+          <div className="w-full h-full rounded-xl border border-white/10 bg-neutral-900/60 flex flex-col items-center justify-center gap-3 text-neutral-400">
+            <FileText className="w-10 h-10 text-red-300/80" />
+            <p className="text-sm text-neutral-300">This PDF is not available to preview here.</p>
+            {file.localPath && previewBridge.available() && (
+              <button
+                type="button"
+                onClick={openExternally}
+                className="h-8 px-3 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/30 text-sky-200 text-xs font-semibold"
+              >
+                Open with Default App
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = (props) => {
+  if (isPdfDocument(props.file)) {
+    return <PdfDocumentViewer {...props} />;
+  }
+  return <RichTextDocumentEditor {...props} />;
+};
 
 const ZOOMS = [50, 75, 100, 125, 150, 200];
 /** US Letter height at 96dpi — matches `.doc-page` min-height. */
@@ -36,12 +155,6 @@ const FONT_SIZES = ['12', '14', '16', '18', '20', '24', '28', '32', '40'] as con
 const DEFAULT_SIZE = '16';
 const DEFAULT_COLOR = '#e5e5e5';
 const DEFAULT_HIGHLIGHT = '#facc15';
-
-const toolButton =
-  'w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-neutral-300 hover:text-neutral-100 hover:bg-white/8 disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-neutral-300 transition-colors';
-const toolOn = 'bg-orange-500/20 text-orange-200 hover:bg-orange-500/25 hover:text-orange-100';
-const fieldClass =
-  'h-8 px-2 rounded-lg bg-neutral-950/80 border border-white/10 text-xs text-neutral-100 focus:outline-none focus:border-orange-400/50';
 
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, char => (
@@ -115,7 +228,7 @@ function highlightMatches(root: HTMLElement, query: string, matchCase: boolean):
   return marks;
 }
 
-export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
+const RichTextDocumentEditor: React.FC<DocumentEditorModalProps> = ({
   file, isOpen, onClose, onSave, embedded = false,
 }) => {
   /** File still downloads as text when the extension is a plain-text type. */

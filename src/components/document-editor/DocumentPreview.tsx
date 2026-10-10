@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { FileText } from '@/src/icons';
 import { FileItem } from '../../types';
-import { editorHtmlFromFile, isEditableDocument } from '../../utils/documentKind';
+import { editorHtmlFromFile, isEditableDocument, isPdfDocument } from '../../utils/documentKind';
 
 interface DocumentPreviewProps {
   file: FileItem;
@@ -14,11 +14,13 @@ interface DocumentPreviewProps {
 export const DocumentPreview: React.FC<DocumentPreviewProps> = ({ file, className = '', compact = false }) => {
   const html = useMemo(() => editorHtmlFromFile(file), [file.id, file.documentBody, file.name, file.mimeType]);
 
-  if (!isEditableDocument(file)) {
+  if (!isEditableDocument(file) || isPdfDocument(file)) {
     return (
       <div className={`w-full h-full flex flex-col items-center justify-center text-neutral-500 gap-2 ${className}`}>
-        <FileText className="w-10 h-10 text-sky-400" />
-        <span className="text-xs font-mono text-neutral-400">Binary Document</span>
+        <FileText className={`w-10 h-10 ${isPdfDocument(file) ? 'text-red-400' : 'text-sky-400'}`} />
+        <span className="text-xs font-mono text-neutral-400">
+          {isPdfDocument(file) ? 'PDF' : 'Binary Document'}
+        </span>
       </div>
     );
   }

@@ -19,10 +19,30 @@ use tauri_plugin_dialog::DialogExt;
 
 pub const ROOTS_FILE: &str = "local_roots.json";
 const MAX_DEPTH: usize = 12;
+/// `/Applications` is mostly opaque `.app` packages — keep the walk shallow so
+/// selecting it in the sidebar does not ingest tens of thousands of nested files.
+/// Depth 1 = top-level apps + one subfolder (Utilities/*.app), not deeper trees.
+const APPLICATIONS_MAX_DEPTH: usize = 1;
 /// Cap on files+folders returned per scan. Package dirs (.app) are opaque so they
 /// do not burn this budget walking Contents/.
 const MAX_ENTRIES: usize = 25_000;
+const APPLICATIONS_MAX_ENTRIES: usize = 4_000;
 const MAX_READ_BYTES: u64 = 64 * 1024 * 1024;
+
+fn is_applications_root(root: &Path) -> bool {
+    root.file_name()
+        .and_then(|n| n.to_str())
+        .map(|n| n.eq_ignore_ascii_case("Applications"))
+        .unwrap_or(false)
+}
+
+fn scan_limits_for(root: &Path) -> (usize, usize) {
+    if is_applications_root(root) {
+        (APPLICATIONS_MAX_DEPTH, APPLICATIONS_MAX_ENTRIES)
+    } else {
+        (MAX_DEPTH, MAX_ENTRIES)
+    }
+}
 
 #[derive(Default)]
 pub struct LocalRoots {
@@ -233,13 +253,14 @@ fn valid_file_name(name: &str) -> Result<&str, String> {
 }
 
 pub fn scan_dir(root: &Path) -> Result<LocalScan, String> {
-    scan_dir_limited(root, MAX_ENTRIES)
+    let (max_depth, max_entries) = scan_limits_for(root);
+    scan_dir_limited(root, max_entries, max_depth)
 }
 
-fn scan_dir_limited(root: &Path, max_entries: usize) -> Result<LocalScan, String> {
+fn scan_dir_limited(root: &Path, max_entries: usize, max_depth: usize) -> Result<LocalScan, String> {
     let mut entries = Vec::new();
     let mut truncated = false;
-    walk(root, root, 0, &mut entries, &mut truncated, max_entries)?;
+    walk(root, root, 0, &mut entries, &mut truncated, max_entries, max_depth)?;
     Ok(LocalScan { entries, truncated })
 }
 
@@ -280,8 +301,9 @@ fn walk(
     out: &mut Vec<LocalEntry>,
     truncated: &mut bool,
     max_entries: usize,
+    max_depth: usize,
 ) -> Result<(), String> {
-    if depth > MAX_DEPTH {
+    if depth > max_depth {
         // Mark truncated but keep scanning siblings of the deep folder.
         *truncated = true;
         return Ok(());
@@ -345,7 +367,7 @@ fn walk(
             *truncated = true;
             return Ok(());
         }
-        walk(root, &path, depth + 1, out, truncated, max_entries)?;
+        walk(root, &path, depth + 1, out, truncated, max_entries, max_depth)?;
         if *truncated && out.len() >= max_entries {
             return Ok(());
         }
@@ -375,7 +397,7 @@ fn walk(
             modified_ms: modified_ms(&meta),
         });
         // Permission denied (TCC) while walking is fine — keep the library folder entry.
-        let _ = walk(root, &originals, depth + 1, out, truncated, max_entries);
+        let _ = walk(root, &originals, depth + 1, out, truncated, max_entries, max_depth);
         if *truncated && out.len() >= max_entries {
             return Ok(());
         }
@@ -924,6 +946,34 @@ mod tests {
     }
 
     #[test]
+    fn applications_root_uses_shallow_scan_limits() {
+        let t = Tmp::new();
+        let apps = t.0.join("Applications");
+        let foo = apps.join("Foo.app");
+        let bar = apps.join("Utilities").join("Bar.app");
+        fs::create_dir_all(foo.join("Contents")).unwrap();
+        fs::write(foo.join("Contents").join("Info.plist"), "x").unwrap();
+        fs::create_dir_all(bar.join("Contents")).unwrap();
+        fs::write(bar.join("Contents").join("Info.plist"), "x").unwrap();
+        fs::create_dir_all(apps.join("Utilities").join("nested")).unwrap();
+        fs::write(apps.join("Utilities").join("nested").join("deep.txt"), "x").unwrap();
+
+        let scan = scan_dir(&apps).unwrap();
+        let rels: Vec<_> = scan.entries.iter().map(|e| e.relative_path.as_str()).collect();
+        assert!(rels.contains(&"Foo.app"));
+        assert!(rels.contains(&"Utilities"));
+        assert!(rels.contains(&"Utilities/Bar.app"));
+        assert!(
+            !rels.iter().any(|r| r.contains("deep.txt")),
+            "nested files under Applications/Utilities must be skipped"
+        );
+        assert!(
+            !rels.iter().any(|r| r.contains("Contents")),
+            ".app packages must stay opaque"
+        );
+    }
+
+    #[test]
     fn scan_continues_after_max_depth_in_one_branch() {
         let t = Tmp::new();
         // Deep tree sorts before "zebra.txt", so a depth abort must not skip the sibling file.
@@ -952,7 +1002,7 @@ mod tests {
         }
         fs::write(t.0.join("zebra.txt"), "z").unwrap();
 
-        let scan = scan_dir_limited(&t.0, 40).unwrap();
+        let scan = scan_dir_limited(&t.0, 40, MAX_DEPTH).unwrap();
         let top: Vec<_> = scan
             .entries
             .iter()

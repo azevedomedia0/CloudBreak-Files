@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ChevronRight, Check } from '@/src/icons';
 import { FileItem } from '../../types';
-import { isEditableDocument, isMacAppBundle } from '../../utils/documentKind';
+import { isEditableDocument, isMacAppBundle, isPdfDocument } from '../../utils/documentKind';
 import { isZipArchive } from '../../utils/unzipArchive';
 
 const SUGGESTED_TAGS = ['Favorite', 'Work', 'Personal', 'Review', 'Final'];
@@ -89,7 +89,12 @@ export const FileContextMenu: React.FC<FileContextMenuProps> = ({
     { id: 'photo', label: 'Photo Studio', enabled: file.category === 'photo' && !isApp, action: () => onOpen(file) },
     { id: 'video', label: 'Video Player', enabled: file.category === 'video', action: () => onOpen(file) },
     { id: 'audio', label: 'Audio Player', enabled: file.category === 'audio', action: () => onOpen(file) },
-    { id: 'document', label: 'Document Editor', enabled: isEditableDocument(file), action: () => onOpen(file) },
+    {
+      id: 'document',
+      label: isPdfDocument(file) ? 'Open Document' : 'Document Editor',
+      enabled: isEditableDocument(file),
+      action: () => onOpen(file),
+    },
     {
       id: 'archive',
       label: 'Extract Archive',

@@ -5,6 +5,7 @@ import { DocumentPreview } from '../document-editor/DocumentPreview';
 import {
   isEditableDocument,
   isMacAppBundle,
+  isPdfDocument,
   isSystemPreviewDocument,
   needsNativeThumbnail,
 } from '../../utils/documentKind';
@@ -105,13 +106,14 @@ export const FileThumbnail: React.FC<FileThumbnailProps> = ({
     setNativeThumb(null);
     if (!near || !wantsNative || !file.localPath) return;
     const ac = new AbortController();
-    void previewBridge.thumbnailUrl(file.localPath, 512, ac.signal).then(url => {
+    const edge = isApp ? 256 : 512;
+    void previewBridge.thumbnailUrl(file.localPath, edge, ac.signal).then(url => {
       if (!ac.signal.aborted && url) setNativeThumb(url);
     });
     return () => {
       ac.abort();
     };
-  }, [file.id, file.localPath, wantsNative, near]);
+  }, [file.id, file.localPath, wantsNative, near, isApp]);
 
   const mediaClass = `w-full h-full ${isApp ? 'object-contain p-[6%]' : 'object-cover'} ${hoverZoom ? 'transition-transform duration-300 group-hover:scale-105' : ''}`;
 
@@ -175,9 +177,11 @@ export const FileThumbnail: React.FC<FileThumbnailProps> = ({
         <ZipFileIcon className={`${iconClassName} text-pink-400`} title="ZIP archive" />
       </div>
     );
+  } else if (isPdfDocument(file) || isSystemPreviewDocument(file)) {
+    content = <DocumentPage name={file.name} compact={compact} />;
   } else if (isEditableDocument(file)) {
     content = <DocumentPreview file={file} compact={compact} className="w-full h-full" />;
-  } else if (isSystemPreviewDocument(file) || file.category === 'document') {
+  } else if (file.category === 'document') {
     content = <DocumentPage name={file.name} compact={compact} />;
   } else {
     const Icon = FALLBACK_ICONS[file.category as keyof typeof FALLBACK_ICONS] ?? FileText;

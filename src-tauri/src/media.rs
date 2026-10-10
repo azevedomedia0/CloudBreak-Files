@@ -3,7 +3,7 @@
 use crate::crypto::compute_sha256;
 use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine;
-use image::{DynamicImage, ImageFormat, ImageReader, Rgba, RgbaImage};
+use image::{DynamicImage, GenericImageView, ImageFormat, ImageReader, Rgba, RgbaImage};
 use serde::{Deserialize, Serialize};
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
@@ -27,6 +27,11 @@ pub struct PhotoAdjustments {
     pub rotation: i32,   // 0, 90, 180, 270
     pub flip_h: bool,
     pub flip_v: bool,
+    /// Normalized crop in post-rotation space (0–1). Defaults to full frame.
+    pub crop_x: f32,
+    pub crop_y: f32,
+    pub crop_w: f32,
+    pub crop_h: f32,
 }
 
 impl Default for PhotoAdjustments {
@@ -47,6 +52,10 @@ impl Default for PhotoAdjustments {
             rotation: 0,
             flip_h: false,
             flip_v: false,
+            crop_x: 0.0,
+            crop_y: 0.0,
+            crop_w: 1.0,
+            crop_h: 1.0,
         }
     }
 }
@@ -322,7 +331,32 @@ fn apply_geometry(img: DynamicImage, adj: &PhotoAdjustments) -> DynamicImage {
         270 => out.rotate270(),
         _ => out,
     };
-    out
+
+    let (w, h) = out.dimensions();
+    if w == 0 || h == 0 {
+        return out;
+    }
+    let crop_w = adj.crop_w.clamp(0.01, 1.0);
+    let crop_h = adj.crop_h.clamp(0.01, 1.0);
+    let crop_x = adj.crop_x.clamp(0.0, 1.0 - crop_w);
+    let crop_y = adj.crop_y.clamp(0.0, 1.0 - crop_h);
+    let full_frame = crop_x <= 0.0005
+        && crop_y <= 0.0005
+        && crop_w >= 0.9995
+        && crop_h >= 0.9995;
+    if full_frame {
+        return out;
+    }
+    let x = (crop_x * w as f32).round() as u32;
+    let y = (crop_y * h as f32).round() as u32;
+    let mut cw = (crop_w * w as f32).round() as u32;
+    let mut ch = (crop_h * h as f32).round() as u32;
+    if x >= w || y >= h {
+        return out;
+    }
+    cw = cw.min(w - x).max(1);
+    ch = ch.min(h - y).max(1);
+    out.crop_imm(x, y, cw, ch)
 }
 
 fn encode_image(img: &DynamicImage, format: &str, quality: u8) -> Result<(Vec<u8>, String), MediaError> {
@@ -741,6 +775,21 @@ mod tests {
         assert_eq!(out.mime_type, "image/png");
         let decoded = B64.decode(out.image_base64.as_bytes()).unwrap();
         assert!(!decoded.is_empty());
+    }
+
+    #[test]
+    fn photo_render_applies_crop() {
+        let png = solid_png(100, 80, [10, 20, 30]);
+        let adj = PhotoAdjustments {
+            crop_x: 0.1,
+            crop_y: 0.1,
+            crop_w: 0.5,
+            crop_h: 0.5,
+            ..Default::default()
+        };
+        let out = process_photo_bytes(&png, &adj, "png", 90).unwrap();
+        assert_eq!(out.width, 50);
+        assert_eq!(out.height, 40);
     }
 
     #[test]

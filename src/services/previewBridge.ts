@@ -14,7 +14,8 @@ interface PreviewResult {
   widthHint: number;
 }
 
-const THUMB_CONCURRENCY = 4;
+/** App .icns/sips work is cheap; keep a modest ceiling so PDF/QL jobs still share the queue. */
+const THUMB_CONCURRENCY = 6;
 
 const thumbCache = new Map<string, string>();
 const rasterCache = new Map<string, string>();

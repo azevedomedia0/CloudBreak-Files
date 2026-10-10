@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Play, Music2 } from '@/src/icons';
 import { FileItem, FolderItem } from '../../types';
 import { isEditableDocument, isMacAppBundle } from '../../utils/documentKind';
@@ -9,6 +9,7 @@ import { HoverSelectCheckbox } from './HoverSelectCheckbox';
 import { SelectionAccent, SELECTION_CLASSES } from '../../utils/selectionAccent';
 import { formatTimecode } from '../../utils/format';
 import { setFileDragData } from '../../utils/fileDrag';
+import { useProgressiveItems } from '../../hooks/useProgressiveItems';
 
 /** Badge only when duration is already known — avoids a hidden <video> per tile. */
 const MediaDurationBadge: React.FC<{ file: FileItem }> = ({ file }) => {
@@ -46,7 +47,30 @@ export interface IconsViewProps {
 export const IconsView: React.FC<IconsViewProps> = ({
   accent, files, folders = [], selectedFileId, selectedIds, iconScale,
   onSelectFile, onOpenFolder, onEditPhoto, onOpenDocument, onOpenVideo, onOpenAudio, onOpenQuickLook, onFileContextMenu, onFolderContextMenu, toggleSelectOne,
-}) => (
+}) => {
+  // Large folders (Applications) must not mount every tile in one paint.
+  const { visible: visibleFiles, hasMore, showMore, shownCount, totalCount } = useProgressiveItems(
+    files,
+    48,
+    48,
+  );
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!hasMore) return;
+    const el = sentinelRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(
+      entries => {
+        if (entries.some(e => e.isIntersecting)) showMore();
+      },
+      { root: null, rootMargin: '400px', threshold: 0 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [hasMore, showMore, shownCount]);
+
+  return (
     <div
       className="grid gap-x-3 gap-y-5"
       style={{
@@ -65,7 +89,7 @@ export const IconsView: React.FC<IconsViewProps> = ({
           onContextMenu={onFolderContextMenu}
         />
       ))}
-      {files.map(file => {
+      {visibleFiles.map(file => {
         const isSelected = selectedIds.has(file.id);
         const isCurrent = selectedFileId === file.id;
         const isApp = isMacAppBundle(file);
@@ -87,7 +111,7 @@ export const IconsView: React.FC<IconsViewProps> = ({
               else if (isEditableDocument(file)) onOpenDocument(file);
               else onOpenQuickLook();
             }}
-            className={`group relative rounded-xl px-2 pt-3 pb-2 transition-all cursor-pointer ${
+            className={`group relative rounded-xl px-2 pt-3 pb-2 transition-all cursor-pointer [content-visibility:auto] [contain-intrinsic-size:180px] ${
               isCurrent
                 ? SELECTION_CLASSES[accent].card
                 : isSelected
@@ -138,5 +162,15 @@ export const IconsView: React.FC<IconsViewProps> = ({
           </div>
         );
       })}
+      {hasMore && (
+        <div
+          ref={sentinelRef}
+          className="col-span-full flex items-center justify-center py-4 text-[11px] text-neutral-500"
+          aria-hidden
+        >
+          Showing {shownCount} of {totalCount}…
+        </div>
+      )}
     </div>
-);
+  );
+};

@@ -11,6 +11,7 @@ import { FileItem, CloudAccount, FolderItem } from '../types';
 import {
   isEditableDocument,
   isMacAppBundle,
+  isPdfDocument,
   isSystemPreviewDocument,
   needsNativeThumbnail,
 } from '../utils/documentKind';
@@ -21,6 +22,7 @@ import { emitFileContextMenu } from '../utils/fileContextMenuBus';
 import { previewBridge } from '../services/previewBridge';
 import { FileThumbnail } from './file-browser/FileThumbnail';
 import { FileInspectorIcon } from './file-browser/FileInspectorIcon';
+import { EditPhotoIcon } from './file-browser/EditPhotoIcon';
 import { VideoTrimIcon } from './video-player/VideoTrimIcon';
 
 import { PhotoNav, PhotoNavArrows } from './PhotoNavArrows';
@@ -539,7 +541,7 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                   title="Edit Photo"
                   aria-label="Edit Photo"
                 >
-                  <Edit3 className="w-3.5 h-3.5" />
+                  <EditPhotoIcon className="w-3.5 h-3.5" title="Edit Photo" />
                   <span>Edit Photo</span>
                 </button>
               ) : file.category === 'audio' && onOpenAudio ? (
@@ -604,11 +606,23 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                     else onEditPhoto(file);
                   }}
                   className="col-span-2 h-9 rounded-lg bg-[#c45c26]/18 hover:bg-[#c45c26]/28 border border-[#e07a45]/40 text-[#e8a070] flex items-center justify-center gap-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer"
-                  title={isEditableDocument(file) ? 'Edit document' : 'Open'}
-                  aria-label={isEditableDocument(file) ? 'Edit document' : 'Open'}
+                  title={
+                    isPdfDocument(file) ? 'Open document'
+                      : isEditableDocument(file) ? 'Edit document'
+                        : 'Open'
+                  }
+                  aria-label={
+                    isPdfDocument(file) ? 'Open document'
+                      : isEditableDocument(file) ? 'Edit document'
+                        : 'Open'
+                  }
                 >
                   <Edit3 className="w-3.5 h-3.5" />
-                  <span>{isEditableDocument(file) ? 'Edit Document' : 'Open'}</span>
+                  <span>
+                    {isPdfDocument(file) ? 'Open Document'
+                      : isEditableDocument(file) ? 'Edit Document'
+                        : 'Open'}
+                  </span>
                 </button>
               )}
 

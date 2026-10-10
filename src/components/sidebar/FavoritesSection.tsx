@@ -1,7 +1,8 @@
 import React from 'react';
-import { Star, Plus, ShieldCheck, ChevronDown, Folder, Server, HardDrive } from '@/src/icons';
+import { Star, Plus, ChevronDown, Folder, Server, HardDrive } from '@/src/icons';
 import { CloudProviderId, FavoriteShortcut } from '../../types';
 import { SidebarSectionKey } from './sectionKey';
+import { PrivateVaultIcon } from './PrivateVaultIcon';
 
 export interface FavoritesSectionProps {
   selectedAccountId: CloudProviderId;
@@ -92,7 +93,7 @@ export const FavoritesSection: React.FC<FavoritesSectionProps> = ({
           }`}
         >
           <div className="flex items-center gap-2 truncate">
-            <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+            <PrivateVaultIcon className="w-4 h-4 text-emerald-400 shrink-0" title="Private Vault" />
             <span className="truncate">Private Vault</span>
           </div>
         </button>

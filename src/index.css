@@ -98,13 +98,16 @@
 .finder-folder-icon .finder-folder-highlight {
   fill: #6EB4FF;
 }
-html[data-theme="light"] .finder-folder-icon .finder-folder-back {
+html[data-theme="light"] .finder-folder-icon .finder-folder-back,
+html[data-theme="graphite"] .finder-folder-icon .finder-folder-back {
   fill: #F5C518;
 }
-html[data-theme="light"] .finder-folder-icon .finder-folder-front {
+html[data-theme="light"] .finder-folder-icon .finder-folder-front,
+html[data-theme="graphite"] .finder-folder-icon .finder-folder-front {
   fill: #FFD60A;
 }
-html[data-theme="light"] .finder-folder-icon .finder-folder-highlight {
+html[data-theme="light"] .finder-folder-icon .finder-folder-highlight,
+html[data-theme="graphite"] .finder-folder-icon .finder-folder-highlight {
   fill: #FFE566;
 }
 
@@ -526,64 +529,172 @@ html[data-theme="midnight"] .macos-segmented-pill {
   border-color: rgba(140, 160, 240, 0.12);
 }
 
-/* —— Graphite: cooler lifted slate —— */
+/* —— Graphite: macOS Finder Dark appearance —— */
 html[data-theme="graphite"] {
-  --color-neutral-700: #4a5058;
-  --color-neutral-750: #3c424a;
-  --color-neutral-800: #32383f;
-  --color-neutral-850: #2a2f36;
-  --color-neutral-900: #22262c;
-  --color-neutral-950: #181b20;
-  --color-sky-300: #7ec8e3;
-  --color-sky-400: #5bb4d6;
-  --color-sky-500: #3d9cc0;
+  /* Apple system grays (dark) */
+  --color-neutral-700: #636366;
+  --color-neutral-750: #48484a;
+  --color-neutral-800: #3a3a3c;
+  --color-neutral-850: #2c2c2e;
+  --color-neutral-900: #1c1c1e;
+  --color-neutral-950: #161617;
+  /* System blue accent (same as Finder selection) */
+  --color-sky-200: #64d2ff;
+  --color-sky-300: #5ac8fa;
+  --color-sky-400: #0a84ff;
+  --color-sky-500: #0071e3;
+  --color-sky-600: #0058b0;
 }
 
 html[data-theme="graphite"] body {
-  color: #eceef1;
-  background-color: #121518;
+  color: #f5f5f7;
+  background-color: #1c1c1e;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
 }
 
+html[data-theme="graphite"] ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+}
+html[data-theme="graphite"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Finder window: mostly opaque chrome, soft hairline edge */
 html[data-theme="graphite"] .macos-window {
-  background: rgba(42, 47, 54, 0.82);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(28, 28, 30, 0.94);
+  border-color: rgba(255, 255, 255, 0.08);
   box-shadow:
-    0 25px 70px -15px rgba(0, 0, 0, 0.65),
-    0 0 0 1px rgba(255, 255, 255, 0.06),
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.14);
+    0 18px 48px -12px rgba(0, 0, 0, 0.55),
+    0 0 0 0.5px rgba(0, 0, 0, 0.45),
+    inset 0 0.5px 0 0 rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(40px) saturate(160%);
+  -webkit-backdrop-filter: blur(40px) saturate(160%);
 }
 
+/* Sidebar vibrancy — slightly lifted gray like Finder’s source list */
 html[data-theme="graphite"] .macos-sidebar-glass {
-  background: rgba(32, 36, 42, 0.78);
-  border-right-color: rgba(255, 255, 255, 0.08);
-  box-shadow: inset -1px 0 0 0 rgba(255, 255, 255, 0.04);
+  background: rgba(42, 42, 46, 0.72);
+  border-right-color: rgba(255, 255, 255, 0.06);
+  box-shadow: none;
+  backdrop-filter: blur(50px) saturate(180%);
+  -webkit-backdrop-filter: blur(50px) saturate(180%);
 }
 
+/* Title / toolbar bar — matches Finder unified titlebar */
 html[data-theme="graphite"] .macos-toolbar-glass {
-  background: rgba(48, 53, 60, 0.78);
-  border-bottom-color: rgba(255, 255, 255, 0.09);
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
+  background: rgba(44, 44, 46, 0.88);
+  border-bottom-color: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0.5px 0 0 rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(40px) saturate(160%);
+  -webkit-backdrop-filter: blur(40px) saturate(160%);
 }
 
 html[data-theme="graphite"] .audio-player-bar {
-  background: rgba(48, 53, 60, 0.78);
-  border-top-color: rgba(255, 255, 255, 0.09);
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
+  background: rgba(44, 44, 46, 0.92);
+  border-top-color: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0.5px 0 0 rgba(255, 255, 255, 0.08);
 }
 
 html[data-theme="graphite"] .audio-player-menu {
-  background: #2a2f36;
+  background: rgba(44, 44, 46, 0.96);
   border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 10px 28px -8px rgba(0, 0, 0, 0.45);
 }
 
 html[data-theme="graphite"] .macos-glass-card {
-  background: rgba(52, 58, 66, 0.55);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(58, 58, 60, 0.45);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: none;
 }
 
 html[data-theme="graphite"] .macos-segmented-pill {
-  background: rgba(18, 21, 26, 0.5);
+  background: rgba(58, 58, 60, 0.55);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0.5px 1px rgba(0, 0, 0, 0.25);
+}
+
+html[data-theme="graphite"] .notification-panel,
+html[data-theme="graphite"] .app-modal-panel {
+  background: rgba(44, 44, 46, 0.94);
   border-color: rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 20px 48px -14px rgba(0, 0, 0, 0.55),
+    0 0 0 0.5px rgba(255, 255, 255, 0.08);
+}
+
+/* Finder source-list selection: solid system blue + white label */
+html[data-theme="graphite"] .bg-sky-500\/20 {
+  background-color: #0a84ff;
+  box-shadow: none;
+}
+html[data-theme="graphite"] .bg-sky-500\/20.text-sky-200,
+html[data-theme="graphite"] .bg-sky-500\/20 .text-sky-200 {
+  color: #ffffff;
+}
+html[data-theme="graphite"] .bg-sky-500\/15,
+html[data-theme="graphite"] .bg-sky-500\/25 {
+  background-color: rgba(10, 132, 255, 0.28);
+}
+html[data-theme="graphite"] .bg-sky-500\/10 {
+  background-color: rgba(10, 132, 255, 0.16);
+}
+html[data-theme="graphite"] .border-sky-400\/20,
+html[data-theme="graphite"] .border-sky-400\/25,
+html[data-theme="graphite"] .border-sky-500\/20,
+html[data-theme="graphite"] .border-sky-500\/25 {
+  border-color: rgba(10, 132, 255, 0.4);
+}
+html[data-theme="graphite"] .ring-sky-400\/40,
+html[data-theme="graphite"] .ring-sky-500\/30,
+html[data-theme="graphite"] .ring-sky-500\/40 {
+  --tw-ring-color: rgba(10, 132, 255, 0.5);
+}
+html[data-theme="graphite"] .text-sky-200:not(.bg-sky-500\/20) {
+  color: #64d2ff;
+}
+html[data-theme="graphite"] .text-sky-300 {
+  color: #5ac8fa;
+}
+html[data-theme="graphite"] .text-sky-400 {
+  color: #0a84ff;
+}
+
+/* Local Files source-list icons: white glyphs (Finder-style), not system blue */
+html[data-theme="graphite"] .macos-sidebar-glass .local-files-icon,
+html[data-theme="graphite"] .macos-sidebar-glass .local-files-icon.text-sky-400,
+html[data-theme="graphite"] .macos-sidebar-glass .local-files-icon.text-sky-400\/80,
+html[data-theme="graphite"] .macos-sidebar-glass .local-files-icon.text-rose-400,
+html[data-theme="graphite"] .macos-sidebar-glass .local-files-icon.text-neutral-400,
+html[data-theme="graphite"] .macos-sidebar-glass .group:hover .local-files-icon.text-rose-300 {
+  color: #ffffff;
+}
+
+/* Hairline separators instead of bright glass edges */
+html[data-theme="graphite"] .border-white\/5,
+html[data-theme="graphite"] .border-white\/8,
+html[data-theme="graphite"] .border-white\/10,
+html[data-theme="graphite"] .border-white\/12 {
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+html[data-theme="graphite"] .hover\:bg-white\/5:hover,
+html[data-theme="graphite"] .hover\:bg-white\/6:hover,
+html[data-theme="graphite"] .hover\:bg-white\/10:hover {
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+html[data-theme="graphite"] .bg-white\/5,
+html[data-theme="graphite"] .bg-white\/\[0\.04\],
+html[data-theme="graphite"] .bg-white\/10 {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Secondary labels closer to Finder’s #98989d */
+html[data-theme="graphite"] .text-neutral-400 {
+  color: #98989d;
+}
+html[data-theme="graphite"] .text-neutral-500 {
+  color: #8e8e93;
 }
 
 /* —— Light appearance: readable ink on gray surfaces (WCAG-minded) —— */

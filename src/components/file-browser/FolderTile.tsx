@@ -98,7 +98,7 @@ export const FolderTile: React.FC<FolderTileProps> = ({
     );
   }
 
-  const scale = Math.min(1.4, Math.max(0.75, iconScale / 100));
+  const scale = Math.min(2.5, Math.max(0.5, iconScale / 100));
 
   return (
     <div

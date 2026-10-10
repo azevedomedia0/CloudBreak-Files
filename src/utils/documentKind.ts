@@ -30,9 +30,9 @@ const RICH_EXTENSIONS = new Set([
 /**
  * Binary / system-preview documents: Quick Look thumbnail + in-app preview,
  * opened with the macOS default app for real editing (Word, Pages, Excel, …).
+ * PDFs open in the document editor (viewer), not here.
  */
 const SYSTEM_PREVIEW_EXTENSIONS = new Set([
-  'pdf',
   'doc', 'docx', 'rtf', 'odt', 'pages',
   'xls', 'xlsx', 'numbers',
   'ppt', 'pptx', 'key',
@@ -92,7 +92,6 @@ const RICH_MIME_PREFIXES = [
 ];
 
 const SYSTEM_PREVIEW_MIME_PREFIXES = [
-  'application/pdf',
   'application/msword',
   'application/rtf',
   'application/vnd.oasis.opendocument',
@@ -194,11 +193,17 @@ function isSystemPreviewMime(mimeType: string): boolean {
   return SYSTEM_PREVIEW_MIME_PREFIXES.some(prefix => mime.startsWith(prefix));
 }
 
-/** PDF, Office, Pages, spreadsheets, decks — preview in-app, edit via default macOS app. */
+/** Office, Pages, spreadsheets, decks — preview in-app, edit via default macOS app. */
 export function isSystemPreviewDocument(file: Pick<FileItem, 'name' | 'mimeType'>): boolean {
   const ext = fileExtension(file.name);
   if (SYSTEM_PREVIEW_EXTENSIONS.has(ext)) return true;
   return isSystemPreviewMime(file.mimeType);
+}
+
+/** PDF — opens in the document editor as a read-only viewer. */
+export function isPdfDocument(file: Pick<FileItem, 'name' | 'mimeType'>): boolean {
+  if (fileExtension(file.name) === 'pdf') return true;
+  return file.mimeType.toLowerCase().includes('pdf');
 }
 
 /** macOS application bundle — show the official icon and launch with `open`. */
@@ -212,6 +217,7 @@ export function needsNativeThumbnail(file: Pick<FileItem, 'name' | 'mimeType' | 
   const ext = fileExtension(file.name);
   if (NATIVE_THUMB_IMAGE_EXTENSIONS.has(ext)) return true;
   if (isMacAppBundle(file)) return true;
+  if (isPdfDocument(file)) return true;
   if (isSystemPreviewDocument(file)) return true;
   return false;
 }
@@ -256,6 +262,8 @@ export function isEditableDocument(file: Pick<FileItem, 'name' | 'mimeType' | 'c
   if (IMAGE_EXTENSIONS.has(ext)) return false;
   if (VIDEO_EXTENSIONS.has(ext) || AUDIO_EXTENSIONS.has(ext)) return false;
 
+  // PDFs use the document editor shell (viewer); other Office binaries stay Quick Look.
+  if (isPdfDocument(file)) return true;
   if (isSystemPreviewDocument(file)) return false;
 
   if (isPlainTextDocument(file)) return true;

@@ -193,7 +193,13 @@ export interface PhotoAdjustments {
   rotation: number;     // 0, 90, 180, 270
   flipH: boolean;
   flipV: boolean;
+  /** Crop aspect guide while editing (`free` = unconstrained). */
   cropAspect: 'free' | '1:1' | '4:5' | '16:9' | '9:16' | '3:2';
+  /** Normalized crop rect in post-rotation image space (0–1). */
+  cropX: number;
+  cropY: number;
+  cropW: number;
+  cropH: number;
 }
 
 export type VideoConvertFormat =

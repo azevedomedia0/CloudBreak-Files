@@ -117,7 +117,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   systemHitCount = 0,
 }) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [iconScale, setIconScale] = useState<number>(100); // 75 to 150%
+  const [iconScale, setIconScale] = useState<number>(100); // 50 to 250%
   const [contextMenu, setContextMenu] = useState<{ file: FileItem; x: number; y: number } | null>(null);
   const [folderMenu, setFolderMenu] = useState<{ folder: FolderItem; x: number; y: number } | null>(null);
   const [renaming, setRenaming] = useState<{ file: FileItem; x: number; y: number } | null>(null);
@@ -200,7 +200,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     else if (isEditableDocument(file)) onOpenDocument(file);
     else if (file.name.toLowerCase().endsWith('.zip') || file.mimeType === 'application/zip') onUnzipFile(file);
     else if (isSystemPreviewDocument(file)) {
-      // PDF / Office / Pages: in-app Quick Look preview (thumbnails + PDF iframe).
+      // Office / Pages: in-app Quick Look preview (PDF opens in the document editor).
       onOpenQuickLook();
     }
     else onOpenQuickLook();
@@ -606,11 +606,11 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
               <span className="text-[10px] text-neutral-500">Icon Size</span>
               <input
                 type="range"
-                min={75}
-                max={150}
+                min={50}
+                max={250}
                 value={iconScale}
                 onChange={e => setIconScale(parseInt(e.target.value, 10))}
-                className="w-28 custom-range"
+                className="w-36 custom-range"
                 aria-label="Icon size"
               />
             </div>

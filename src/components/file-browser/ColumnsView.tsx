@@ -1,11 +1,12 @@
 import React from 'react';
-import { Folder, FileText, Download, ChevronRight, HardDrive, Monitor, Music2 } from '@/src/icons';
+import { Folder, FileText, Download, ChevronRight, HardDrive, Music2 } from '@/src/icons';
 import { FileItem, FolderItem } from '../../types';
 import { isEditableDocument, isMacAppBundle } from '../../utils/documentKind';
 import { previewBridge } from '../../services/previewBridge';
 import { FileThumbnail } from './FileThumbnail';
 import { HoverSelectCheckbox } from './HoverSelectCheckbox';
 import { ApplicationsIcon } from './ApplicationsIcon';
+import { DesktopIcon } from './DesktopIcon';
 import { PhotosIcon } from './PhotosIcon';
 import { VideosIcon } from './VideosIcon';
 import { SelectionAccent, SELECTION_CLASSES } from '../../utils/selectionAccent';
@@ -64,7 +65,7 @@ export const ColumnsView: React.FC<ColumnsViewProps> = ({
             const iconClass = `w-4 h-4 ${isSel ? 'text-sky-400' : 'text-neutral-400'}`;
             const renderIcon = () => {
               switch (f.name.toLowerCase()) {
-                case 'desktop': return <Monitor className={iconClass} />;
+                case 'desktop': return <DesktopIcon className={iconClass} title="Desktop" />;
                 case 'documents': return <FileText className={iconClass} />;
                 case 'photos': return <PhotosIcon className={iconClass} title="Photos" />;
                 case 'videos': return <VideosIcon className={iconClass} title="Videos" />;

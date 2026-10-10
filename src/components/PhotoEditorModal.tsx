@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   X, RotateCw, RotateCcw, FlipHorizontal, FlipVertical,
-  Sliders, Wand2, Download, Save, Undo2, Redo2, Check,
-  Sparkles, Layers, ZoomIn, ZoomOut, Maximize2, Minimize2, Crop
+  Wand2, Download, Save, Undo2, Redo2, Check,
+  Sparkles, ZoomIn, ZoomOut, Maximize2, Minimize2, Crop
 } from '@/src/icons';
 import { FileItem, PhotoAdjustments } from '../types';
 import { photoResultToDataUrl, renderPhotoNative } from '../services/mediaBridge';
 import { PhotoNav, PhotoNavArrows } from './PhotoNavArrows';
+import { EditPhotoIcon } from './file-browser/EditPhotoIcon';
 
 interface PhotoEditorModalProps {
   file: FileItem;
@@ -33,7 +34,61 @@ const DEFAULT_ADJUSTMENTS: PhotoAdjustments = {
   flipH: false,
   flipV: false,
   cropAspect: 'free',
+  cropX: 0,
+  cropY: 0,
+  cropW: 1,
+  cropH: 1,
 };
+
+type CropAspect = PhotoAdjustments['cropAspect'];
+type CropRect = { x: number; y: number; w: number; h: number };
+
+const CROP_ASPECT_OPTIONS: { id: CropAspect; label: string; ratio: number | null }[] = [
+  { id: 'free', label: 'Free', ratio: null },
+  { id: '1:1', label: '1:1', ratio: 1 },
+  { id: '4:5', label: '4:5', ratio: 4 / 5 },
+  { id: '3:2', label: '3:2', ratio: 3 / 2 },
+  { id: '16:9', label: '16:9', ratio: 16 / 9 },
+  { id: '9:16', label: '9:16', ratio: 9 / 16 },
+];
+
+function clampCrop(rect: CropRect): CropRect {
+  const w = Math.min(1, Math.max(0.05, rect.w));
+  const h = Math.min(1, Math.max(0.05, rect.h));
+  const x = Math.min(1 - w, Math.max(0, rect.x));
+  const y = Math.min(1 - h, Math.max(0, rect.y));
+  return { x, y, w, h };
+}
+
+/** Largest centered rect of the given aspect that fits in the frame. */
+function cropForAspect(ratio: number | null, current?: CropRect): CropRect {
+  if (ratio == null) {
+    return current ? clampCrop(current) : { x: 0.1, y: 0.1, w: 0.8, h: 0.8 };
+  }
+  // Frame is 1×1 in normalized space; pick max area with aspect (width/height = ratio).
+  let w: number;
+  let h: number;
+  if (ratio >= 1) {
+    w = 0.9;
+    h = w / ratio;
+    if (h > 0.9) {
+      h = 0.9;
+      w = h * ratio;
+    }
+  } else {
+    h = 0.9;
+    w = h * ratio;
+    if (w > 0.9) {
+      w = 0.9;
+      h = w / ratio;
+    }
+  }
+  return clampCrop({ x: (1 - w) / 2, y: (1 - h) / 2, w, h });
+}
+
+function isFullFrameCrop(a: Pick<PhotoAdjustments, 'cropX' | 'cropY' | 'cropW' | 'cropH'>): boolean {
+  return a.cropX <= 0.0005 && a.cropY <= 0.0005 && a.cropW >= 0.9995 && a.cropH >= 0.9995;
+}
 
 interface EditSnapshot {
   adjustments: PhotoAdjustments;
@@ -188,8 +243,17 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
   const selectedExportFormat = EXPORT_FORMATS.find(f => f.id === exportFormat) ?? EXPORT_FORMATS[0];
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [cropMode, setCropMode] = useState(false);
+  const [draftCrop, setDraftCrop] = useState<CropRect>({ x: 0, y: 0, w: 1, h: 1 });
+  const [draftAspect, setDraftAspect] = useState<CropAspect>('free');
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const cropDragRef = useRef<{
+    handle: 'move' | 'nw' | 'ne' | 'sw' | 'se' | 'n' | 's' | 'e' | 'w';
+    startX: number;
+    startY: number;
+    origin: CropRect;
+  } | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const histogramCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -237,6 +301,9 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
     setAdjustments(fresh);
     setActivePreset('natural');
     setZoomLevel(100);
+    setCropMode(false);
+    setDraftCrop({ x: 0, y: 0, w: 1, h: 1 });
+    setDraftAspect('free');
 
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -247,12 +314,12 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
     };
   }, [file.id, file.url, isOpen]);
 
-  // Re-render when adjustments or compare mode changes
+  // Re-render when adjustments or crop preview mode changes
   useEffect(() => {
     if (imgRef.current) {
       renderImage();
     }
-  }, [adjustments]);
+  }, [adjustments, cropMode]);
 
   const pushPast = () => {
     pastRef.current.push({
@@ -353,6 +420,11 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && cropMode) {
+        e.preventDefault();
+        cancelCropMode();
+        return;
+      }
       if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
       const key = e.key.toLowerCase();
       if (key === 'z' && !e.shiftKey) {
@@ -365,7 +437,7 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [isOpen]);
+  }, [isOpen, cropMode]);
 
   useEffect(() => {
     if (!isOpen || !photoNav) return;
@@ -384,6 +456,65 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [isOpen, photoNav]);
 
+  const enterCropMode = () => {
+    const adj = adjustmentsRef.current;
+    const next = isFullFrameCrop(adj)
+      ? cropForAspect(CROP_ASPECT_OPTIONS.find(o => o.id === adj.cropAspect)?.ratio ?? null)
+      : clampCrop({ x: adj.cropX, y: adj.cropY, w: adj.cropW, h: adj.cropH });
+    setDraftAspect(adj.cropAspect);
+    setDraftCrop(next);
+    setCropMode(true);
+  };
+
+  const cancelCropMode = () => {
+    cropDragRef.current = null;
+    setCropMode(false);
+  };
+
+  const applyCropMode = () => {
+    const rect = clampCrop(draftCrop);
+    const next: PhotoAdjustments = {
+      ...adjustmentsRef.current,
+      cropAspect: draftAspect,
+      cropX: rect.x,
+      cropY: rect.y,
+      cropW: rect.w,
+      cropH: rect.h,
+    };
+    if (!adjustmentsEqual(next, adjustmentsRef.current)) {
+      sessionRef.current = null;
+      pushPast();
+      writeEdit(next, '');
+    }
+    cropDragRef.current = null;
+    setCropMode(false);
+  };
+
+  const clearCrop = () => {
+    const next: PhotoAdjustments = {
+      ...adjustmentsRef.current,
+      cropAspect: 'free',
+      cropX: 0,
+      cropY: 0,
+      cropW: 1,
+      cropH: 1,
+    };
+    if (!adjustmentsEqual(next, adjustmentsRef.current)) {
+      sessionRef.current = null;
+      pushPast();
+      writeEdit(next, '');
+    }
+    setDraftCrop({ x: 0, y: 0, w: 1, h: 1 });
+    setDraftAspect('free');
+    setCropMode(false);
+  };
+
+  const setCropAspectOption = (id: CropAspect) => {
+    const ratio = CROP_ASPECT_OPTIONS.find(o => o.id === id)?.ratio ?? null;
+    setDraftAspect(id);
+    setDraftCrop(prev => cropForAspect(ratio, id === 'free' ? prev : undefined));
+  };
+
   // Render Image onto canvas with CSS filter & pixel transformations
   const renderImage = () => {
     const canvas = canvasRef.current;
@@ -393,60 +524,79 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return;
 
+    const adj = adjustmentsRef.current;
     // Handle rotation dimensions
-    const isRotated90or270 = adjustments.rotation === 90 || adjustments.rotation === 270;
+    const isRotated90or270 = adj.rotation === 90 || adj.rotation === 270;
     const targetWidth = isRotated90or270 ? img.naturalHeight : img.naturalWidth;
     const targetHeight = isRotated90or270 ? img.naturalWidth : img.naturalHeight;
 
-    canvas.width = targetWidth;
-    canvas.height = targetHeight;
+    const offscreen = document.createElement('canvas');
+    offscreen.width = targetWidth;
+    offscreen.height = targetHeight;
+    const octx = offscreen.getContext('2d', { willReadFrequently: true });
+    if (!octx) return;
 
-    ctx.save();
-    ctx.clearRect(0, 0, targetWidth, targetHeight);
+    octx.save();
+    octx.clearRect(0, 0, targetWidth, targetHeight);
+    octx.translate(targetWidth / 2, targetHeight / 2);
+    octx.rotate((adj.rotation * Math.PI) / 180);
+    octx.scale(adj.flipH ? -1 : 1, adj.flipV ? -1 : 1);
 
-    // Coordinate transforms
-    ctx.translate(targetWidth / 2, targetHeight / 2);
-    ctx.rotate((adjustments.rotation * Math.PI) / 180);
-    ctx.scale(adjustments.flipH ? -1 : 1, adjustments.flipV ? -1 : 1);
+    const exp = 1 + adj.exposure / 100;
+    const bright = Math.max(0, 1 + adj.brightness / 100);
+    const cont = Math.max(0, 1 + adj.contrast / 100);
+    const sat = Math.max(0, 1 + adj.saturation / 100);
 
-    // Apply color and tone filters
-    const exp = 1 + adjustments.exposure / 100;
-    const bright = Math.max(0, 1 + adjustments.brightness / 100);
-    const cont = Math.max(0, 1 + adjustments.contrast / 100);
-    const sat = Math.max(0, 1 + adjustments.saturation / 100);
-
-    // Warmth / temp via hue and sepia mix
     let filterString = `brightness(${bright * exp}) contrast(${cont}) saturate(${sat})`;
-    if (adjustments.warmth !== 0) {
-      if (adjustments.warmth > 0) {
-        filterString += ` sepia(${adjustments.warmth * 0.4}%)`;
+    if (adj.warmth !== 0) {
+      if (adj.warmth > 0) {
+        filterString += ` sepia(${adj.warmth * 0.4}%)`;
       } else {
-        filterString += ` hue-rotate(${adjustments.warmth * 0.4}deg)`;
+        filterString += ` hue-rotate(${adj.warmth * 0.4}deg)`;
       }
     }
-    if (adjustments.tint !== 0) {
-      filterString += ` hue-rotate(${adjustments.tint * 0.5}deg)`;
+    if (adj.tint !== 0) {
+      filterString += ` hue-rotate(${adj.tint * 0.5}deg)`;
     }
 
-    ctx.filter = filterString;
-    ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
-    ctx.restore();
+    octx.filter = filterString;
+    octx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
+    octx.restore();
 
-    // Apply Vignette if enabled
-    if (adjustments.vignette > 0) {
-      const gradient = ctx.createRadialGradient(
+    if (adj.vignette > 0) {
+      const gradient = octx.createRadialGradient(
         targetWidth / 2,
         targetHeight / 2,
-        (Math.min(targetWidth, targetHeight) / 2) * (1 - adjustments.vignette / 120),
+        (Math.min(targetWidth, targetHeight) / 2) * (1 - adj.vignette / 120),
         targetWidth / 2,
         targetHeight / 2,
-        Math.max(targetWidth, targetHeight) * 0.8
+        Math.max(targetWidth, targetHeight) * 0.8,
       );
-      const alpha = (adjustments.vignette / 100) * 0.8;
+      const alpha = (adj.vignette / 100) * 0.8;
       gradient.addColorStop(0, 'rgba(0,0,0,0)');
       gradient.addColorStop(1, `rgba(0,0,0,${alpha})`);
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, targetWidth, targetHeight);
+      octx.fillStyle = gradient;
+      octx.fillRect(0, 0, targetWidth, targetHeight);
+    }
+
+    // In crop mode show the full frame so the overlay can be edited.
+    const applyCrop = !cropMode && !isFullFrameCrop(adj);
+    if (applyCrop) {
+      const cw = Math.max(1, Math.round(adj.cropW * targetWidth));
+      const ch = Math.max(1, Math.round(adj.cropH * targetHeight));
+      const cx = Math.min(targetWidth - 1, Math.max(0, Math.round(adj.cropX * targetWidth)));
+      const cy = Math.min(targetHeight - 1, Math.max(0, Math.round(adj.cropY * targetHeight)));
+      const width = Math.min(cw, targetWidth - cx);
+      const height = Math.min(ch, targetHeight - cy);
+      canvas.width = width;
+      canvas.height = height;
+      ctx.clearRect(0, 0, width, height);
+      ctx.drawImage(offscreen, cx, cy, width, height, 0, 0, width, height);
+    } else {
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+      ctx.clearRect(0, 0, targetWidth, targetHeight);
+      ctx.drawImage(offscreen, 0, 0);
     }
 
     drawHistogram(ctx, canvas);
@@ -606,7 +756,7 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
         <div className="flex items-center justify-between px-5 py-3 border-b border-neutral-800 bg-neutral-950/80">
           <div className="flex items-center gap-3">
             <div className="p-1.5 rounded-lg bg-cyan-500/10 text-cyan-400">
-              <Sliders className="w-5 h-5" />
+              <EditPhotoIcon className="w-5 h-5" title="Photo Studio" />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -689,80 +839,147 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
             {photoNav && <PhotoNavArrows nav={photoNav} />}
 
             {/* Canvas Container with dynamic zoom */}
-            <div 
+            <div
               className="flex items-center justify-center w-full h-full transition-transform duration-100 ease-out"
               style={{ transform: `scale(${zoomLevel / 100})` }}
             >
-              <canvas
-                ref={canvasRef}
-                className="max-w-full max-h-full object-contain rounded shadow-2xl border border-neutral-800/80"
-              />
-            </div>
-
-            {/* Bottom Viewport Bar (Zoom & Geometry Quick Actions) */}
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-2.5 py-1 bg-neutral-900/90 border border-neutral-800 rounded-full backdrop-blur-md text-xs text-neutral-300 shadow-xl">
-              <div className="flex items-center gap-0 pr-1.5 border-r border-neutral-800">
-                <button
-                  onClick={() => console.log('Crop mode')}
-                  className="p-0.5 hover:text-white rounded-md"
-                  title="Crop"
-                >
-                  <Crop className="w-4.5 h-4.5" />
-                </button>
-                <button
-                  onClick={() => updateAdj('rotation', (adjustmentsRef.current.rotation + 90) % 360)}
-                  className="p-0.5 hover:text-white rounded-md"
-                  title="Rotate CW 90°"
-                >
-                  <RotateCw className="w-4.5 h-4.5" />
-                </button>
-                <button
-                  onClick={() => updateAdj('flipH', !adjustmentsRef.current.flipH)}
-                  className={`p-0.5 rounded-md ${adjustments.flipH ? 'text-cyan-400' : 'hover:text-white'}`}
-                  title="Flip Horizontal"
-                >
-                  <FlipHorizontal className="w-4.5 h-4.5" />
-                </button>
-                <button
-                  onClick={() => updateAdj('flipV', !adjustmentsRef.current.flipV)}
-                  className={`p-0.5 rounded-md ${adjustments.flipV ? 'text-cyan-400' : 'hover:text-white'}`}
-                  title="Flip Vertical"
-                >
-                  <FlipVertical className="w-4.5 h-4.5" />
-                </button>
-              </div>
-
-              <div className="flex items-center gap-0.5">
-                <button
-                  onClick={() => setZoomLevel(Math.max(25, zoomLevel - 25))}
-                  className="p-0.5 hover:text-white rounded-md"
-                >
-                  <ZoomOut className="w-4.5 h-4.5" />
-                </button>
-                <span className="w-9 text-center font-mono text-neutral-300 text-[11px]">{zoomLevel}%</span>
-                <button
-                  onClick={() => setZoomLevel(Math.min(300, zoomLevel + 25))}
-                  className="p-0.5 hover:text-white rounded-md"
-                >
-                  <ZoomIn className="w-4.5 h-4.5" />
-                </button>
-                <button
-                  onClick={() => setZoomLevel(100)}
-                  className="text-[11px] font-medium text-cyan-400 hover:underline px-0.5"
-                >
-                  Fit
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void toggleFullscreen()}
-                  className="p-0.5 hover:text-white rounded-md"
-                  title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
-                  aria-label={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
-                >
-                  {isFullscreen ? <Minimize2 className="w-4.5 h-4.5" /> : <Maximize2 className="w-4.5 h-4.5" />}
-                </button>
+              <div className="relative inline-block max-w-full max-h-full">
+                <canvas
+                  ref={canvasRef}
+                  className="max-w-full max-h-full object-contain rounded shadow-2xl border border-neutral-800/80 block"
+                />
+                {cropMode && (
+                  <CropOverlay
+                    rect={draftCrop}
+                    aspect={draftAspect}
+                    onChange={setDraftCrop}
+                    dragRef={cropDragRef}
+                  />
+                )}
               </div>
             </div>
+
+            {/* Crop mode toolbar */}
+            {cropMode ? (
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 z-20">
+                <div className="flex items-center gap-1 px-2 py-1.5 bg-neutral-900/95 border border-neutral-700 rounded-full backdrop-blur-md text-xs text-neutral-300 shadow-xl">
+                  {CROP_ASPECT_OPTIONS.map(opt => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setCropAspectOption(opt.id)}
+                      className={`px-2 py-1 rounded-md font-medium transition-colors ${
+                        draftAspect === opt.id
+                          ? 'bg-cyan-500/25 text-cyan-300'
+                          : 'hover:bg-white/10 hover:text-white'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-neutral-900/95 border border-neutral-700 rounded-full backdrop-blur-md text-xs shadow-xl">
+                  <button
+                    type="button"
+                    onClick={cancelCropMode}
+                    className="px-3 py-1 rounded-md text-neutral-300 hover:text-white hover:bg-white/10"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={clearCrop}
+                    className="px-3 py-1 rounded-md text-neutral-300 hover:text-white hover:bg-white/10"
+                    title="Reset to full frame"
+                  >
+                    Reset
+                  </button>
+                  <button
+                    type="button"
+                    onClick={applyCropMode}
+                    className="px-3 py-1 rounded-md font-semibold text-neutral-950 bg-cyan-400 hover:bg-cyan-300"
+                  >
+                    Apply Crop
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-2.5 py-1 bg-neutral-900/90 border border-neutral-800 rounded-full backdrop-blur-md text-xs text-neutral-300 shadow-xl">
+                <div className="flex items-center gap-0 pr-1.5 border-r border-neutral-800">
+                  <button
+                    type="button"
+                    onClick={enterCropMode}
+                    className={`p-0.5 rounded-md ${
+                      !isFullFrameCrop(adjustments) ? 'text-cyan-400' : 'hover:text-white'
+                    }`}
+                    title="Crop"
+                  >
+                    <Crop className="w-4.5 h-4.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (cropMode) return;
+                      updateAdj('rotation', (adjustmentsRef.current.rotation + 90) % 360);
+                    }}
+                    className="p-0.5 hover:text-white rounded-md"
+                    title="Rotate CW 90°"
+                  >
+                    <RotateCw className="w-4.5 h-4.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateAdj('flipH', !adjustmentsRef.current.flipH)}
+                    className={`p-0.5 rounded-md ${adjustments.flipH ? 'text-cyan-400' : 'hover:text-white'}`}
+                    title="Flip Horizontal"
+                  >
+                    <FlipHorizontal className="w-4.5 h-4.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateAdj('flipV', !adjustmentsRef.current.flipV)}
+                    className={`p-0.5 rounded-md ${adjustments.flipV ? 'text-cyan-400' : 'hover:text-white'}`}
+                    title="Flip Vertical"
+                  >
+                    <FlipVertical className="w-4.5 h-4.5" />
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setZoomLevel(Math.max(25, zoomLevel - 25))}
+                    className="p-0.5 hover:text-white rounded-md"
+                  >
+                    <ZoomOut className="w-4.5 h-4.5" />
+                  </button>
+                  <span className="w-9 text-center font-mono text-neutral-300 text-[11px]">{zoomLevel}%</span>
+                  <button
+                    type="button"
+                    onClick={() => setZoomLevel(Math.min(300, zoomLevel + 25))}
+                    className="p-0.5 hover:text-white rounded-md"
+                  >
+                    <ZoomIn className="w-4.5 h-4.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setZoomLevel(100)}
+                    className="text-[11px] font-medium text-cyan-400 hover:underline px-0.5"
+                  >
+                    Fit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void toggleFullscreen()}
+                    className="p-0.5 hover:text-white rounded-md"
+                    title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                    aria-label={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                  >
+                    {isFullscreen ? <Minimize2 className="w-4.5 h-4.5" /> : <Maximize2 className="w-4.5 h-4.5" />}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Right Adjustments & Presets Sidebar */}
@@ -1033,6 +1250,196 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
           </div>
         </div>
 
+      </div>
+    </div>
+  );
+};
+
+type CropHandle = 'move' | 'nw' | 'ne' | 'sw' | 'se' | 'n' | 's' | 'e' | 'w';
+
+interface CropOverlayProps {
+  rect: CropRect;
+  aspect: CropAspect;
+  onChange: (rect: CropRect) => void;
+  dragRef: React.MutableRefObject<{
+    handle: CropHandle;
+    startX: number;
+    startY: number;
+    origin: CropRect;
+  } | null>;
+}
+
+const CropOverlay: React.FC<CropOverlayProps> = ({ rect, aspect, onChange, dragRef }) => {
+  const ratio = CROP_ASPECT_OPTIONS.find(o => o.id === aspect)?.ratio ?? null;
+
+  const onPointerDown = (handle: CropHandle) => (e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const target = e.currentTarget as HTMLElement;
+    const host = target.closest('[data-crop-host]') as HTMLElement | null;
+    if (!host) return;
+    host.setPointerCapture(e.pointerId);
+    dragRef.current = {
+      handle,
+      startX: e.clientX,
+      startY: e.clientY,
+      origin: { ...rect },
+    };
+  };
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const host = e.currentTarget as HTMLElement;
+    const box = host.getBoundingClientRect();
+    if (box.width < 1 || box.height < 1) return;
+    const dx = (e.clientX - drag.startX) / box.width;
+    const dy = (e.clientY - drag.startY) / box.height;
+    const o = drag.origin;
+    let next: CropRect = { ...o };
+
+    const applyAspectFromCorner = (nx: number, ny: number, nw: number, nh: number, corner: 'nw' | 'ne' | 'sw' | 'se') => {
+      if (ratio == null) return clampCrop({ x: nx, y: ny, w: nw, h: nh });
+      // Prefer width-driven resize; adjust height to match aspect.
+      let w = Math.max(0.05, nw);
+      let h = w / ratio;
+      if (h > 0.05 && (corner === 'nw' || corner === 'ne')) {
+        const bottom = o.y + o.h;
+        let y = bottom - h;
+        if (y < 0) {
+          y = 0;
+          h = bottom;
+          w = h * ratio;
+        }
+        const x = corner === 'nw' ? o.x + o.w - w : o.x;
+        return clampCrop({ x, y, w, h });
+      }
+      if (h > 0.05 && (corner === 'sw' || corner === 'se')) {
+        const x = corner === 'sw' ? o.x + o.w - w : o.x;
+        if (o.y + h > 1) {
+          h = 1 - o.y;
+          w = h * ratio;
+        }
+        return clampCrop({ x, y: o.y, w, h });
+      }
+      return clampCrop({ x: nx, y: ny, w: nw, h: nh });
+    };
+
+    switch (drag.handle) {
+      case 'move':
+        next = clampCrop({ x: o.x + dx, y: o.y + dy, w: o.w, h: o.h });
+        break;
+      case 'e':
+        next = ratio == null
+          ? clampCrop({ x: o.x, y: o.y, w: o.w + dx, h: o.h })
+          : applyAspectFromCorner(o.x, o.y, o.w + dx, o.h, 'se');
+        break;
+      case 'w': {
+        const w = o.w - dx;
+        next = ratio == null
+          ? clampCrop({ x: o.x + dx, y: o.y, w, h: o.h })
+          : applyAspectFromCorner(o.x + dx, o.y, w, o.h, 'sw');
+        break;
+      }
+      case 's':
+        if (ratio == null) {
+          next = clampCrop({ x: o.x, y: o.y, w: o.w, h: o.h + dy });
+        } else {
+          const h = Math.max(0.05, o.h + dy);
+          const w = h * ratio;
+          next = clampCrop({ x: o.x + (o.w - w) / 2, y: o.y, w, h });
+        }
+        break;
+      case 'n':
+        if (ratio == null) {
+          next = clampCrop({ x: o.x, y: o.y + dy, w: o.w, h: o.h - dy });
+        } else {
+          const h = Math.max(0.05, o.h - dy);
+          const w = h * ratio;
+          const bottom = o.y + o.h;
+          next = clampCrop({ x: o.x + (o.w - w) / 2, y: bottom - h, w, h });
+        }
+        break;
+      case 'se':
+        next = applyAspectFromCorner(o.x, o.y, o.w + dx, o.h + dy, 'se');
+        break;
+      case 'sw':
+        next = applyAspectFromCorner(o.x + dx, o.y, o.w - dx, o.h + dy, 'sw');
+        break;
+      case 'ne':
+        next = applyAspectFromCorner(o.x, o.y + dy, o.w + dx, o.h - dy, 'ne');
+        break;
+      case 'nw':
+        next = applyAspectFromCorner(o.x + dx, o.y + dy, o.w - dx, o.h - dy, 'nw');
+        break;
+    }
+    onChange(next);
+  };
+
+  const onPointerUp = (e: React.PointerEvent) => {
+    if (dragRef.current) {
+      try {
+        (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+      } catch { /* already released */ }
+      dragRef.current = null;
+    }
+  };
+
+  const handleClass =
+    'absolute w-3 h-3 bg-white border border-cyan-400 rounded-sm shadow z-10 -translate-x-1/2 -translate-y-1/2';
+
+  return (
+    <div
+      data-crop-host
+      className="absolute inset-0 z-10 touch-none"
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+    >
+      {/* Dim outside crop */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute left-0 right-0 top-0 bg-black/55" style={{ height: `${rect.y * 100}%` }} />
+        <div className="absolute left-0 right-0 bottom-0 bg-black/55" style={{ height: `${(1 - rect.y - rect.h) * 100}%` }} />
+        <div
+          className="absolute left-0 bg-black/55"
+          style={{ top: `${rect.y * 100}%`, height: `${rect.h * 100}%`, width: `${rect.x * 100}%` }}
+        />
+        <div
+          className="absolute right-0 bg-black/55"
+          style={{ top: `${rect.y * 100}%`, height: `${rect.h * 100}%`, width: `${(1 - rect.x - rect.w) * 100}%` }}
+        />
+      </div>
+
+      {/* Active crop frame */}
+      <div
+        className="absolute border-2 border-cyan-400/90 box-border cursor-move"
+        style={{
+          left: `${rect.x * 100}%`,
+          top: `${rect.y * 100}%`,
+          width: `${rect.w * 100}%`,
+          height: `${rect.h * 100}%`,
+        }}
+        onPointerDown={onPointerDown('move')}
+      >
+        {/* Rule-of-thirds guides */}
+        <div className="absolute inset-0 pointer-events-none opacity-40">
+          <div className="absolute left-1/3 top-0 bottom-0 w-px bg-white/80" />
+          <div className="absolute left-2/3 top-0 bottom-0 w-px bg-white/80" />
+          <div className="absolute top-1/3 left-0 right-0 h-px bg-white/80" />
+          <div className="absolute top-2/3 left-0 right-0 h-px bg-white/80" />
+        </div>
+
+        {/* Edge handles */}
+        <div className="absolute left-1/2 top-0 w-8 h-2 -translate-x-1/2 -translate-y-1/2 cursor-ns-resize" onPointerDown={onPointerDown('n')} />
+        <div className="absolute left-1/2 bottom-0 w-8 h-2 -translate-x-1/2 translate-y-1/2 cursor-ns-resize" onPointerDown={onPointerDown('s')} />
+        <div className="absolute top-1/2 left-0 w-2 h-8 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize" onPointerDown={onPointerDown('w')} />
+        <div className="absolute top-1/2 right-0 w-2 h-8 translate-x-1/2 -translate-y-1/2 cursor-ew-resize" onPointerDown={onPointerDown('e')} />
+
+        {/* Corner handles */}
+        <div className={`${handleClass} left-0 top-0 cursor-nwse-resize`} onPointerDown={onPointerDown('nw')} />
+        <div className={`${handleClass} left-full top-0 cursor-nesw-resize`} onPointerDown={onPointerDown('ne')} />
+        <div className={`${handleClass} left-0 top-full cursor-nesw-resize`} onPointerDown={onPointerDown('sw')} />
+        <div className={`${handleClass} left-full top-full cursor-nwse-resize`} onPointerDown={onPointerDown('se')} />
       </div>
     </div>
   );
