@@ -8,18 +8,26 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      upload_release_tag:
+        description: 'If set, upload the Linux Flatpak to this existing release tag (e.g. v0.1.5)'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: write
 
 jobs:
   build:
+    # Skip desktop matrix when this is a Flatpak-only manual upload to an existing tag.
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.upload_release_tag == '' }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: macos-latest
-            args: --target universal-apple-darwin --config tauri.ffmpeg.conf.json
+            args: --target universal-apple-darwin --config src-tauri/tauri.ffmpeg.conf.json
             rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
           - os: windows-latest
             args: ''
@@ -146,10 +154,10 @@ jobs:
       - name: Install Linux build dependencies
         run: |
           sudo apt-get update
+          # Prefer Ayatana only — libappindicator3-dev conflicts with it on Ubuntu 22.04.
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev \
             libgtk-3-dev \
-            libappindicator3-dev \
             librsvg2-dev \
             patchelf \
             libssl-dev \
@@ -173,13 +181,17 @@ jobs:
           chmod +x scripts/build-flatpak.sh
           npm run build:flatpak
 
-      - name: Upload Flatpak to draft release
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Upload Flatpak to release
+        if: startsWith(github.ref, 'refs/tags/') || inputs.upload_release_tag != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${GITHUB_REF_NAME}"
-          # Ensure the draft release from the matrix job exists (or create one).
+          if [[ -n "${{ inputs.upload_release_tag }}" ]]; then
+            TAG="${{ inputs.upload_release_tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          # Ensure a release exists (tag pushes may still be drafting via tauri-action).
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             gh release create "$TAG" \
               --draft \
