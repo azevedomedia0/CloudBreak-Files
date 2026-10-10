@@ -1,0 +1,14 @@
+{
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-cli/schema.json",
+  "mainBinaryName": "cloudbreak-files",
+  "bundle": {
+    "targets": ["deb", "appimage"],
+    "linux": {
+      "deb": {
+        "files": {
+          "/usr/share/metainfo/com.cloudbreak.files.metainfo.xml": "../flatpak/com.cloudbreak.files.metainfo.xml"
+        }
+      }
+    }
+  }
+}

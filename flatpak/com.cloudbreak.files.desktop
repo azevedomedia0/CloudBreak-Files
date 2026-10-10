@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Cloudbreak Files
+GenericName=File Manager
+Comment=Multi-cloud files with a private vault and P2P libraries
+Exec=cloudbreak-files
+Icon=com.cloudbreak.files
+Terminal=false
+Categories=Utility;FileTools;Network;
+Keywords=files;cloud;vault;encryption;p2p;
+StartupWMClass=cloudbreak-files

@@ -109,7 +109,7 @@ pub fn build_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 
     let icon = compose_tray_icon(TrayStatus::Idle)?;
 
-    let _tray = TrayIconBuilder::with_id(TRAY_ID)
+    let mut builder = TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon)
         .tooltip(TrayStatus::Idle.tooltip())
         .menu(&menu)
@@ -128,8 +128,15 @@ pub fn build_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
             {
                 show_main_window(tray.app_handle());
             }
-        })
-        .build(app)?;
+        });
+
+    // Flatpak cannot write tray bitmaps under $XDG_RUNTIME_DIR; keep them in the app cache.
+    #[cfg(target_os = "linux")]
+    if let Ok(cache) = app.path().app_cache_dir() {
+        builder = builder.temp_dir_path(cache);
+    }
+
+    let _tray = builder.build(app)?;
 
     LAST_STATUS.store(TrayStatus::Idle as u8, Ordering::Relaxed);
     Ok(())

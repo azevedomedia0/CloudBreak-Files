@@ -12,6 +12,7 @@ Tauri 2 + React 19 + Vite + Tailwind 4 desktop app. It manages many cloud accoun
 - Desktop app: `npm run tauri dev`
 - In-app self-test (runs inside the real desktop app, debug build only): `npm run test:app`. It checks vault unlock and `vault.json`, the security policy, the asset protocol, local file saves, the path limits, video trim and save, drag permission and toolbar spacing. It uses a throwaway app data folder. Needs port 3000 free and ffmpeg.
 - Release build: `npm run build:mac` (universal Apple Silicon + Intel; see `docs/notarized-distribution.md`; sets `CARGO_TARGET_DIR` outside OneDrive, `MACOSX_DEPLOYMENT_TARGET=11.0`)
+- Linux Flatpak: `npm run build:flatpak` (Linux) or `npm run build:flatpak:docker` (Docker Desktop; see `docs/flatpak.md`). CI job `linux-flatpak` in `.github/workflows/release.yml`.
 - Updater keys: `npm run updater:keys` (private key in `~/.tauri/`; see `docs/auto-updates.md`)
 
 ## Notes
@@ -51,3 +52,4 @@ Tauri 2 + React 19 + Vite + Tailwind 4 desktop app. It manages many cloud accoun
 
 ## Remaining work
 - The Windows build is only configured in the workflow. It is untested and unsigned.
+- Linux Flatpak packaging is in-repo (`flatpak/`, `npm run build:flatpak`); CI builds it on Ubuntu. Flathub from-source submission is not done yet.

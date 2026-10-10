@@ -1,0 +1,123 @@
+# Flatpak manifest — wraps the Tauri .deb into a sandboxed app.
+# Build on Linux with: bash scripts/build-flatpak.sh
+# Or via Docker: bash scripts/build-flatpak-docker.sh
+# See docs/flatpak.md.
+
+id: com.cloudbreak.files
+runtime: org.gnome.Platform
+runtime-version: '47'
+sdk: org.gnome.Sdk
+command: cloudbreak-files
+
+finish-args:
+  # Windowing
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  - --share=ipc
+  # Cloud sync, updates, P2P
+  - --share=network
+  # Local Files browser + media
+  - --filesystem=home
+  - --filesystem=xdg-download
+  - --filesystem=xdg-pictures
+  - --filesystem=xdg-videos
+  - --filesystem=xdg-music
+  - --filesystem=xdg-documents
+  - --filesystem=xdg-desktop
+  # OS keyring (provider tokens)
+  - --talk-name=org.freedesktop.secrets
+  # Tray icon (tauri tray-icon feature)
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --env=FLATPAK=1
+
+cleanup:
+  - /include
+  - /lib/pkgconfig
+  - /share/man
+  - '*.la'
+  - '*.a'
+
+modules:
+  - name: cloudbreak-files
+    buildsystem: simple
+    sources:
+      - type: file
+        path: com.cloudbreak.files.metainfo.xml
+      - type: file
+        path: com.cloudbreak.files.desktop
+      # Populated by scripts/build-flatpak.sh (copy the Tauri .deb here).
+      - type: file
+        path: cloudbreak-files.deb
+    build-commands:
+      - set -eu
+      - mkdir -p deb-extract
+      - ar x cloudbreak-files.deb --output deb-extract
+      - |
+        set -eu
+        if [ -f deb-extract/data.tar.zst ]; then
+          tar -C deb-extract -xf deb-extract/data.tar.zst
+        elif [ -f deb-extract/data.tar.xz ]; then
+          tar -C deb-extract -xf deb-extract/data.tar.xz
+        elif [ -f deb-extract/data.tar.gz ]; then
+          tar -C deb-extract -xf deb-extract/data.tar.gz
+        else
+          echo "No data.tar.* in deb" >&2
+          ls -la deb-extract >&2
+          exit 1
+        fi
+      - |
+        set -eu
+        BIN=""
+        for candidate in \
+          deb-extract/usr/bin/cloudbreak-files \
+          deb-extract/usr/bin/Cloudbreak\ Files \
+          deb-extract/usr/bin/cloudbreak_files
+        do
+          if [ -x "$candidate" ]; then BIN="$candidate"; break; fi
+        done
+        if [ -z "$BIN" ]; then
+          BIN="$(find deb-extract/usr/bin -type f -perm -111 2>/dev/null | head -n 1 || true)"
+        fi
+        test -n "$BIN"
+        install -Dm755 "$BIN" /app/bin/cloudbreak-files
+      - |
+        set -eu
+        for libdir in "deb-extract/usr/lib/Cloudbreak Files" deb-extract/usr/lib/cloudbreak-files; do
+          if [ -d "$libdir" ]; then
+            mkdir -p /app/lib/cloudbreak-files
+            cp -a "$libdir"/. /app/lib/cloudbreak-files/
+            find /app/lib/cloudbreak-files -type f -exec chmod 644 {} \;
+            find /app/lib/cloudbreak-files -type d -exec chmod 755 {} \;
+          fi
+        done
+      - |
+        set -eu
+        # Prefer our Flatpak desktop entry; fall back to the one from the .deb.
+        if [ -f com.cloudbreak.files.desktop ]; then
+          install -Dm644 com.cloudbreak.files.desktop /app/share/applications/com.cloudbreak.files.desktop
+        else
+          DESKTOP="$(find deb-extract/usr/share/applications -name '*.desktop' | head -n 1)"
+          test -n "$DESKTOP"
+          sed -e 's/^Icon=.*/Icon=com.cloudbreak.files/' \
+              -e 's|^Exec=.*|Exec=cloudbreak-files|' \
+              "$DESKTOP" > /tmp/com.cloudbreak.files.desktop
+          install -Dm644 /tmp/com.cloudbreak.files.desktop /app/share/applications/com.cloudbreak.files.desktop
+        fi
+      - |
+        set -eu
+        ICON_SRC="$(find deb-extract/usr/share/icons -type f -name '*.png' | sort | tail -n 1 || true)"
+        if [ -z "$ICON_SRC" ] && [ -f deb-extract/usr/share/pixmaps/cloudbreak-files.png ]; then
+          ICON_SRC=deb-extract/usr/share/pixmaps/cloudbreak-files.png
+        fi
+        if [ -n "$ICON_SRC" ]; then
+          install -Dm644 "$ICON_SRC" /app/share/icons/hicolor/256x256/apps/com.cloudbreak.files.png
+          install -Dm644 "$ICON_SRC" /app/share/icons/hicolor/128x128/apps/com.cloudbreak.files.png
+        fi
+        for size in 32x32 128x128; do
+          src="$(find "deb-extract/usr/share/icons/hicolor/$size" -type f -name '*.png' 2>/dev/null | head -n 1 || true)"
+          if [ -n "$src" ]; then
+            install -Dm644 "$src" "/app/share/icons/hicolor/$size/apps/com.cloudbreak.files.png"
+          fi
+        done
+      - install -Dm644 com.cloudbreak.files.metainfo.xml /app/share/metainfo/com.cloudbreak.files.metainfo.xml

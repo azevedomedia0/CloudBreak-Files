@@ -14,6 +14,8 @@
     "test:vault": "tsx scripts/browser-vault-persist-test.mts",
     "tauri": "tauri",
     "build:mac": "bash scripts/build-macos-release.sh",
+    "build:flatpak": "bash scripts/build-flatpak.sh",
+    "build:flatpak:docker": "bash scripts/build-flatpak-docker.sh",
     "fetch:ffmpeg": "bash scripts/fetch-ffmpeg.sh",
     "updater:keys": "bash scripts/generate-updater-keys.sh",
     "test:app": "bash scripts/run-app-selftest.sh"
