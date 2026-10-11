@@ -3,12 +3,20 @@
   "mainBinaryName": "cloudbreak-files",
   "bundle": {
     "createUpdaterArtifacts": false,
-    "targets": ["deb", "appimage"],
+    "targets": [
+      "deb",
+      "appimage"
+    ],
     "linux": {
       "deb": {
         "files": {
-          "/usr/share/metainfo/com.cloudbreak.files.metainfo.xml": "../flatpak/com.cloudbreak.files.metainfo.xml"
-        }
+          "/usr/share/metainfo/com.cloudbreak.files.metainfo.xml": "../flatpak/com.cloudbreak.files.metainfo.xml",
+          "/usr/share/applications/com.cloudbreak.files.desktop": "../flatpak/com.cloudbreak.files.desktop",
+          "/usr/share/icons/hicolor/32x32/apps/com.cloudbreak.files.png": "icons/32x32.png",
+          "/usr/share/icons/hicolor/128x128/apps/com.cloudbreak.files.png": "icons/128x128.png",
+          "/usr/share/icons/hicolor/256x256/apps/com.cloudbreak.files.png": "icons/128x128@2x.png"
+        },
+        "desktopTemplate": "../flatpak/deb-hidden.desktop"
       }
     }
   }

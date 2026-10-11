@@ -25,6 +25,12 @@ npm run build:flatpak
 # → dist-flatpak/com.cloudbreak.files.flatpak
 ```
 
+## Bundled ffmpeg (Linux x86_64)
+
+`scripts/build-flatpak.sh` downloads a static ffmpeg ([eugeneware/ffmpeg-static](https://github.com/eugeneware/ffmpeg-static), release `b6.1.1`) with `scripts/fetch-ffmpeg.sh linux` and installs it in the `.deb` at `/usr/lib/cloudbreak-files/ffmpeg`. It is not placed in `/usr/bin`, so it cannot clash with Debian's `ffmpeg` package. The Flatpak copies it to `/app/lib/cloudbreak-files/ffmpeg`, and `media.rs` looks for it there before falling back to a system ffmpeg. Set `FFMPEG_LINUX_X64_URL` to pin a different build.
+
+The static ffmpeg build is GPL-licensed. Before a public release, ship its license text and a source offer alongside it (see the ffmpeg-static release notes). If the download fails, the build continues and video tools use a system ffmpeg.
+
 ## Docker build (macOS / any host)
 
 With Docker Desktop running:

@@ -27,8 +27,8 @@
     <keyword>p2p</keyword>
   </keywords>
   <branding>
-    <color type="primary" scheme_preference="light">#0ea5e9</color>
-    <color type="primary" scheme_preference="dark">#38bdf8</color>
+    <color type="primary" scheme_preference="light">#2e7bde</color>
+    <color type="primary" scheme_preference="dark">#6aa5f0</color>
   </branding>
   <recommends>
     <display_length compare="ge">960</display_length>
@@ -65,7 +65,7 @@
         </p>
       </description>
     </release>
-    <release version="0.1.4" date="2026-10-10">
+    <release version="0.1.4" date="2026-10-09">
       <description>
         <p>Faster startup with Desktop-first local scans and in-app update checks.</p>
       </description>

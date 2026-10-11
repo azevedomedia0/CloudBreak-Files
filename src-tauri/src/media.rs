@@ -497,7 +497,7 @@ fn ffmpeg_binary_name() -> &'static str {
     }
 }
 
-/// Sidecar next to the app binary (Tauri `externalBin`) and common Homebrew paths.
+/// Sidecar next to the app binary (Tauri `externalBin`), the Linux package lib dir, and common Homebrew paths.
 fn which_ffmpeg() -> Option<(PathBuf, &'static str)> {
     if let Ok(p) = std::env::var("FFMPEG_PATH") {
         let path = PathBuf::from(p);
@@ -514,6 +514,13 @@ fn which_ffmpeg() -> Option<(PathBuf, &'static str)> {
             let candidate = dir.join(name);
             if candidate.is_file() {
                 return Some((candidate, "bundled"));
+            }
+            // Linux packages: <prefix>/bin/<exe> and <prefix>/lib/cloudbreak-files/ffmpeg (.deb and Flatpak).
+            if let Some(prefix) = dir.parent() {
+                let packaged = prefix.join("lib").join("cloudbreak-files").join(name);
+                if packaged.is_file() {
+                    return Some((packaged, "bundled"));
+                }
             }
             // Dev tree: src-tauri/binaries/ffmpeg-<triple> when running `cargo test` / odd layouts.
             let binaries = dir.join("binaries").join(name);

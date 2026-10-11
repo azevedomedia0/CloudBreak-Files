@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Download static ffmpeg sidecars for Tauri externalBin (not committed — see .gitignore).
 # Used by `npm run build:mac` and CI so release DMGs ship video tools without requiring Homebrew.
+# `fetch-ffmpeg.sh linux` fetches the Linux x86_64 build that scripts/build-flatpak.sh packs into the .deb.
+# These are GPL-licensed static builds (see eugeneware/ffmpeg-static); keep the notice in docs/flatpak.md.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -11,6 +13,7 @@ mkdir -p "$BIN"
 # Override with FFMPEG_ARM_URL / FFMPEG_X64_URL if you pin a different release.
 ARM_URL="${FFMPEG_ARM_URL:-https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-arm64.gz}"
 X64_URL="${FFMPEG_X64_URL:-https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-x64.gz}"
+LINUX_X64_URL="${FFMPEG_LINUX_X64_URL:-https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-linux-x64.gz}"
 
 fetch_gz() {
   local url="$1"
@@ -92,6 +95,15 @@ ensure() {
 
 ARCH_FILTER="${1:-all}"
 ok=0
+
+if [[ "$ARCH_FILTER" == "linux" ]]; then
+  if ensure "$BIN/ffmpeg-x86_64-unknown-linux-gnu" "$LINUX_X64_URL"; then
+    echo "Done. scripts/build-flatpak.sh packs this into the .deb."
+    exit 0
+  fi
+  echo "error: could not obtain the Linux ffmpeg sidecar." >&2
+  exit 1
+fi
 
 if [[ "$ARCH_FILTER" == "all" || "$ARCH_FILTER" == "arm64" || "$ARCH_FILTER" == "aarch64" ]]; then
   if ensure "$BIN/ffmpeg-aarch64-apple-darwin" "$ARM_URL"; then
