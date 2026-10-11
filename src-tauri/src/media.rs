@@ -466,7 +466,7 @@ pub struct FfmpegStatus {
 }
 
 pub const FFMPEG_INSTALL_HINT: &str =
-    "Install ffmpeg with Homebrew: brew install ffmpeg. Release builds of Cloudbreak Files ship a bundled copy.";
+    "Install ffmpeg with Homebrew: brew install ffmpeg. Release builds of CloudBreak Files ship a bundled copy.";
 
 pub(crate) fn find_ffmpeg() -> Result<PathBuf, MediaError> {
     which_ffmpeg().map(|(path, _)| path).ok_or(MediaError::FfmpegMissing)

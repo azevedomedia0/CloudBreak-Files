@@ -137,7 +137,7 @@ const PtyPane: React.FC<{
       }
 
       if (!real) {
-        term.writeln('\x1b[38;2;192;192;200mCloudbreak Files — system terminal\x1b[0m');
+        term.writeln('\x1b[38;2;192;192;200mCloudBreak Files — system terminal\x1b[0m');
         term.writeln(
           '\x1b[38;2;163;230;53mReal Mac Terminal (zsh) requires the desktop app.\x1b[0m',
         );

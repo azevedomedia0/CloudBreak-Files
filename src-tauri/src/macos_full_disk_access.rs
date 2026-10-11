@@ -1,7 +1,7 @@
 //! Full Disk Access (System Settings → Privacy & Security).
 //!
 //! macOS does not show a permission alert for Full Disk Access. The app must
-//! open System Settings and the user toggles Cloudbreak Files on. We detect
+//! open System Settings and the user toggles CloudBreak Files on. We detect
 //! grant status by probing a path that requires FDA.
 
 #[cfg(target_os = "macos")]

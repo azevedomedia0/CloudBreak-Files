@@ -1,4 +1,4 @@
-# Cloudbreak Files
+# CloudBreak Files
 
 Tauri 2 + React 19 + Vite + Tailwind 4 desktop app. It manages many cloud accounts, has a client-side encrypted vault, and shares files through private P2P libraries. The app starts empty: there is no sample data.
 

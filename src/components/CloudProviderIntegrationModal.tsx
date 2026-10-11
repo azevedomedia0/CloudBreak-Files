@@ -466,7 +466,7 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
                 type="button"
                 onClick={() => setConfirmingDisconnect(true)}
                 className="px-4 py-2 rounded-lg bg-red-950/50 hover:bg-red-900/60 border border-red-800/60 text-red-300 hover:text-red-100 text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer"
-                title={`Disconnect ${account.name} from Cloudbreak Files`}
+                title={`Disconnect ${account.name} from CloudBreak Files`}
               >
                 <Unlink className="w-3.5 h-3.5" />
                 <span>Disconnect Account</span>

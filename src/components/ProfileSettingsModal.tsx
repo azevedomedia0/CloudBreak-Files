@@ -274,7 +274,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
             </div>
             <div>
               <h2 className="text-sm font-semibold text-white tracking-tight">Profile & App Settings</h2>
-              <p className="text-[10px] text-neutral-400 font-mono">Cloudbreak Files Preferences</p>
+              <p className="text-[10px] text-neutral-400 font-mono">CloudBreak Files Preferences</p>
             </div>
           </div>
           <button
@@ -628,7 +628,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                           onShowToast?.(
                             ok
                               ? 'Full Disk Access is already granted'
-                              : 'Enable Cloudbreak Files in Full Disk Access, then restart the app',
+                              : 'Enable CloudBreak Files in Full Disk Access, then restart the app',
                           );
                           window.setTimeout(() => {
                             void fullDiskAccessGranted().then(setFdaGranted);
@@ -763,7 +763,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
         </div>
 
         <div className="px-5 py-3.5 border-t border-white/10 bg-neutral-950/80 flex items-center justify-between shrink-0">
-          <span className="text-[10px] text-neutral-500 font-mono">Cloudbreak Files v0.1</span>
+          <span className="text-[10px] text-neutral-500 font-mono">CloudBreak Files v0.1</span>
           <div className="flex items-center gap-2">
             <button
               type="button"

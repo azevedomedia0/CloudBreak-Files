@@ -1,4 +1,4 @@
-# Ubuntu 22.04 builder for Cloudbreak Files Flatpak (WebKitGTK 4.1 + flatpak-builder).
+# Ubuntu 22.04 builder for CloudBreak Files Flatpak (WebKitGTK 4.1 + flatpak-builder).
 # Used by scripts/build-flatpak-docker.sh
 FROM ubuntu:22.04
 

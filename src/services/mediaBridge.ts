@@ -57,7 +57,7 @@ export interface FfmpegStatus {
 }
 
 const FFMPEG_INSTALL_HINT =
-  'Install ffmpeg with Homebrew: brew install ffmpeg. Release builds of Cloudbreak Files ship a bundled copy.';
+  'Install ffmpeg with Homebrew: brew install ffmpeg. Release builds of CloudBreak Files ship a bundled copy.';
 
 /** Desktop: whether ffmpeg is available for trim / convert. Browser always reports unavailable. */
 export async function getFfmpegStatus(): Promise<FfmpegStatus> {

@@ -71,7 +71,7 @@ modules:
         BIN=""
         for candidate in \
           deb-extract/usr/bin/cloudbreak-files \
-          deb-extract/usr/bin/Cloudbreak\ Files \
+          deb-extract/usr/bin/CloudBreak\ Files \
           deb-extract/usr/bin/cloudbreak_files
         do
           if [ -x "$candidate" ]; then BIN="$candidate"; break; fi
@@ -83,7 +83,7 @@ modules:
         install -Dm755 "$BIN" /app/bin/cloudbreak-files
       - |
         set -eu
-        for libdir in "deb-extract/usr/lib/Cloudbreak Files" deb-extract/usr/lib/cloudbreak-files; do
+        for libdir in "deb-extract/usr/lib/CloudBreak Files" deb-extract/usr/lib/cloudbreak-files; do
           if [ -d "$libdir" ]; then
             mkdir -p /app/lib/cloudbreak-files
             cp -a "$libdir"/. /app/lib/cloudbreak-files/

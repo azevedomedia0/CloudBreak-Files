@@ -108,7 +108,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: 'Cloudbreak Files ${{ github.ref_name }}'
+          releaseName: 'CloudBreak Files ${{ github.ref_name }}'
           releaseBody: 'Beta build. See the assets below to download.'
           releaseDraft: true
           prerelease: true
@@ -117,9 +117,9 @@ jobs:
       - name: Verify universal macOS binary (Intel + Apple Silicon)
         if: matrix.os == 'macos-latest'
         run: |
-          APP="$(find "${CARGO_TARGET_DIR}" -path '*/release/bundle/macos/Cloudbreak Files.app' -type d | head -1)"
+          APP="$(find "${CARGO_TARGET_DIR}" -path '*/release/bundle/macos/CloudBreak Files.app' -type d | head -1)"
           test -n "$APP"
-          BIN="$APP/Contents/MacOS/Cloudbreak Files"
+          BIN="$APP/Contents/MacOS/CloudBreak Files"
           ARCHS="$(lipo -archs "$BIN")"
           echo "App binary architectures: $ARCHS"
           echo "$ARCHS" | grep -q 'x86_64'
@@ -208,7 +208,7 @@ jobs:
             gh release create "$TAG" \
               --draft \
               --prerelease \
-              --title "Cloudbreak Files ${TAG}" \
+              --title "CloudBreak Files ${TAG}" \
               --notes "Beta build. See the assets below to download."
           fi
           # Draft releases are not always addressable via /releases/tags/{tag}.

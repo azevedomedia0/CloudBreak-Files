@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-cli/schema.json",
-  "productName": "Cloudbreak Files",
+  "productName": "CloudBreak Files",
   "version": "0.1.5",
   "identifier": "com.cloudbreak.files",
   "build": {
@@ -13,7 +13,7 @@
     "macOSPrivateApi": true,
     "windows": [
       {
-        "title": "Cloudbreak Files",
+        "title": "CloudBreak Files",
         "width": 1440,
         "height": 900,
         "minWidth": 960,

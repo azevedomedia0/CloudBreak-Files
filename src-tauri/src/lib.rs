@@ -169,5 +169,5 @@ pub fn run() {
             terminal::terminal_kill,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Cloudbreak Files");
+        .expect("error while running CloudBreak Files");
 }
