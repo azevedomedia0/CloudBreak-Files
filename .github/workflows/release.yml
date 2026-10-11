@@ -119,7 +119,7 @@ jobs:
         run: |
           APP="$(find "${CARGO_TARGET_DIR}" -path '*/release/bundle/macos/CloudBreak Files.app' -type d | head -1)"
           test -n "$APP"
-          BIN="$APP/Contents/MacOS/CloudBreak Files"
+          BIN="$APP/Contents/MacOS/cloudbreak-files"
           ARCHS="$(lipo -archs "$BIN")"
           echo "App binary architectures: $ARCHS"
           echo "$ARCHS" | grep -q 'x86_64'
