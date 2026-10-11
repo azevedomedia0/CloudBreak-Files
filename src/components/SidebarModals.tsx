@@ -442,7 +442,7 @@ export const NewSharedLibraryModal: React.FC<NewSharedLibraryModalProps> = ({
 
           <div>
             <label className="block text-xs font-medium text-neutral-300 mb-1.5">
-              Invite passphrase (E2EE wrap, min 8 chars)
+              Invite passphrase (min 8 chars)
             </label>
             <div className="flex items-center gap-2">
               <input

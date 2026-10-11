@@ -490,20 +490,13 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                 <span className="font-mono text-[11px] text-neutral-400">{file.folderPath}</span>
               </div>
 
-              <div className="flex items-center gap-2 text-[11px] pt-0.5">
-                {file.encryption.isEncrypted ? (
-                  <>
-                    <Lock className="w-3 h-3 text-cyan-400 shrink-0" />
-                    <span className="text-cyan-300 font-medium">{file.encryption.algorithm}</span>
-                    <span className="font-mono text-neutral-500 truncate">{file.encryption.keyFingerprint}</span>
-                  </>
-                ) : (
-                  <>
-                    <Unlock className="w-3 h-3 text-neutral-500 shrink-0" />
-                    <span className="text-neutral-400">Not encrypted</span>
-                  </>
-                )}
-              </div>
+              {file.encryption.isEncrypted && (
+                <div className="flex items-center gap-2 text-[11px] pt-0.5">
+                  <Lock className="w-3 h-3 text-cyan-400 shrink-0" />
+                  <span className="text-cyan-300 font-medium">{file.encryption.algorithm}</span>
+                  <span className="font-mono text-neutral-500 truncate">{file.encryption.keyFingerprint}</span>
+                </div>
+              )}
             </div>
           )}
         </div>

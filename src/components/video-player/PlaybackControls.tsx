@@ -21,6 +21,8 @@ interface PlaybackControlsProps {
   volume: number;
   isMuted: boolean;
   isLooping: boolean;
+  autoplay?: boolean;
+  onToggleAutoplay?: () => void;
   playbackRate: number;
   isFullscreen?: boolean;
   onTogglePlay: () => void;
@@ -43,6 +45,7 @@ const iconButton = 'w-8 h-8 flex items-center justify-center rounded-full text-w
 
 export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   visible, isPlaying, currentTime, duration, volume, isMuted, isLooping, playbackRate,
+  autoplay = false, onToggleAutoplay,
   isFullscreen = false,
   onTogglePlay, onSeek, onSkip, onStepFrame, onVolumeChange, onToggleMute, onToggleLoop, onChangeSpeed,
   onToggleFullscreen, onCast,
@@ -153,6 +156,22 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
         </div>
 
         <div className="flex items-center justify-end gap-0.5 relative">
+          {onToggleAutoplay && (
+            <button
+              onClick={onToggleAutoplay}
+              role="switch"
+              aria-checked={autoplay}
+              className={`${iconButton} ${autoplay ? '!text-white bg-white/20' : ''}`}
+              title={autoplay ? 'Autoplay next video: on' : 'Autoplay next video: off'}
+              aria-label="Autoplay"
+            >
+              <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M21 12a9 9 0 1 1-3-6.7" />
+                <path d="M21 4v5h-5" />
+                <path d="M10 9l5 3-5 3z" fill="currentColor" />
+              </svg>
+            </button>
+          )}
           <button
             onClick={() => setIsShuffled(!isShuffled)}
             className={`${iconButton} ${isShuffled ? '!text-white bg-white/20' : ''}`}

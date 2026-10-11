@@ -6,7 +6,8 @@ import type { AppPreferences } from '../utils/appPreferences';
 export function useVault(appPreferences: AppPreferences, showToast: (message: string) => void) {
   const [isVaultUnlocked, setIsVaultUnlocked] = useState<boolean>(false);
 
-  const handleToggleVaultLock = async (unlocked: boolean, passphrase?: string) => {
+  /** Resolves to true when the lock state changed, false when it failed (the reason is shown as a toast). */
+  const handleToggleVaultLock = async (unlocked: boolean, passphrase?: string): Promise<boolean> => {
     try {
       if (unlocked) {
         await rustBridge.unlockVault(passphrase ?? '');
@@ -17,8 +18,10 @@ export function useVault(appPreferences: AppPreferences, showToast: (message: st
       if (appPreferences.securityAlerts) {
         showToast(unlocked ? 'Vault Decrypted' : 'Vault Locked & Encrypted');
       }
+      return true;
     } catch (err) {
       showToast(err instanceof Error ? err.message : String(err));
+      return false;
     }
   };
 

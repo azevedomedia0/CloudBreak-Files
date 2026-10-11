@@ -36,6 +36,7 @@ export interface AppModalsProps {
   videoPlayerInitialTab: 'player' | 'trim' | 'convert';
   canPreviousMedia?: boolean;
   canNextMedia?: boolean;
+  nextVideoFile?: FileItem | null;
   onPreviousMedia?: () => void;
   onNextMedia?: () => void;
   sharingLibrary: SharedLibrary | null;
@@ -45,7 +46,7 @@ export interface AppModalsProps {
   isVaultSecurityOpen: boolean;
   setIsVaultSecurityOpen: (open: boolean) => void;
   isVaultUnlocked: boolean;
-  handleToggleVaultLock: (unlocked: boolean, passphrase?: string) => Promise<void>;
+  handleToggleVaultLock: (unlocked: boolean, passphrase?: string) => Promise<boolean>;
   isProfileSettingsOpen: boolean;
   setIsProfileSettingsOpen: (open: boolean) => void;
   userProfile: UserProfile;
@@ -112,6 +113,7 @@ export const AppModals: React.FC<AppModalsProps> = ({
   videoPlayerInitialTab,
   canPreviousMedia,
   canNextMedia,
+  nextVideoFile = null,
   onPreviousMedia,
   onNextMedia,
   sharingLibrary,
@@ -213,6 +215,7 @@ export const AppModals: React.FC<AppModalsProps> = ({
       folders={folders}
       canPreviousMedia={canPreviousMedia}
       canNextMedia={canNextMedia}
+      nextMedia={nextVideoFile}
       onPreviousMedia={onPreviousMedia}
       onNextMedia={onNextMedia}
     />

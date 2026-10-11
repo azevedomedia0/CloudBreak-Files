@@ -291,7 +291,7 @@ export function useP2pLibraries({
             url,
             localPath,
             thumbnailUrl: mimeType.startsWith('image/') ? url : undefined,
-            tags: ['P2P', 'E2EE'],
+            tags: ['P2P', 'Encrypted'],
             encryption: {
               isEncrypted: true,
               algorithm: 'AES-256-GCM',

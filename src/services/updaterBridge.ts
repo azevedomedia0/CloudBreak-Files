@@ -19,8 +19,26 @@ export type UpdateCheckResult =
       update: Update;
     };
 
+/** Updates are published for macOS only. Linux builds update through Flatpak or the package manager. */
+export function updatesSupportedHere(): boolean {
+  return isTauri() && /Mac/i.test(navigator.userAgent);
+}
+
 export async function updaterAvailable(): Promise<boolean> {
-  return isTauri();
+  return updatesSupportedHere();
+}
+
+/** Turn the updater's raw error into something a person can act on. */
+export function describeUpdateError(err: unknown, action: 'check' | 'install' = 'check'): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  const text = raw.toLowerCase();
+  if (text.includes('signature')) return 'The update’s signature didn’t verify, so nothing was installed.';
+  if (text.includes('platform')) return 'No update has been published for this computer yet.';
+  if (text.includes('could not fetch') || text.includes('valid release')) return 'No update information is published yet. Try again later.';
+  if (text.includes('request') || text.includes('network') || text.includes('dns') || text.includes('connect') || text.includes('timed out')) {
+    return 'Couldn’t reach GitHub. Check your connection and try again.';
+  }
+  return action === 'install' ? `Couldn’t install the update: ${raw}` : `Couldn’t check for updates: ${raw}`;
 }
 
 export async function currentAppVersion(): Promise<string> {
@@ -38,7 +56,7 @@ export async function checkForAppUpdate(): Promise<UpdateCheckResult> {
   if (!isTauri()) {
     return { available: false, currentVersion };
   }
-  const update = await check();
+  const update = await check({ timeout: 15_000 });
   if (!update) {
     return { available: false, currentVersion };
   }
@@ -52,8 +70,30 @@ export async function checkForAppUpdate(): Promise<UpdateCheckResult> {
   };
 }
 
-/** Download, install, and relaunch. Blocks until install finishes. */
-export async function downloadAndInstallUpdate(update: Update): Promise<void> {
-  await update.downloadAndInstall();
+export interface UpdateProgress {
+  downloaded: number;
+  /** Total size in bytes, or null when the server didn't say. */
+  total: number | null;
+  phase: 'downloading' | 'installing';
+}
+
+/** Download, install, and relaunch. Reports progress; blocks until the app restarts. */
+export async function downloadAndInstallUpdate(
+  update: Update,
+  onProgress?: (progress: UpdateProgress) => void,
+): Promise<void> {
+  let downloaded = 0;
+  let total: number | null = null;
+  await update.downloadAndInstall(event => {
+    if (event.event === 'Started') {
+      total = event.data.contentLength ?? null;
+      onProgress?.({ downloaded, total, phase: 'downloading' });
+    } else if (event.event === 'Progress') {
+      downloaded += event.data.chunkLength;
+      onProgress?.({ downloaded, total, phase: 'downloading' });
+    } else if (event.event === 'Finished') {
+      onProgress?.({ downloaded, total, phase: 'installing' });
+    }
+  });
   await relaunch();
 }

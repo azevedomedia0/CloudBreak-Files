@@ -5,6 +5,7 @@ coverage/
 .DS_Store
 *.log
 .env*
+!.env.example
 # Updater private keys must never be committed (public key lives in tauri.conf.json).
 *.key
 !*.key.pub
@@ -13,6 +14,9 @@ src-tauri/gen/
 # Fetched by scripts/fetch-ffmpeg.sh for release / CI (keep .gitkeep).
 src-tauri/binaries/ffmpeg
 src-tauri/binaries/ffmpeg-*
+# Fetched by scripts/fetch-rclone.sh.
+src-tauri/binaries/rclone
+src-tauri/binaries/rclone-*
 src-tauri/tauri.ffmpeg.conf.json
 # Flatpak build intermediates (see docs/flatpak.md).
 flatpak/cloudbreak-files.deb

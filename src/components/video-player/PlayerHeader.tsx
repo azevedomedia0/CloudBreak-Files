@@ -25,7 +25,7 @@ export const PlayerHeader: React.FC<PlayerHeaderProps> = ({ file, duration, acti
             </h2>
             {file.encryption.isEncrypted && (
               <span className="flex items-center gap-1 text-[11px] text-cyan-400 bg-cyan-950/40 border border-cyan-800/50 px-2 py-0.5 rounded">
-                <ShieldCheck className="w-3 h-3" /> E2EE Stream
+                <ShieldCheck className="w-3 h-3" /> Encrypted file
               </span>
             )}
           </div>

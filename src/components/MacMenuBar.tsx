@@ -157,11 +157,11 @@ export const MacMenuBar: React.FC<MacMenuBarProps> = ({
           type="button"
           onClick={onOpenVaultSecurity}
           className="flex items-center gap-1.5 px-2 py-0.5 rounded hover:bg-white/10 transition-colors group"
-          title="End-to-End Cryptography Engine"
+          title="Vault settings"
         >
           <span className={`w-1.5 h-1.5 rounded-full ${isVaultUnlocked ? 'bg-cyan-400' : 'bg-amber-400'} animate-pulse`} />
           <span className="font-mono text-[11px] text-neutral-400 group-hover:text-cyan-300 transition-colors">
-            {isVaultUnlocked ? 'AES-256 E2EE' : 'Vault Locked'}
+            {isVaultUnlocked ? 'Vault Unlocked' : 'Vault Locked'}
           </span>
           <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
         </button>

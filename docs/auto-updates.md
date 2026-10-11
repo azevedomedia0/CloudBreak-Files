@@ -92,6 +92,13 @@ The repo is **public**, so anonymous clients can fetch:
 
 (404 until the first published release that includes `latest.json`.) A private repo would block that download — keep Releases on this public repo, or point `plugins.updater.endpoints` at a public CDN.
 
+## What the user sees
+
+- **Check for updates** (Profile → Preferences, or the app menu) asks the manifest. If a newer version exists, an **Update available** dialog shows the version and release notes. **Install and restart** downloads with a progress bar, installs, and relaunches. **Later** dismisses it. Nothing installs without that click.
+- A quiet check runs a few seconds after launch and shows a toast only.
+- Updates are published for macOS only. On Linux (Flatpak or `.deb`) the button explains that updates come from the package manager.
+- Errors are translated: offline, no manifest yet, no build for this platform, or a signature that did not verify.
+
 ## Verify after a release
 
 1. Bump `version` in `src-tauri/tauri.conf.json`, tag `v*`, publish the draft release.

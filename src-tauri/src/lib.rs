@@ -1,6 +1,9 @@
 pub mod cloud_http;
 pub mod commands;
 pub mod credentials_store;
+pub mod oauth_google;
+pub mod oauth_pkce;
+pub mod rclone;
 pub mod crypto;
 pub mod local_fs;
 pub mod macos_full_disk_access;
@@ -105,6 +108,7 @@ pub fn run() {
             commands::list_cloud_accounts,
             commands::unlock_sovereign_vault,
             commands::lock_sovereign_vault,
+            commands::vault_is_configured,
             commands::check_vault_status,
             commands::process_photo_render,
             commands::ffmpeg_status,
@@ -113,6 +117,15 @@ pub fn run() {
             commands::media_read_temp,
             commands::media_cleanup_temp,
             cloud_http::cloud_http,
+            oauth_google::google_oauth_sign_in,
+            oauth_google::google_oauth_refresh,
+            oauth_pkce::oauth_sign_in,
+            oauth_pkce::oauth_refresh,
+            oauth_pkce::nextcloud_login_flow,
+            rclone::rclone_status,
+            rclone::rclone_google_authorize,
+            rclone::rclone_drive_info,
+            rclone::rclone_drive_list,
             credentials_store::credentials_list,
             credentials_store::credentials_get,
             credentials_store::credentials_save,
@@ -139,6 +152,7 @@ pub fn run() {
             local_fs::local_read_file,
             local_fs::local_write_file,
             local_fs::local_write_text,
+            local_fs::local_save_new_file,
             local_fs::local_rename_file,
             preview::local_file_thumbnail,
             preview::local_file_raster,
