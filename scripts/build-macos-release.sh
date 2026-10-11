@@ -90,7 +90,7 @@ npm run tauri build -- --target "$TARGET" "${EXTRA_CONFIG[@]}"
 
 APP="$(find "${CARGO_TARGET_DIR}" -path '*/release/bundle/macos/CloudBreak Files.app' -type d 2>/dev/null | head -1)"
 if [[ -n "$APP" && -d "$APP" ]]; then
-  BIN="$APP/Contents/MacOS/CloudBreak Files"
+  BIN="$APP/Contents/MacOS/cloudbreak-files"
   if [[ "$TARGET" == "universal-apple-darwin" && -x "$BIN" ]]; then
     ARCHS="$(lipo -archs "$BIN" 2>/dev/null || true)"
     echo "App binary architectures: ${ARCHS:-unknown}"

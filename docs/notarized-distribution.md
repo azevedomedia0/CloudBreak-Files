@@ -56,7 +56,7 @@ Never commit or paste these values into the repo, docs, or chat.
 rustup target add aarch64-apple-darwin x86_64-apple-darwin   # once (build script also installs these)
 MACOSX_DEPLOYMENT_TARGET=11.0 npm run build:mac
 # Confirm Intel + Apple Silicon slices:
-#   lipo -archs "/tmp/cloudbreak-cargo-target/.../CloudBreak Files.app/Contents/MacOS/CloudBreak Files"
+#   lipo -archs "/tmp/cloudbreak-cargo-target/.../CloudBreak Files.app/Contents/MacOS/cloudbreak-files"
 ```
 
 Equivalent: `npm run tauri build -- --target universal-apple-darwin` with `CARGO_TARGET_DIR` set as above.
