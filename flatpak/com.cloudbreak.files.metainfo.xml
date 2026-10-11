@@ -7,7 +7,7 @@
   <developer id="com.cloudbreak">
     <name>Steven Azevedo</name>
   </developer>
-  <summary>Multi-cloud files with a private vault and P2P libraries</summary>
+  <summary>Cloud files with a private vault</summary>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>Apache-2.0</project_license>
   <url type="homepage">https://azevedomedia0.github.io/CloudBreak-Files/</url>
