@@ -13,13 +13,14 @@ mkdir -p "$BIN"
 # *_SHA256 (an empty value skips the check). If you change a build, update THIRD_PARTY_NOTICES.md and
 # licenses/ffmpeg/BUILD-INFO-*.txt too: these are GPL builds and their notices ship with the app.
 #
-# macOS arm64: Martin Riedl's static FFmpeg 9.0.2 (GPLv3, open build script). The eugeneware
-# ffmpeg-darwin-arm64 build used before was configured with --enable-nonfree (unredistributable).
+# macOS (both architectures): Martin Riedl's static FFmpeg 9.0.2 (GPLv3, open build script).
+# The eugeneware/ffmpeg-static macOS builds used before were not suitable: the arm64 one was
+# configured with --enable-nonfree (unredistributable) and the x86_64 one had no source offer.
 ARM_URL="${FFMPEG_ARM_URL:-https://ffmpeg.martin-riedl.de/download/macos/arm64/1789931890_9.0.2/ffmpeg.zip}"
 ARM_SHA256="${FFMPEG_ARM_SHA256-c8ed4c4e6978a03c485edbfe4e0a5dc2380f8a30bba5150531b31b094492d924}"
-# macOS x86_64: evermeet.cx FFmpeg 6.1.1-tessus (GPLv3), via eugeneware/ffmpeg-static b6.1.1.
-X64_URL="${FFMPEG_X64_URL:-https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-x64.gz}"
-X64_SHA256="${FFMPEG_X64_SHA256-929b375c1182d956c51f7ac25e0b2b0411fb01f6f407aa15c9758efeb4242106}"
+X64_URL="${FFMPEG_X64_URL:-https://ffmpeg.martin-riedl.de/download/macos/amd64/1789931006_9.0.2/ffmpeg.zip}"
+X64_SHA256="${FFMPEG_X64_SHA256-7c6b4125b191cbf773832dc51f424cf2b6bb7da43007d1e066f95909e47cacd4}"
+# Linux x86_64: John Van Sickle's static 7.0.2 (GPLv3), via eugeneware/ffmpeg-static.
 LINUX_X64_URL="${FFMPEG_LINUX_X64_URL:-https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-linux-x64.gz}"
 LINUX_X64_SHA256="${FFMPEG_LINUX_X64_SHA256-}"  # TODO: pin once the exact build is vetted
 

@@ -8,9 +8,9 @@ CloudBreak Files ships static builds of [FFmpeg](https://ffmpeg.org/) for video 
 |---|---|---|---|---|
 | Linux x86_64 (`.deb`, Flatpak) | 7.0.2 | [John Van Sickle](https://johnvansickle.com/ffmpeg/) | `/usr/lib/cloudbreak-files/ffmpeg` (Flatpak: `/app/lib/cloudbreak-files/ffmpeg`) | [`BUILD-INFO-linux-x86_64.txt`](licenses/ffmpeg/BUILD-INFO-linux-x86_64.txt) |
 | macOS Apple Silicon | 9.0.2 | [Martin Riedl](https://ffmpeg.martin-riedl.de/) | `Contents/MacOS/ffmpeg` (universal binary) | [`BUILD-INFO-macos-arm64.txt`](licenses/ffmpeg/BUILD-INFO-macos-arm64.txt) |
-| macOS Intel | 6.1.1 (tessus) | [evermeet.cx](https://evermeet.cx/ffmpeg/) | `Contents/MacOS/ffmpeg` (universal binary) | [`BUILD-INFO-macos-x86_64.txt`](licenses/ffmpeg/BUILD-INFO-macos-x86_64.txt) |
+| macOS Intel | 9.0.2 | [Martin Riedl](https://ffmpeg.martin-riedl.de/) | `Contents/MacOS/ffmpeg` (universal binary) | [`BUILD-INFO-macos-x86_64.txt`](licenses/ffmpeg/BUILD-INFO-macos-x86_64.txt) |
 
-The macOS app contains one universal `ffmpeg`: the two builds above joined with `lipo`, so Apple Silicon and Intel Macs run different FFmpeg versions.
+The macOS app contains one universal `ffmpeg`: the two macOS builds above joined with `lipo`.
 
 ### License text and build details
 
@@ -26,8 +26,7 @@ The `BUILD-INFO-*.txt` files, installed next to it, record each binary's version
 ### Source code
 
 - FFmpeg 7.0.2: <https://ffmpeg.org/releases/ffmpeg-7.0.2.tar.xz>
-- FFmpeg 9.0.2: <https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz>, with the build script at <https://git.martin-riedl.de/ffmpeg/build-script>
-- FFmpeg 6.1.1: <https://ffmpeg.org/releases/ffmpeg-6.1.1.tar.xz>
+- FFmpeg 9.0.2 (both macOS builds): <https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz>, with the build script at <https://git.martin-riedl.de/ffmpeg/build-script>
 - Linux build configuration and library versions: <https://johnvansickle.com/ffmpeg/release-readme.txt>
 
 ### Written offer for source code
