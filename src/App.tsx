@@ -41,9 +41,11 @@ import { getFfmpegStatus } from './services/mediaBridge';
 import {
   checkForAppUpdate,
   currentAppVersion,
-  downloadAndInstallUpdate,
+  describeUpdateError,
   updaterAvailable,
+  updatesSupportedHere,
 } from './services/updaterBridge';
+import { UpdateModal, type UpdateOffer } from './components/UpdateModal';
 import { isTauri } from '@tauri-apps/api/core';
 import { whenIdle } from './utils/deferWork';
 import { desktopScanReady } from './utils/startupGate';
@@ -121,6 +123,7 @@ export default function App() {
   const [isVaultSecurityOpen, setIsVaultSecurityOpen] = useState<boolean>(false);
   const [isProfileSettingsOpen, setIsProfileSettingsOpen] = useState<boolean>(false);
   const [updateChecking, setUpdateChecking] = useState(false);
+  const [updateOffer, setUpdateOffer] = useState<UpdateOffer | null>(null);
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const [userProfile, setUserProfileState] = useState<UserProfile>(() => loadProfile());
   const [isAddAccountOpen, setIsAddAccountOpen] = useState<boolean>(false);
@@ -278,6 +281,11 @@ export default function App() {
       showToast('Updates are available in the desktop app');
       return;
     }
+    if (!updatesSupportedHere()) {
+      showToast('Automatic updates are available on macOS. On Linux, update through Flatpak or your package manager.');
+      return;
+    }
+    if (updateChecking) return;
     setUpdateChecking(true);
     try {
       const result = await checkForAppUpdate();
@@ -285,12 +293,9 @@ export default function App() {
         showToast(`You’re on the latest version (${result.currentVersion})`);
         return;
       }
-      const note = result.notes ? ` — ${result.notes.slice(0, 80)}` : '';
-      showToast(`Downloading update ${result.version}${note}…`);
-      await downloadAndInstallUpdate(result.update);
-      // relaunch is called inside downloadAndInstallUpdate
+      setUpdateOffer(result);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : String(err));
+      showToast(describeUpdateError(err));
     } finally {
       setUpdateChecking(false);
     }
@@ -967,12 +972,12 @@ export default function App() {
                 onCopyFiles={handleCopyFileNames}
                 onToggleTag={handleToggleTag}
                 onUnzipFile={file => { void handleUnzipFile(file); }}
+                onCompressFiles={items => { void handleCompressFiles(items); }}
                 onOpenQuickLook={() => setIsQuickLookOpen(true)}
                 folders={folders}
                 onSelectFolder={id => {
                   if (selectedCategory === 'files' || selectedCategory === 'photo' || selectedCategory === 'video') {
                     setSelectedCategory('all');
-                onCompressFiles={items => { void handleCompressFiles(items); }}
                   }
                   selectFolder(id);
                 }}
@@ -1086,6 +1091,8 @@ export default function App() {
           onDeny={denyUntrustedOpen}
         />
       )}
+
+      {updateOffer && <UpdateModal offer={updateOffer} onClose={() => setUpdateOffer(null)} />}
 
       <AppModals
         selectedFile={selectedFile}
