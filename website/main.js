@@ -50,3 +50,38 @@ if (downloadMac) {
       /* Keep the Releases page fallback on the anchor. */
     });
 }
+
+/** Point Linux buttons at the newest release that ships a .deb / Flatpak. */
+const downloadLinuxDeb = document.getElementById("download-linux-deb");
+const downloadLinuxFlatpak = document.getElementById("download-linux-flatpak");
+const downloadMetaLinux = document.getElementById("download-meta-linux");
+if (downloadLinuxDeb || downloadLinuxFlatpak) {
+  fetch("https://api.github.com/repos/azevedomedia0/CloudBreak-Files/releases?per_page=20")
+    .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+    .then((releases) => {
+      const linux = (releases || []).find((rel) =>
+        (rel.assets || []).some((a) => /\.deb$/i.test(a.name)),
+      );
+      if (!linux) return;
+      const deb = (linux.assets || []).find((a) => /\.deb$/i.test(a.name));
+      const flatpak = (linux.assets || []).find((a) => /\.flatpak$/i.test(a.name));
+      if (deb?.browser_download_url && downloadLinuxDeb) {
+        downloadLinuxDeb.href = deb.browser_download_url;
+        downloadLinuxDeb.setAttribute("download", deb.name);
+      }
+      if (flatpak?.browser_download_url && downloadLinuxFlatpak) {
+        downloadLinuxFlatpak.href = flatpak.browser_download_url;
+        downloadLinuxFlatpak.setAttribute("download", flatpak.name);
+      }
+      if (downloadMetaLinux) {
+        const ver = String(linux.tag_name || linux.name || "").replace(/^v/, "");
+        downloadMetaLinux.hidden = false;
+        downloadMetaLinux.textContent = ver
+          ? `Linux: v${ver} · .deb (amd64) and Flatpak bundle`
+          : "Latest Linux .deb and Flatpak";
+      }
+    })
+    .catch(() => {
+      /* Keep the hardcoded release URLs on the anchors. */
+    });
+}
