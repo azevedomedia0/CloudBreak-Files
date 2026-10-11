@@ -759,6 +759,27 @@ pub fn local_write_file(path: String, content_base64: String, state: State<'_, L
     info_for(&resolved)
 }
 
+/// Save `bytes` as a new file in `dir`. A taken name becomes `name 2.ext`; an existing file is never replaced.
+fn save_new_in(dir: &Path, name: &str, bytes: &[u8]) -> Result<PathBuf, String> {
+    let dest = unique_destination(dir, valid_file_name(name)?);
+    write_atomic(&dest, bytes)?;
+    Ok(dest)
+}
+
+#[tauri::command]
+pub fn local_save_new_file(dir: String, name: String, content_base64: String, state: State<'_, LocalRoots>) -> Result<LocalFileInfo, String> {
+    let dir = resolve_in_roots(&snapshot(&state), Path::new(&dir))?;
+    if !dir.is_dir() {
+        return Err("That is not a folder".into());
+    }
+    let bytes = B64.decode(content_base64.as_bytes()).map_err(|_| "Invalid file data".to_string())?;
+    if bytes.len() as u64 > MAX_READ_BYTES {
+        return Err(format!("The archive is larger than {} MB", MAX_READ_BYTES / (1024 * 1024)));
+    }
+    let dest = save_new_in(&dir, &name, &bytes)?;
+    info_for(&dest)
+}
+
 #[tauri::command]
 pub fn local_write_text(path: String, text: String, state: State<'_, LocalRoots>) -> Result<LocalFileInfo, String> {
     let resolved = resolve_in_roots(&snapshot(&state), Path::new(&path))?;
@@ -1137,6 +1158,17 @@ mod tests {
         save_roots(&file, &[keep.clone(), gone.clone()]).unwrap();
         fs::remove_dir_all(&gone).unwrap();
         assert_eq!(load_roots(&file), vec![keep]);
+    }
+
+    #[test]
+    fn save_new_never_overwrites_an_existing_file() {
+        let tmp = Tmp::new();
+        let first = save_new_in(&tmp.0, "a.zip", b"one").unwrap();
+        let second = save_new_in(&tmp.0, "a.zip", b"two").unwrap();
+        assert_ne!(first, second);
+        assert!(second.ends_with("a 2.zip"));
+        assert_eq!(fs::read(&first).unwrap(), b"one");
+        assert!(save_new_in(&tmp.0, "../escape.zip", b"x").is_err());
     }
 
     #[test]

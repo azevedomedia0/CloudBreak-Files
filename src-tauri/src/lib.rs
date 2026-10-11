@@ -151,6 +151,7 @@ pub fn run() {
             local_fs::local_read_file,
             local_fs::local_write_file,
             local_fs::local_write_text,
+            local_fs::local_save_new_file,
             local_fs::local_rename_file,
             preview::local_file_thumbnail,
             preview::local_file_raster,

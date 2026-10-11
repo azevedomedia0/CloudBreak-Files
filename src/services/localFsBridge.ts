@@ -116,6 +116,11 @@ export const localFs = {
     return new TextDecoder().decode(await localFs.readBytes(path));
   },
 
+  /** Save a new file in `dir`. A taken name gets a number ("a 2.zip"); nothing is overwritten. */
+  saveNewFile(dir: string, name: string, bytes: Uint8Array): Promise<LocalFileInfo> {
+    return invoke<LocalFileInfo>('local_save_new_file', { dir, name, contentBase64: toBase64(bytes) });
+  },
+
   writeBytes(path: string, bytes: Uint8Array): Promise<LocalFileInfo> {
     return invoke<LocalFileInfo>('local_write_file', { path, contentBase64: toBase64(bytes) });
   },

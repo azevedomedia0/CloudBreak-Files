@@ -20,6 +20,7 @@ export interface FileContextMenuProps {
   onCopy: (files: FileItem[]) => void;
   onShare: (file: FileItem) => void;
   onUnzip?: (file: FileItem) => void;
+  onCompress?: (files: FileItem[]) => void;
   onTrash: (files: FileItem[]) => void;
   onToggleTag: (files: FileItem[], tag: string) => void;
   onToggleEncrypt?: (file: FileItem) => void;
@@ -39,6 +40,7 @@ export const FileContextMenu: React.FC<FileContextMenuProps> = ({
   onCopy,
   onShare,
   onUnzip,
+  onCompress,
   onTrash,
   onToggleTag,
   onToggleEncrypt,
@@ -136,6 +138,13 @@ export const FileContextMenu: React.FC<FileContextMenuProps> = ({
       <Separator />
       <MenuItem label="Get Info" shortcut="⌘I" onClick={() => run(() => onGetInfo(file))} />
       <MenuItem label="Rename" disabled={multiple} onClick={() => run(() => onRename(file))} />
+      {onCompress && (
+        <MenuItem
+          label={multiple ? `Compress ${targets.length} Items` : `Compress “${file.name}”`}
+          disabled={targets.every(isZipArchive)}
+          onClick={() => run(() => onCompress(targets))}
+        />
+      )}
       <MenuItem label="Duplicate" shortcut="⌘D" onClick={() => run(() => onDuplicate(targets))} />
       <MenuItem label="Quick Look" shortcut="Space" onClick={() => run(() => onQuickLook(file))} />
       <Separator />

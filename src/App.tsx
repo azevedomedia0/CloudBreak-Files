@@ -552,7 +552,7 @@ export default function App() {
     isDraggingOver,
     handleSavePhotoVersion, handleSaveDocument, handleSaveTrimmedVideo, handleToggleEncrypt, handleDeleteFile,
     handleRenameFile, handleDuplicateFiles, handleCopyFileNames, handlePasteFiles,
-    handleMoveFile, handleCompressFile, clipboardFileIds, handleToggleTag,
+    handleMoveFile, handleCompressFile, handleCompressFiles, clipboardFileIds, handleToggleTag,
     handleBatchRestore, handleBatchDelete, handleUploadFiles, handleUnzipFile, handleDragOver, handleDragLeave, handleDrop,
   } = useFileActions({
     files,
@@ -972,6 +972,7 @@ export default function App() {
                 onSelectFolder={id => {
                   if (selectedCategory === 'files' || selectedCategory === 'photo' || selectedCategory === 'video') {
                     setSelectedCategory('all');
+                onCompressFiles={items => { void handleCompressFiles(items); }}
                   }
                   selectFolder(id);
                 }}

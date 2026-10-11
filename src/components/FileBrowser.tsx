@@ -51,6 +51,7 @@ interface FileBrowserProps {
   onCopyFiles: (files: FileItem[]) => void;
   onToggleTag: (fileIds: string[], tag: string) => void;
   onUnzipFile: (file: FileItem) => void;
+  onCompressFiles?: (files: FileItem[]) => void;
   onOpenQuickLook: () => void;
   folders: FolderItem[];
   onSelectFolder: (folderId: string | null) => void;
@@ -99,6 +100,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   onCopyFiles,
   onToggleTag,
   onUnzipFile,
+  onCompressFiles,
   onOpenQuickLook,
   folders,
   onSelectFolder,
@@ -633,6 +635,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
           onCopy={onCopyFiles}
           onShare={onShareFile}
           onUnzip={onUnzipFile}
+          onCompress={onCompressFiles}
           onTrash={trashFiles}
           onToggleTag={(items, tag) => onToggleTag(items.map(item => item.id), tag)}
           onToggleEncrypt={onToggleEncrypt}
