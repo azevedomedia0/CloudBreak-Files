@@ -64,7 +64,7 @@ interface ProfileSettingsModalProps {
   onUpdatePreferences?: (prefs: AppPreferences) => void;
   accounts: CloudAccount[];
   isVaultUnlocked: boolean;
-  onToggleVaultLock: (unlocked: boolean, passphrase?: string) => void | Promise<void>;
+  onToggleVaultLock: (unlocked: boolean, passphrase?: string) => void | boolean | Promise<boolean | void>;
   onShowToast?: (msg: string) => void;
   peerId?: string | null;
   swarmListening?: boolean;

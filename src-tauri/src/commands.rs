@@ -268,6 +268,15 @@ pub fn unlock_sovereign_vault(
     Ok(true)
 }
 
+/// True once a vault passphrase has been created (in this run or an earlier one).
+#[tauri::command]
+pub fn vault_is_configured(app: AppHandle, state: State<'_, AppState>) -> Result<bool, String> {
+    if lock(&state.vault).verifier.is_some() {
+        return Ok(true);
+    }
+    Ok(vault_store::load(&vault_file(&app)?)?.is_some())
+}
+
 #[tauri::command]
 pub fn lock_sovereign_vault(state: State<'_, AppState>) -> bool {
     lock(&state.vault).clear_session();

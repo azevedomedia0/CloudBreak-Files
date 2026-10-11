@@ -108,6 +108,7 @@ pub fn run() {
             commands::list_cloud_accounts,
             commands::unlock_sovereign_vault,
             commands::lock_sovereign_vault,
+            commands::vault_is_configured,
             commands::check_vault_status,
             commands::process_photo_render,
             commands::ffmpeg_status,

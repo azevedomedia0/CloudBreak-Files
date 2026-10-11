@@ -46,7 +46,7 @@ export interface AppModalsProps {
   isVaultSecurityOpen: boolean;
   setIsVaultSecurityOpen: (open: boolean) => void;
   isVaultUnlocked: boolean;
-  handleToggleVaultLock: (unlocked: boolean, passphrase?: string) => Promise<void>;
+  handleToggleVaultLock: (unlocked: boolean, passphrase?: string) => Promise<boolean>;
   isProfileSettingsOpen: boolean;
   setIsProfileSettingsOpen: (open: boolean) => void;
   userProfile: UserProfile;
