@@ -34,9 +34,9 @@ impl TrayStatus {
 
     fn tooltip(self) -> &'static str {
         match self {
-            Self::Idle => "Cloudbreak Files",
-            Self::Online => "Cloudbreak Files — online",
-            Self::Seeding => "Cloudbreak Files — seeding",
+            Self::Idle => "CloudBreak Files",
+            Self::Online => "CloudBreak Files — online",
+            Self::Seeding => "CloudBreak Files — seeding",
         }
     }
 
@@ -103,7 +103,7 @@ fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
 }
 
 pub fn build_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    let show_i = MenuItem::with_id(app, "show", "Show Cloudbreak Files", true, None::<&str>)?;
+    let show_i = MenuItem::with_id(app, "show", "Show CloudBreak Files", true, None::<&str>)?;
     let status_i = MenuItem::with_id(
         app,
         "status",
@@ -112,7 +112,7 @@ pub fn build_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         None::<&str>,
     )?;
     let sep = PredefinedMenuItem::separator(app)?;
-    let quit_i = MenuItem::with_id(app, "quit", "Quit Cloudbreak Files", true, None::<&str>)?;
+    let quit_i = MenuItem::with_id(app, "quit", "Quit CloudBreak Files", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show_i, &sep, &status_i, &sep, &quit_i])?;
 
     let icon = compose_tray_icon(TrayStatus::Idle)?;
@@ -190,10 +190,10 @@ pub fn refresh_tray_status(app: &AppHandle) {
 
     // Rebuild menu so the disabled status line stays accurate.
     if let (Ok(show_i), Ok(status_i), Ok(sep), Ok(quit_i)) = (
-        MenuItem::with_id(app, "show", "Show Cloudbreak Files", true, None::<&str>),
+        MenuItem::with_id(app, "show", "Show CloudBreak Files", true, None::<&str>),
         MenuItem::with_id(app, "status", status.label(), false, None::<&str>),
         PredefinedMenuItem::separator(app),
-        MenuItem::with_id(app, "quit", "Quit Cloudbreak Files", true, None::<&str>),
+        MenuItem::with_id(app, "quit", "Quit CloudBreak Files", true, None::<&str>),
     ) {
         if let Ok(menu) = Menu::with_items(app, &[&show_i, &sep, &status_i, &sep, &quit_i]) {
             let _ = tray.set_menu(Some(menu));

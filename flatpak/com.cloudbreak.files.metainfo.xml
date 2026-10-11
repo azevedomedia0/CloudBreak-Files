@@ -3,7 +3,7 @@
 <component type="desktop-application">
   <id>com.cloudbreak.files</id>
   <launchable type="desktop-id">com.cloudbreak.files.desktop</launchable>
-  <name>Cloudbreak Files</name>
+  <name>CloudBreak Files</name>
   <developer id="com.cloudbreak">
     <name>Steven Azevedo</name>
   </developer>
@@ -39,7 +39,7 @@
   </supports>
   <description>
     <p>
-      Cloudbreak Files brings cloud accounts, local folders, and private peer-to-peer
+      CloudBreak Files brings cloud accounts, local folders, and private peer-to-peer
       libraries into one desktop browser. Unlock a client-side encrypted vault, edit
       photos and trim video, and keep provider credentials in the OS keyring.
     </p>
@@ -53,7 +53,7 @@
   <screenshots>
     <screenshot type="default">
       <image>https://azevedomedia0.github.io/CloudBreak-Files/assets/icon.png</image>
-      <caption>Cloudbreak Files app icon</caption>
+      <caption>CloudBreak Files app icon</caption>
     </screenshot>
   </screenshots>
   <releases>

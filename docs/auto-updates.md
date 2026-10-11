@@ -71,7 +71,7 @@ npm run build:mac
   "pub_date": "2026-10-09T00:00:00Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "<contents of Cloudbreak Files.app.tar.gz.sig>",
+      "signature": "<contents of CloudBreak Files.app.tar.gz.sig>",
       "url": "https://github.com/azevedomedia0/CloudBreak-Files/releases/download/v0.1.1/Cloudbreak%20Files.app.tar.gz"
     },
     "darwin-x86_64": {

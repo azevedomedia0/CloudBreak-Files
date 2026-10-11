@@ -220,7 +220,7 @@ export default function App() {
           const { fullDiskAccessGranted } = await import('./services/permissionsBridge');
           const granted = await fullDiskAccessGranted();
           if (cancelled || granted) return;
-          showToast('Turn on Cloudbreak Files under System Settings → Privacy & Security → Full Disk Access');
+          showToast('Turn on CloudBreak Files under System Settings → Privacy & Security → Full Disk Access');
           try {
             localStorage.setItem(key, '1');
           } catch { /* ignore */ }

@@ -56,7 +56,7 @@ Never commit or paste these values into the repo, docs, or chat.
 rustup target add aarch64-apple-darwin x86_64-apple-darwin   # once (build script also installs these)
 MACOSX_DEPLOYMENT_TARGET=11.0 npm run build:mac
 # Confirm Intel + Apple Silicon slices:
-#   lipo -archs "/tmp/cloudbreak-cargo-target/.../Cloudbreak Files.app/Contents/MacOS/Cloudbreak Files"
+#   lipo -archs "/tmp/cloudbreak-cargo-target/.../CloudBreak Files.app/Contents/MacOS/CloudBreak Files"
 ```
 
 Equivalent: `npm run tauri build -- --target universal-apple-darwin` with `CARGO_TARGET_DIR` set as above.
@@ -68,8 +68,8 @@ If bundling fails with `Failed to create app Assets.car`, confirm `CloudBreak-ic
 ## 5. Verify before shipping
 
 ```bash
-codesign --verify --deep --strict --verbose=2 "<path>/Cloudbreak Files.app"
-spctl -a -vv "<path>/Cloudbreak Files.app"    # expect notarized Developer ID after notarization
+codesign --verify --deep --strict --verbose=2 "<path>/CloudBreak Files.app"
+spctl -a -vv "<path>/CloudBreak Files.app"    # expect notarized Developer ID after notarization
 xcrun stapler validate "<path>.dmg"
 ```
 
