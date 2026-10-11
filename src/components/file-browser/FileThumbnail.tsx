@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Image as ImageIcon, Video, FileText, Archive, Music2, AppWindow } from '@/src/icons';
+import { Image as ImageIcon, Video, FileText, Archive, Music2, AppWindow, Radio } from '@/src/icons';
 import { FileItem } from '../../types';
 import { DocumentPreview } from '../document-editor/DocumentPreview';
 import {
@@ -194,9 +194,25 @@ export const FileThumbnail: React.FC<FileThumbnailProps> = ({
     );
   }
 
+  const seeding = file.seedingLibraries ?? [];
+  const seedingLabel = seeding.length
+    ? `Seeding in ${seeding.map(name => `“${name}”`).join(', ')}`
+    : '';
+
   return (
-    <div ref={ref} className={`${className} overflow-hidden`} onContextMenu={handleContextMenu}>
+    <div ref={ref} className={`${className} relative overflow-hidden`} onContextMenu={handleContextMenu}>
       {content}
+      {seeding.length > 0 && (
+        <span
+          title={seedingLabel}
+          aria-label={seedingLabel}
+          className={`absolute z-10 flex items-center justify-center rounded-full bg-purple-500 text-white ring-1 ring-white/40 shadow-md shadow-black/40 ${
+            compact ? 'top-0.5 right-0.5 w-3.5 h-3.5' : 'top-1.5 right-1.5 w-5 h-5'
+          }`}
+        >
+          <Radio className={compact ? 'w-2 h-2' : 'w-3 h-3'} />
+        </span>
+      )}
     </div>
   );
 };

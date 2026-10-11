@@ -19,6 +19,8 @@ export interface FileContextMenuProps {
   onDuplicate: (files: FileItem[]) => void;
   onCopy: (files: FileItem[]) => void;
   onShare: (file: FileItem) => void;
+  /** Turn the selected files (and any selected folders) into an outgoing P2P library. */
+  onShareLibrary?: (files: FileItem[]) => void;
   onUnzip?: (file: FileItem) => void;
   onCompress?: (files: FileItem[]) => void;
   onTrash: (files: FileItem[]) => void;
@@ -39,6 +41,7 @@ export const FileContextMenu: React.FC<FileContextMenuProps> = ({
   onDuplicate,
   onCopy,
   onShare,
+  onShareLibrary,
   onUnzip,
   onCompress,
   onTrash,
@@ -149,7 +152,14 @@ export const FileContextMenu: React.FC<FileContextMenuProps> = ({
       <MenuItem label="Quick Look" shortcut="Space" onClick={() => run(() => onQuickLook(file))} />
       <Separator />
       <MenuItem label="Copy" shortcut="⌘C" onClick={() => run(() => onCopy(targets))} />
-      <MenuItem label="Share…" onClick={() => run(() => onShare(file))} />
+      {onShareLibrary ? (
+        <MenuItem
+          label="Share as Library…"
+          onClick={() => run(() => onShareLibrary(targets))}
+        />
+      ) : (
+        <MenuItem label="Share…" onClick={() => run(() => onShare(file))} />
+      )}
       {onToggleEncrypt && !multiple && (
         <MenuItem
           label={file.encryption.isEncrypted ? 'Decrypt with Vault' : 'Encrypt with Vault'}

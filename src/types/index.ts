@@ -88,6 +88,8 @@ export interface FileItem {
   documentBody?: string;
   /** Absolute path on disk, for files added from a local folder in the desktop app. Edits are saved here. */
   localPath?: string;
+  /** Names of outgoing libraries this file is currently seeded in (set for display only). */
+  seedingLibraries?: string[];
   /**
    * Trust metadata for data extracted from the file.
    * All extracted content is untrusted external data; suspicious payloads need a user verdict.

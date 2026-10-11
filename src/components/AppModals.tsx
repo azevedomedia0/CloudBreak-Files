@@ -1,4 +1,5 @@
 import React from 'react';
+import type { LibraryDraft } from '../utils/libraryItems';
 import { CloudAccount, CloudProviderId, FileItem, FolderItem, RemovableDevice, SharedLibrary } from '../types';
 import { QuickLookModal } from './QuickLookModal';
 import { PhotoNav } from './PhotoNavArrows';
@@ -73,7 +74,9 @@ export interface AppModalsProps {
   handleCreateFolder: (name: string, category: string) => void;
   isNewLibraryOpen: boolean;
   setIsNewLibraryOpen: (open: boolean) => void;
-  handleCreateLibrary: (form: CreateP2pLibraryForm) => void | Promise<void>;
+  libraryDraft: LibraryDraft | null;
+  setLibraryDraft: (draft: LibraryDraft | null) => void;
+  handleCreateLibrary: (form: CreateP2pLibraryForm, draft?: LibraryDraft | null) => void | Promise<void>;
   isJoinIncomingOpen: boolean;
   setIsJoinIncomingOpen: (open: boolean) => void;
   handleJoinIncomingLibrary: (form: JoinP2pLibraryForm) => void | Promise<void>;
@@ -150,6 +153,8 @@ export const AppModals: React.FC<AppModalsProps> = ({
   handleCreateFolder,
   isNewLibraryOpen,
   setIsNewLibraryOpen,
+  libraryDraft,
+  setLibraryDraft,
   handleCreateLibrary,
   isJoinIncomingOpen,
   setIsJoinIncomingOpen,
@@ -305,8 +310,9 @@ export const AppModals: React.FC<AppModalsProps> = ({
 
   <NewSharedLibraryModal
     isOpen={isNewLibraryOpen}
-    onClose={() => setIsNewLibraryOpen(false)}
-    onCreateLibrary={handleCreateLibrary}
+    onClose={() => { setIsNewLibraryOpen(false); setLibraryDraft(null); }}
+    draft={libraryDraft}
+    onCreateLibrary={form => handleCreateLibrary(form, libraryDraft)}
   />
 
   <JoinIncomingLibraryModal

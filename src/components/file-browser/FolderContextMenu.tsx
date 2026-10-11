@@ -25,6 +25,8 @@ export interface FolderContextMenuProps {
   onDuplicate: (folders: FolderItem[]) => void;
   onCopy: (folders: FolderItem[]) => void;
   onShare: (folder: FolderItem) => void;
+  /** Turn the selected folders (and any selected files) into an outgoing P2P library. */
+  onShareLibrary?: (folders: FolderItem[]) => void;
   onTrash: (folders: FolderItem[]) => void;
   onToggleTag: (folders: FolderItem[], tag: string) => void;
 }
@@ -42,6 +44,7 @@ export const FolderContextMenu: React.FC<FolderContextMenuProps> = ({
   onDuplicate,
   onCopy,
   onShare,
+  onShareLibrary,
   onTrash,
   onToggleTag,
 }) => {
@@ -126,7 +129,11 @@ export const FolderContextMenu: React.FC<FolderContextMenuProps> = ({
       <MenuItem label="Quick Look" shortcut="Space" onClick={() => run(() => onQuickLook(folder))} />
       <Separator />
       <MenuItem label="Copy" shortcut="⌘C" onClick={() => run(() => onCopy(targets))} />
-      <MenuItem label="Share…" onClick={() => run(() => onShare(folder))} />
+      {onShareLibrary ? (
+        <MenuItem label="Share as Library…" onClick={() => run(() => onShareLibrary(targets))} />
+      ) : (
+        <MenuItem label="Share…" onClick={() => run(() => onShare(folder))} />
+      )}
       <Separator />
       <SubmenuItem
         label="Tags"

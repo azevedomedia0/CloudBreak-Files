@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   X, Folder, FolderPlus, Server, Star,
   HardDrive, Radio, Shield, FolderDown, RefreshCw,
 } from '@/src/icons';
 import type { RemovableDevice } from '../types';
+import { describeDraft, MAX_LIBRARY_FILES, type LibraryDraft } from '../utils/libraryItems';
 
 function generateInvitePassphrase(length = 20): string {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%*-_';
@@ -156,12 +157,15 @@ function parseRecipientTokens(raw: string): string[] {
 interface NewSharedLibraryModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /** Files and folders the user picked with "Share as Library"; undefined from the sidebar "+" button. */
+  draft?: LibraryDraft | null;
   onCreateLibrary: (form: CreateP2pLibraryForm) => void | Promise<void>;
 }
 
 export const NewSharedLibraryModal: React.FC<NewSharedLibraryModalProps> = ({
   isOpen,
   onClose,
+  draft = null,
   onCreateLibrary,
 }) => {
   const [libName, setLibName] = useState('');
@@ -176,6 +180,10 @@ export const NewSharedLibraryModal: React.FC<NewSharedLibraryModalProps> = ({
   const [showPassphrase, setShowPassphrase] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isOpen) setLibName(draft?.suggestedName ?? '');
+  }, [isOpen, draft]);
 
   if (!isOpen) return null;
 
@@ -270,6 +278,21 @@ export const NewSharedLibraryModal: React.FC<NewSharedLibraryModalProps> = ({
             <X className="w-4 h-4" />
           </button>
         </div>
+
+        {draft && (
+          <div className="mx-5 mt-4 px-3 py-2.5 rounded-xl bg-purple-500/10 border border-purple-400/20">
+            <div className="text-xs font-medium text-purple-100">{describeDraft(draft)}</div>
+            <div className="mt-0.5 text-[11px] text-purple-200/70 truncate">
+              {draft.sources.slice(0, 3).map(s => s.name).join(', ')}
+              {draft.sources.length > 3 ? ` and ${draft.sources.length - 3} more` : ''}
+            </div>
+            {draft.truncated && (
+              <div className="mt-1 text-[11px] text-amber-200">
+                Only the first {MAX_LIBRARY_FILES} files are included.
+              </div>
+            )}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           <div>

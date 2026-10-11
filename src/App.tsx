@@ -46,6 +46,7 @@ import {
   updatesSupportedHere,
 } from './services/updaterBridge';
 import { UpdateModal, type UpdateOffer } from './components/UpdateModal';
+import { buildLibraryDraft, type LibraryDraft, type LibrarySelection } from './utils/libraryItems';
 import { isTauri } from '@tauri-apps/api/core';
 import { whenIdle } from './utils/deferWork';
 import { desktopScanReady } from './utils/startupGate';
@@ -90,6 +91,7 @@ export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [isNewFolderOpen, setIsNewFolderOpen] = useState<boolean>(false);
   const [isNewLibraryOpen, setIsNewLibraryOpen] = useState<boolean>(false);
+  const [libraryDraft, setLibraryDraft] = useState<LibraryDraft | null>(null);
   const [isJoinIncomingOpen, setIsJoinIncomingOpen] = useState<boolean>(false);
   const [isAddFavoriteOpen, setIsAddFavoriteOpen] = useState<boolean>(false);
   const [isConnectServerOpen, setIsConnectServerOpen] = useState<boolean>(false);
@@ -156,7 +158,7 @@ export default function App() {
 
   const { isVaultUnlocked, handleToggleVaultLock } = useVault(appPreferences, showToast);
   const {
-    sharedLibraries, setSharedLibraries, swarmStatus,
+    sharedLibraries, setSharedLibraries, swarmStatus, markSeeding,
     refreshSwarm, copyLibraryInvite, handleCreateLibrary, handleJoinIncomingLibrary,
   } = useP2pLibraries({
     userName: userProfile.name,
@@ -535,6 +537,21 @@ export default function App() {
       }
     : null;
 
+  /** Files with a "seeding" badge when they are in an active outgoing library. */
+  const browserFiles = useMemo(() => markSeeding(filteredFiles), [markSeeding, filteredFiles]);
+
+  /** Open the new-library dialog for the picked files and folders. */
+  const openLibraryShare = (selection: LibrarySelection) => {
+    if (!selection.files.length && !selection.folders.length) return;
+    const draft = buildLibraryDraft(selection, files, folders);
+    if (!draft.sources.length) {
+      showToast('There are no files in that selection to share');
+      return;
+    }
+    setLibraryDraft(draft);
+    setIsNewLibraryOpen(true);
+  };
+
   // Video navigation for playback controls
   const videoFiles = useMemo(
     () => filteredFiles.filter(f => f.category === 'video'),
@@ -799,8 +816,8 @@ export default function App() {
             onQuickLook={() => setIsQuickLookOpen(true)}
             hasSelectedFile={selectedFile !== null}
             onShare={() => {
-              const firstLib = sharedLibraries[0];
-              if (firstLib) setSharingLibrary(firstLib);
+              if (selectedFile) openLibraryShare({ files: [selectedFile], folders: [] });
+              else showToast('Select a file or folder to share');
             }}
             onUploadFiles={handleUploadFiles}
             onOpenAddAccount={() => setIsAddAccountOpen(true)}
@@ -875,8 +892,8 @@ export default function App() {
               onRescanLocalFolders={handleRescanLocalFolders}
               isRescanningLocal={isRescanningLocal}
               onAddNewIncomingLibrary={() => setIsJoinIncomingOpen(true)}
-              onAddNewOutgoingLibrary={() => setIsNewLibraryOpen(true)}
-              onAddNewSharedLibrary={() => setIsNewLibraryOpen(true)}
+              onAddNewOutgoingLibrary={() => { setLibraryDraft(null); setIsNewLibraryOpen(true); }}
+              onAddNewSharedLibrary={() => { setLibraryDraft(null); setIsNewLibraryOpen(true); }}
               onAddNetworkServer={() => setIsConnectServerOpen(true)}
               customFavorites={customFavorites}
               networkServers={networkServers}
@@ -920,7 +937,7 @@ export default function App() {
               />
             ) : (
               <FileBrowser
-                files={filteredFiles}
+                files={browserFiles}
                 selectedSourceId={selectedSourceId}
                 accounts={accounts}
                 selectedAccountId={selectedAccountId}
@@ -959,10 +976,8 @@ export default function App() {
                   setPlayingAudioFile(file);
                 }}
                 onCloseAudio={() => setPlayingAudioFile(null)}
-                onShareFile={file => {
-                  const firstLib = sharedLibraries[0];
-                  if (firstLib) setSharingLibrary(firstLib);
-                }}
+                onShareFile={file => openLibraryShare({ files: [file], folders: [] })}
+                onShareAsLibrary={openLibraryShare}
                 onToggleEncrypt={handleToggleEncrypt}
                 onDeleteFile={handleDeleteFile}
                 onBatchRestore={handleBatchRestore}
@@ -986,11 +1001,7 @@ export default function App() {
                 onCopyFolders={foldersToCopy => { void handleCopyFolders(foldersToCopy); }}
                 onDeleteFolders={foldersToDelete => { void handleDeleteFolders(foldersToDelete); }}
                 onToggleFolderTag={handleToggleFolderTag}
-                onShareFolder={() => {
-                  const firstLib = sharedLibraries[0];
-                  if (firstLib) setSharingLibrary(firstLib);
-                  else showToast('Create a P2P library to share');
-                }}
+                onShareFolder={folder => openLibraryShare({ files: [], folders: [folder] })}
                 swarmStatus={swarmStatus}
                 onCopyLibraryInvite={() => { void copyLibraryInvite(); }}
                 onRefreshSwarm={() => { void refreshSwarm(); }}
@@ -1052,10 +1063,7 @@ export default function App() {
                   openFileSelection(file);
                   setPlayingAudioFile(file);
                 }}
-                onShare={file => {
-                  const firstLib = sharedLibraries[0];
-                  if (firstLib) setSharingLibrary(firstLib);
-                }}
+                onShare={file => openLibraryShare({ files: [file], folders: [] })}
                 onToggleEncrypt={handleToggleEncrypt}
                 onDeleteFile={handleDeleteFile}
                 onUnzipFile={file => { void handleUnzipFile(file); }}
@@ -1152,6 +1160,8 @@ export default function App() {
         handleCreateFolder={handleCreateFolder}
         isNewLibraryOpen={isNewLibraryOpen}
         setIsNewLibraryOpen={setIsNewLibraryOpen}
+        libraryDraft={libraryDraft}
+        setLibraryDraft={setLibraryDraft}
         handleCreateLibrary={handleCreateLibrary}
         isJoinIncomingOpen={isJoinIncomingOpen}
         setIsJoinIncomingOpen={setIsJoinIncomingOpen}

@@ -42,6 +42,8 @@ interface FileBrowserProps {
   onOpenAudio: (file: FileItem) => void;
   onCloseAudio?: () => void;
   onShareFile: (file: FileItem) => void;
+  /** Make the picked files and folders into an outgoing library. */
+  onShareAsLibrary?: (selection: { files: FileItem[]; folders: FolderItem[] }) => void;
   onToggleEncrypt: (file: FileItem) => void;
   onDeleteFile: (fileId: string) => void;
   onBatchRestore: (fileIds: string[]) => void;
@@ -91,6 +93,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   onOpenAudio,
   onCloseAudio,
   onShareFile,
+  onShareAsLibrary,
   onToggleEncrypt,
   onDeleteFile,
   onBatchRestore,
@@ -246,6 +249,24 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     setRenamingFolder(null);
     if (!selectedIds.has(folder.id)) setSelectedIds(new Set([folder.id]));
     setFolderMenu({ folder, x: event.clientX, y: event.clientY });
+  };
+
+  /** The right-clicked item, or the whole selection (files and folders together) when it is part of one. */
+  const shareSelectionAsLibrary = (clicked: FileItem | FolderItem) => {
+    if (!onShareAsLibrary) return;
+    const inSelection = selectedIds.has(clicked.id) && selectedIds.size > 1;
+    if (inSelection) {
+      onShareAsLibrary({
+        files: files.filter(item => selectedIds.has(item.id)),
+        folders: folders.filter(item => selectedIds.has(item.id)),
+      });
+      return;
+    }
+    const isFile = files.some(item => item.id === clicked.id);
+    onShareAsLibrary({
+      files: isFile ? [clicked as FileItem] : [],
+      folders: isFile ? [] : [clicked as FolderItem],
+    });
   };
 
   const folderTargetsFor = (folder: FolderItem) => (
@@ -634,6 +655,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
           onDuplicate={duplicateFiles}
           onCopy={onCopyFiles}
           onShare={onShareFile}
+          onShareLibrary={onShareAsLibrary ? () => shareSelectionAsLibrary(contextMenu.file) : undefined}
           onUnzip={onUnzipFile}
           onCompress={onCompressFiles}
           onTrash={trashFiles}
@@ -656,6 +678,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
           onDuplicate={onDuplicateFolders}
           onCopy={onCopyFolders}
           onShare={onShareFolder}
+          onShareLibrary={onShareAsLibrary ? () => shareSelectionAsLibrary(folderMenu.folder) : undefined}
           onTrash={onDeleteFolders}
           onToggleTag={(items, tag) => onToggleFolderTag(items.map(item => item.id), tag)}
         />
