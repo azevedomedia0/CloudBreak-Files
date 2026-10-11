@@ -1,20 +1,33 @@
 #!/usr/bin/env bash
 # Download static ffmpeg sidecars for Tauri externalBin (not committed — see .gitignore).
 # Used by `npm run build:mac` and CI so release DMGs ship video tools without requiring Homebrew.
+# `fetch-ffmpeg.sh linux` fetches the Linux x86_64 build that scripts/build-flatpak.sh packs into the .deb.
+# These are GPL-licensed static builds (see eugeneware/ffmpeg-static); keep the notice in docs/flatpak.md.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BIN="$ROOT/src-tauri/binaries"
 mkdir -p "$BIN"
 
-# eugeneware/ffmpeg-static — gzipped single-file macOS builds.
-# Override with FFMPEG_ARM_URL / FFMPEG_X64_URL if you pin a different release.
-ARM_URL="${FFMPEG_ARM_URL:-https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-arm64.gz}"
-X64_URL="${FFMPEG_X64_URL:-https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-x64.gz}"
+# Every download is pinned to a SHA-256 and rejected on mismatch. Override a URL together with its
+# *_SHA256 (an empty value skips the check). If you change a build, update THIRD_PARTY_NOTICES.md and
+# licenses/ffmpeg/BUILD-INFO-*.txt too: these are GPL builds and their notices ship with the app.
+#
+# macOS (both architectures): Martin Riedl's static FFmpeg 9.0.2 (GPLv3, open build script).
+# The eugeneware/ffmpeg-static macOS builds used before were not suitable: the arm64 one was
+# configured with --enable-nonfree (unredistributable) and the x86_64 one had no source offer.
+ARM_URL="${FFMPEG_ARM_URL:-https://ffmpeg.martin-riedl.de/download/macos/arm64/1789931890_9.0.2/ffmpeg.zip}"
+ARM_SHA256="${FFMPEG_ARM_SHA256-c8ed4c4e6978a03c485edbfe4e0a5dc2380f8a30bba5150531b31b094492d924}"
+X64_URL="${FFMPEG_X64_URL:-https://ffmpeg.martin-riedl.de/download/macos/amd64/1789931006_9.0.2/ffmpeg.zip}"
+X64_SHA256="${FFMPEG_X64_SHA256-7c6b4125b191cbf773832dc51f424cf2b6bb7da43007d1e066f95909e47cacd4}"
+# Linux x86_64: John Van Sickle's static 7.0.2 (GPLv3), via eugeneware/ffmpeg-static.
+LINUX_X64_URL="${FFMPEG_LINUX_X64_URL:-https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-linux-x64.gz}"
+LINUX_X64_SHA256="${FFMPEG_LINUX_X64_SHA256-}"  # TODO: pin once the exact build is vetted
 
 fetch_gz() {
   local url="$1"
   local dest="$2"
+  local sha="${3-}"
   local tmp
   tmp="$(mktemp)"
   echo "Downloading ffmpeg → $(basename "$dest")"
@@ -23,8 +36,19 @@ fetch_gz() {
     rm -f "$tmp"
     return 1
   fi
-  # Some mirrors serve plain binaries; others gzip.
-  if gzip -t "$tmp" 2>/dev/null; then
+  if [[ -n "$sha" ]]; then
+    local got
+    got="$(shasum -a 256 "$tmp" | awk '{print $1}')"
+    if [[ "$got" != "$sha" ]]; then
+      echo "error: checksum mismatch for $url (expected $sha, got $got)" >&2
+      rm -f "$tmp"
+      return 2
+    fi
+  fi
+  # Archives: .zip (single "ffmpeg" member), gzip, or a plain binary.
+  if [[ "$url" == *.zip ]]; then
+    unzip -p "$tmp" ffmpeg > "$dest"
+  elif gzip -t "$tmp" 2>/dev/null; then
     gzip -dc "$tmp" > "$dest"
   else
     cp "$tmp" "$dest"
@@ -73,12 +97,19 @@ copy_homebrew() {
 ensure() {
   local dest="$1"
   local url="$2"
+  local sha="${3-}"
   if [[ -x "$dest" ]]; then
     echo "exists: $dest"
     return 0
   fi
-  if fetch_gz "$url" "$dest"; then
+  local rc=0
+  fetch_gz "$url" "$dest" "$sha" || rc=$?
+  if [[ "$rc" -eq 0 ]]; then
     return 0
+  fi
+  # A checksum mismatch is never papered over with a local Homebrew copy.
+  if [[ "$rc" -eq 2 ]]; then
+    return 1
   fi
   local host
   host="$(uname -m)"
@@ -93,14 +124,23 @@ ensure() {
 ARCH_FILTER="${1:-all}"
 ok=0
 
+if [[ "$ARCH_FILTER" == "linux" ]]; then
+  if ensure "$BIN/ffmpeg-x86_64-unknown-linux-gnu" "$LINUX_X64_URL" "$LINUX_X64_SHA256"; then
+    echo "Done. scripts/build-flatpak.sh packs this into the .deb."
+    exit 0
+  fi
+  echo "error: could not obtain the Linux ffmpeg sidecar." >&2
+  exit 1
+fi
+
 if [[ "$ARCH_FILTER" == "all" || "$ARCH_FILTER" == "arm64" || "$ARCH_FILTER" == "aarch64" ]]; then
-  if ensure "$BIN/ffmpeg-aarch64-apple-darwin" "$ARM_URL"; then
+  if ensure "$BIN/ffmpeg-aarch64-apple-darwin" "$ARM_URL" "$ARM_SHA256"; then
     ok=1
   fi
 fi
 
 if [[ "$ARCH_FILTER" == "all" || "$ARCH_FILTER" == "x64" || "$ARCH_FILTER" == "x86_64" ]]; then
-  if ensure "$BIN/ffmpeg-x86_64-apple-darwin" "$X64_URL"; then
+  if ensure "$BIN/ffmpeg-x86_64-apple-darwin" "$X64_URL" "$X64_SHA256"; then
     ok=1
   fi
 fi

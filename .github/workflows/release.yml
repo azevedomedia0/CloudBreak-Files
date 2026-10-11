@@ -68,8 +68,8 @@ jobs:
         if: matrix.os == 'macos-latest'
         run: |
           bash scripts/fetch-ffmpeg.sh
-          # Enable Tauri externalBin only when the binaries are present.
-          printf '%s\n' '{"bundle":{"externalBin":["binaries/ffmpeg"]}}' > src-tauri/tauri.ffmpeg.conf.json
+          # Enable Tauri externalBin (and ship the GPL notices with it) only when the binaries are present.
+          cp src-tauri/tauri.macos-ffmpeg.json src-tauri/tauri.ffmpeg.conf.json
 
       # macOS only: import the Developer ID certificate into a temporary keychain
       # and write the App Store Connect API key to a file outside the repo.

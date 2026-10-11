@@ -1,0 +1,13 @@
+FFmpeg for macOS Apple Silicon (arm64), as bundled by CloudBreak Files
+
+Version:      FFmpeg 9.0.2 (extra version: https://www.martin-riedl.de)
+Built by:     Martin Riedl, https://ffmpeg.martin-riedl.de/
+Build script: https://git.martin-riedl.de/ffmpeg/build-script
+Source:       https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz
+License:      GNU General Public License version 3 or later (the binary reports
+              "libavcodec license: GPL version 3 or later")
+Download:     https://ffmpeg.martin-riedl.de/download/macos/arm64/1789931890_9.0.2/ffmpeg.zip
+SHA-256 (zip): c8ed4c4e6978a03c485edbfe4e0a5dc2380f8a30bba5150531b31b094492d924
+
+Configure line (read from the binary):
+--prefix=/Volumes/ffmpeg_arm64/out --pkg-config-flags=--static --extra-version='https://www.martin-riedl.de' --enable-gray --enable-libxml2 --enable-version3 --enable-gpl --enable-openssl --enable-libfreetype --enable-fontconfig --enable-libharfbuzz --enable-libbluray --enable-libsnappy --enable-libsrt --enable-libvmaf --enable-libass --enable-libklvanc --enable-libzimg --enable-libzvbi --enable-libaom --enable-libdav1d --enable-libopenh264 --enable-libopenjpeg --enable-librav1e --enable-libsvtav1 --enable-libvpx --enable-libvvenc --enable-libwebp --enable-libx264 --enable-libx265 --enable-libmp3lame --enable-libopus --enable-libvorbis --enable-libtheora

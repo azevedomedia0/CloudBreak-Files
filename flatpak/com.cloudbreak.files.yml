@@ -89,8 +89,16 @@ modules:
             cp -a "$libdir"/. /app/lib/cloudbreak-files/
             find /app/lib/cloudbreak-files -type f -exec chmod 644 {} \;
             find /app/lib/cloudbreak-files -type d -exec chmod 755 {} \;
+            if [ -f /app/lib/cloudbreak-files/ffmpeg ]; then chmod 755 /app/lib/cloudbreak-files/ffmpeg; fi
           fi
         done
+      - |
+        set -eu
+        # Licenses and the ffmpeg source offer travel with the bundled ffmpeg.
+        if [ -d deb-extract/usr/share/doc/cloudbreak-files ]; then
+          mkdir -p /app/share/licenses/com.cloudbreak.files
+          cp -a deb-extract/usr/share/doc/cloudbreak-files/. /app/share/licenses/com.cloudbreak.files/
+        fi
       - |
         set -eu
         # Prefer our Flatpak desktop entry; fall back to the one from the .deb.
