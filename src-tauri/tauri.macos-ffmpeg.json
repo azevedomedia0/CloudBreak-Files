@@ -1,0 +1,11 @@
+{
+  "bundle": {
+    "externalBin": ["binaries/ffmpeg"],
+    "resources": {
+      "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md",
+      "../licenses/ffmpeg/GPL-3.0.txt": "licenses/ffmpeg/GPL-3.0.txt",
+      "../licenses/ffmpeg/BUILD-INFO-macos-arm64.txt": "licenses/ffmpeg/BUILD-INFO-macos-arm64.txt",
+      "../licenses/ffmpeg/BUILD-INFO-macos-x86_64.txt": "licenses/ffmpeg/BUILD-INFO-macos-x86_64.txt"
+    }
+  }
+}

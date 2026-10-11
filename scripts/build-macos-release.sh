@@ -81,7 +81,8 @@ fi
 EXTRA_CONFIG=()
 if [[ "$BUNDLE_FFMPEG" -eq 1 ]]; then
   # Only enable externalBin when the binaries exist so `tauri build` does not fail.
-  EXTRA_CONFIG+=(--config '{"bundle":{"externalBin":["binaries/ffmpeg"]}}')
+  # The same config ships the GPL license text and source offer (THIRD_PARTY_NOTICES.md) with it.
+  EXTRA_CONFIG+=(--config "$ROOT/src-tauri/tauri.macos-ffmpeg.json")
 fi
 
 echo "Building for ${TARGET} (MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET}, CARGO_TARGET_DIR=${CARGO_TARGET_DIR})"
