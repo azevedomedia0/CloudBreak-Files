@@ -94,6 +94,13 @@ modules:
         done
       - |
         set -eu
+        # Licenses and the ffmpeg source offer travel with the bundled ffmpeg.
+        if [ -d deb-extract/usr/share/doc/cloudbreak-files ]; then
+          mkdir -p /app/share/licenses/com.cloudbreak.files
+          cp -a deb-extract/usr/share/doc/cloudbreak-files/. /app/share/licenses/com.cloudbreak.files/
+        fi
+      - |
+        set -eu
         # Prefer our Flatpak desktop entry; fall back to the one from the .deb.
         if [ -f com.cloudbreak.files.desktop ]; then
           install -Dm644 com.cloudbreak.files.desktop /app/share/applications/com.cloudbreak.files.desktop

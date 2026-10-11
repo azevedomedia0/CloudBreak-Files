@@ -81,7 +81,15 @@ FFMPEG_CONF_FILE="$ROOT/src-tauri/tauri.ffmpeg.linux.conf.json"
 rm -f "$FFMPEG_CONF_FILE"
 if [[ "$(uname -m)" == "x86_64" ]] && bash "$ROOT/scripts/fetch-ffmpeg.sh" linux \
   && [[ -x "$ROOT/src-tauri/binaries/ffmpeg-x86_64-unknown-linux-gnu" ]]; then
-  printf '%s\n' '{"bundle":{"linux":{"deb":{"files":{"/usr/lib/cloudbreak-files/ffmpeg":"binaries/ffmpeg-x86_64-unknown-linux-gnu"}}}}}' > "$FFMPEG_CONF_FILE"
+  # The GPL license text, build info and source offer ship with the binary (see THIRD_PARTY_NOTICES.md).
+  cat > "$FFMPEG_CONF_FILE" <<'JSON'
+{"bundle":{"linux":{"deb":{"files":{
+  "/usr/lib/cloudbreak-files/ffmpeg":"binaries/ffmpeg-x86_64-unknown-linux-gnu",
+  "/usr/share/doc/cloudbreak-files/THIRD_PARTY_NOTICES.md":"../THIRD_PARTY_NOTICES.md",
+  "/usr/share/doc/cloudbreak-files/ffmpeg/GPL-3.0.txt":"../licenses/ffmpeg/GPL-3.0.txt",
+  "/usr/share/doc/cloudbreak-files/ffmpeg/BUILD-INFO-linux-x86_64.txt":"../licenses/ffmpeg/BUILD-INFO-linux-x86_64.txt"
+}}}}}
+JSON
   FFMPEG_CONFIG=(--config "$FFMPEG_CONF_FILE")
 else
   echo "warn: ffmpeg sidecar unavailable — the .deb will rely on a system ffmpeg." >&2
