@@ -76,7 +76,6 @@ export function useFileActions({
   showToast,
   isVaultUnlocked = false,
 }: Options) {
-  const [isDraggingOver, setIsDraggingOver] = useState<boolean>(false);
   const [clipboardFileIds, setClipboardFileIds] = useState<string[]>([]);
 
   // Photo Version Save
@@ -506,7 +505,7 @@ export function useFileActions({
   };
 
   // Upload Files — encrypt with the vault session key when the vault is unlocked.
-  const handleUploadFiles = async (fileList: FileList) => {
+  const handleUploadFiles = async (fileList: ArrayLike<File>) => {
     const targetAccountId: CloudProviderId = selectedAccountId === 'all' ? 's3' : selectedAccountId;
     const newItems: FileItem[] = [];
     const unlocked = isVaultUnlocked || (await rustBridge.isVaultUnlocked());
@@ -644,27 +643,19 @@ export function useFileActions({
     }
   };
 
-  // Drag and Drop
+  // Files dropped from outside the app are added as a local preview. There is no drop overlay.
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
-    setIsDraggingOver(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDraggingOver(false);
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    setIsDraggingOver(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       handleUploadFiles(e.dataTransfer.files);
     }
   };
 
   return {
-    isDraggingOver,
     handleSavePhotoVersion,
     handleSaveDocument,
     handleSaveTrimmedVideo,
@@ -684,7 +675,6 @@ export function useFileActions({
     handleUploadFiles,
     handleUnzipFile,
     handleDragOver,
-    handleDragLeave,
     handleDrop,
   };
 }

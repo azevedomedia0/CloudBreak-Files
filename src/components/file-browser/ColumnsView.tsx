@@ -119,7 +119,7 @@ export const ColumnsView: React.FC<ColumnsViewProps> = ({
                 role="button"
                 tabIndex={0}
                 draggable
-                onDragStart={e => setFileDragData(e.dataTransfer, file)}
+                onDragStart={e => setFileDragData(e.dataTransfer, file, selectedIds)}
                 onClick={() => onSelectFile(file)}
                 onContextMenu={event => onFileContextMenu(file, event)}
                 onKeyDown={e => {

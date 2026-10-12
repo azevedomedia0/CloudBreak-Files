@@ -26,7 +26,8 @@ export interface AppPreferences {
   theme: AppTheme;
   autoLockMinutes: number;
   rustEngineEnabled: boolean;
-  reduceMotion: boolean;
+  /** Show the system terminal in the right-hand panel when the app starts. */
+  openTerminalAtLaunch: boolean;
   compactSidebar: boolean;
   showTransferSpeeds: boolean;
   transferNotifications: boolean;
@@ -40,7 +41,7 @@ export const DEFAULT_PREFERENCES: AppPreferences = {
   theme: 'dark',
   autoLockMinutes: 15,
   rustEngineEnabled: true,
-  reduceMotion: false,
+  openTerminalAtLaunch: false,
   compactSidebar: false,
   showTransferSpeeds: true,
   transferNotifications: true,

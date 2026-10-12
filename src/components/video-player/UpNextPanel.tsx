@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, X } from '@/src/icons';
+import { Music2, Play, X } from '@/src/icons';
 import { FileItem } from '../../types';
 import { formatTimecode } from '../../utils/format';
 
@@ -41,6 +41,10 @@ export const UpNextPanel: React.FC<UpNextPanelProps> = ({ next, visible, interac
         <div className="relative w-28 aspect-video shrink-0 rounded-lg overflow-hidden bg-neutral-950 border border-white/10">
           {next.thumbnailUrl ? (
             <img src={next.thumbnailUrl} alt="" className="w-full h-full object-cover" draggable={false} />
+          ) : next.category === 'audio' ? (
+            <div className="w-full h-full flex items-center justify-center text-neutral-500">
+              <Music2 className="w-6 h-6" />
+            </div>
           ) : (
             <video
               src={`${next.url}#t=0.1`}

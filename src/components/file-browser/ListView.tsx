@@ -175,7 +175,7 @@ export const ListView: React.FC<ListViewProps> = ({
             <div
               key={file.id}
               draggable
-              onDragStart={e => setFileDragData(e.dataTransfer, file)}
+              onDragStart={e => setFileDragData(e.dataTransfer, file, selectedIds)}
               onClick={() => onSelectFile(file)}
               onContextMenu={event => onFileContextMenu(file, event)}
               onDoubleClick={() => {

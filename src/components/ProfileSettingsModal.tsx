@@ -437,8 +437,8 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                 <Toggle on={prefs.showTransferSpeeds} onChange={() => patchPrefs('showTransferSpeeds', !prefs.showTransferSpeeds)} />
               </PrefRow>
 
-              <PrefRow title="Reduce motion" description="Limit animations and pulsing status indicators">
-                <Toggle on={prefs.reduceMotion} onChange={() => patchPrefs('reduceMotion', !prefs.reduceMotion)} />
+              <PrefRow title="Open terminal at launch" description="Show the system terminal in the side panel when the app starts">
+                <Toggle on={prefs.openTerminalAtLaunch} onChange={() => patchPrefs('openTerminalAtLaunch', !prefs.openTerminalAtLaunch)} />
               </PrefRow>
 
               <PrefRow title="Native Rust crypto engine" description="Use Tauri AES-GCM when running as a desktop app">

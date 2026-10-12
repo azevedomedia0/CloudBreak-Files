@@ -33,6 +33,8 @@ interface VideoPlayerModalProps {
   onClose: () => void;
   onSaveTrimmedVideo: (newFile: FileItem) => void;
   initialTab?: 'player' | 'trim' | 'convert';
+  /** Where to begin, in seconds (used when expanding the side-panel player). */
+  startAt?: number;
   accounts: CloudAccount[];
   folders: FolderItem[];
   canPreviousMedia?: boolean;
@@ -49,6 +51,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   onClose,
   onSaveTrimmedVideo,
   initialTab = 'player',
+  startAt = 0,
   accounts,
   folders,
   canPreviousMedia = false,
@@ -230,6 +233,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       setTrimEnd(dur);
       setConvertOptions(prev => ({ ...prev, trimEnd: dur }));
       videoRef.current.volume = volume;
+      if (startAt > 0 && startAt < dur) videoRef.current.currentTime = startAt;
     }
   };
 

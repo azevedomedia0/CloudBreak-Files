@@ -159,7 +159,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
                 key={file.id}
                 data-file-id={file.id}
                 draggable
-                onDragStart={e => setFileDragData(e.dataTransfer, file)}
+                onDragStart={e => setFileDragData(e.dataTransfer, file, selectedIds)}
                 onClick={() => onSelectFile(file)}
                 onContextMenu={event => onFileContextMenu(file, event)}
                 className={`group h-[calc(100%-6px)] aspect-video rounded-lg border shrink-0 cursor-pointer relative transition-all overflow-hidden ${

@@ -25,7 +25,6 @@ import { mergeSystemSearchResults, systemSearchBridge } from './services/systemS
 import { AppModals } from './components/AppModals';
 import { PhotoNav } from './components/PhotoNavArrows';
 import { UserProfile } from './components/ProfileSettingsModal';
-import { DropOverlay } from './components/DropOverlay';
 import { Toast } from './components/Toast';
 import { FileBrowser } from './components/FileBrowser';
 import { FileInspector } from './components/FileInspector';
@@ -46,6 +45,11 @@ import {
   updatesSupportedHere,
 } from './services/updaterBridge';
 import { UpdateModal, type UpdateOffer } from './components/UpdateModal';
+import { useWindowControlsHidden } from './hooks/useWindowControlsHidden';
+import { PlayingNextPanel } from './components/PlayingNextPanel';
+import { VideoSidePanel } from './components/VideoSidePanel';
+import { isMacLike } from './components/WindowControls';
+import { upcomingAfter } from './utils/playingNext';
 import { buildLibraryDraft, type LibraryDraft, type LibrarySelection } from './utils/libraryItems';
 import { isTauri } from '@tauri-apps/api/core';
 import { whenIdle } from './utils/deferWork';
@@ -121,6 +125,9 @@ export default function App() {
   const [playingVideoFile, setPlayingVideoFile] = useState<FileItem | null>(null);
   const [playingAudioFile, setPlayingAudioFile] = useState<FileItem | null>(null);
   const [videoPlayerInitialTab, setVideoPlayerInitialTab] = useState<'player' | 'trim' | 'convert'>('player');
+  // Videos play in the right-hand panel by default; the full player window is for trimming, converting and a bigger picture.
+  const [videoPlacement, setVideoPlacement] = useState<'panel' | 'window'>('panel');
+  const [videoStartAt, setVideoStartAt] = useState(0);
   const [sharingLibrary, setSharingLibrary] = useState<SharedLibrary | null>(null);
   const [isVaultSecurityOpen, setIsVaultSecurityOpen] = useState<boolean>(false);
   const [isProfileSettingsOpen, setIsProfileSettingsOpen] = useState<boolean>(false);
@@ -131,7 +138,7 @@ export default function App() {
   const [isAddAccountOpen, setIsAddAccountOpen] = useState<boolean>(false);
   const [integratingAccount, setIntegratingAccount] = useState<CloudAccount | null>(null);
   const [isInspectorOpen, setIsInspectorOpen] = useState(true);
-  const [sidePanelMode, setSidePanelMode] = useState<'inspector' | 'terminal'>('inspector');
+  const [sidePanelMode, setSidePanelMode] = useState<'inspector' | 'queue' | 'terminal'>(() => (appPreferences.openTerminalAtLaunch ? 'terminal' : 'inspector'));
 
   const setUserProfile = (profile: UserProfile) => {
     setUserProfileState(profile);
@@ -180,14 +187,11 @@ export default function App() {
     handleMarkAllNotificationsRead, handleClearNotification,
   } = useNotifications({ setSharedLibraries, setSelectedLibraryId, setSelectedFolderId, showToast });
 
-  // Apply theme + reduce-motion preferences to the document root
+  // Apply the theme to the document root
   useEffect(() => {
     applyTheme(appPreferences.theme);
   }, [appPreferences.theme]);
 
-  useEffect(() => {
-    document.documentElement.classList.toggle('reduce-motion', appPreferences.reduceMotion);
-  }, [appPreferences.reduceMotion]);
 
   // One-time notice when the desktop app has no ffmpeg (dev builds / incomplete release).
   useEffect(() => {
@@ -302,6 +306,22 @@ export default function App() {
       setUpdateChecking(false);
     }
   };
+
+  const toggleTerminalPanel = () => {
+    if (playingVideoFile && videoPlacement === 'panel') {
+      setPlayingVideoFile(null);
+      setSidePanelMode('terminal');
+      setIsInspectorOpen(true);
+    } else if (isInspectorOpen && sidePanelMode === 'terminal') {
+      setIsInspectorOpen(false);
+    } else {
+      setSidePanelMode('terminal');
+      setIsInspectorOpen(true);
+    }
+  };
+
+  // The header draws its own window buttons (WindowControls), so the native ones are hidden on macOS.
+  useWindowControlsHidden(isMacLike);
 
   useGlobalShortcuts({
     canQuickLook: !!selectedFileId && !editingPhotoFile && !editingDocumentFile && !playingVideoFile && !playingAudioFile && !sharingLibrary,
@@ -559,23 +579,147 @@ export default function App() {
   );
   const videoIndex = playingVideoFile ? videoFiles.findIndex(f => f.id === playingVideoFile.id) : -1;
   const canPreviousMedia = videoIndex > 0;
-  const canNextMedia = videoIndex >= 0 && videoIndex < videoFiles.length - 1;
+  const videoInPanel = !!playingVideoFile && videoPlacement === 'panel';
+  const showTerminal = !videoInPanel && isInspectorOpen && sidePanelMode === 'terminal';
+  const [terminalMounted, setTerminalMounted] = useState(false);
+  useEffect(() => {
+    if (showTerminal) setTerminalMounted(true);
+  }, [showTerminal]);
   const playVideoAt = (index: number) => {
     const next = videoFiles[index];
     if (!next) return;
     setSelectedFileId(next.id);
     setPlayingVideoFile(next);
   };
-  const nextVideoFile = canNextMedia ? videoFiles[videoIndex + 1] ?? null : null;
+
+  // The "play next" queue holds songs and videos the user dragged into the Playing Next panel, in the order they
+  // were added. The first one plays right after whatever is playing, ahead of the normal list order.
+  const audioQueue = useMemo(() => files.filter(f => f.category === 'audio'), [files]);
+  const [playNextIds, setPlayNextIds] = useState<string[]>([]);
+  const queuedItems = useMemo(
+    () => playNextIds
+      .map(id => files.find(f => f.id === id))
+      .filter((f): f is FileItem => (
+        !!f && (f.category === 'audio' || f.category === 'video')
+        && f.id !== playingAudioFile?.id && f.id !== playingVideoFile?.id
+      )),
+    [playNextIds, files, playingAudioFile, playingVideoFile],
+  );
+  const queuedFirst = queuedItems[0] ?? null;
+  // Queued songs also go first in the audio player's own list (its Up Next popover).
+  const audioPlayOrder = useMemo(() => {
+    const queued = queuedItems.filter(f => f.category === 'audio');
+    if (!queued.length) return audioQueue;
+    const queuedSet = new Set(queued.map(f => f.id));
+    const rest = audioQueue.filter(f => !queuedSet.has(f.id));
+    const at = playingAudioFile ? rest.findIndex(f => f.id === playingAudioFile.id) : -1;
+    return at < 0 ? [...rest, ...queued] : [...rest.slice(0, at + 1), ...queued, ...rest.slice(at + 1)];
+  }, [audioQueue, queuedItems, playingAudioFile]);
+
+  // A queued item leaves the queue as soon as it starts playing.
+  useEffect(() => {
+    const ids = [playingAudioFile?.id, playingVideoFile?.id].filter((x): x is string => !!x);
+    if (ids.length) setPlayNextIds(prev => (prev.some(id => ids.includes(id)) ? prev.filter(id => !ids.includes(id)) : prev));
+  }, [playingAudioFile?.id, playingVideoFile?.id]);
+
+  // What the Playing Next panel lists: the queued items first, then the normal order (audio wraps around like the
+  // audio player; video follows the folder order).
+  const playingNextItems = useMemo(() => {
+    const natural = playingAudioFile
+      ? upcomingAfter(audioQueue, playingAudioFile.id, true)
+      : playingVideoFile
+        ? upcomingAfter(videoFiles, playingVideoFile.id, false)
+        : [];
+    const queuedSet = new Set(queuedItems.map(f => f.id));
+    return [...queuedItems, ...natural.filter(f => !queuedSet.has(f.id))];
+  }, [playingAudioFile, playingVideoFile, audioQueue, videoFiles, queuedItems]);
+
+  /**
+   * Opening a song or video queues the other songs or videos in its folder: the ones after it first, then the ones
+   * before it, so autoplay carries on through the folder. They go behind anything the user already queued.
+   */
+  const queueFolderMedia = (file: FileItem) => {
+    const viewFiles = file.category === 'video' ? videoFiles : filteredFiles.filter(f => f.category === 'audio');
+    const sameFolder = (f: FileItem) => (
+      f.category === file.category && f.id !== file.id
+      && f.accountId === file.accountId && f.sourceId === file.sourceId
+      && (file.folderId ? f.folderId === file.folderId : !f.folderId && f.folderPath === file.folderPath)
+    );
+    const viewOrder = new Map(viewFiles.map((f, i) => [f.id, i]));
+    const at = viewOrder.get(file.id) ?? -1;
+    const mates = files.filter(sameFolder).sort((a, b) => (
+      (viewOrder.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (viewOrder.get(b.id) ?? Number.MAX_SAFE_INTEGER)
+      || a.name.localeCompare(b.name, undefined, { numeric: true })
+    ));
+    const after = at >= 0 ? mates.filter(f => (viewOrder.get(f.id) ?? -1) > at) : [];
+    const rest = mates.filter(f => !after.includes(f));
+    const ids = [...after, ...rest].slice(0, 200).map(f => f.id);
+    if (!ids.length) return;
+    setPlayNextIds(prev => [...prev, ...ids.filter(id => !prev.includes(id))]);
+  };
+
+  /**
+   * Start a video. It plays in the right-hand panel; trim and convert open the full player window.
+   * A video that follows another one stays wherever the first was playing.
+   */
+  const startVideo = (file: FileItem, tab?: 'player' | 'trim' | 'convert', opts?: { queueFolder?: boolean }) => {
+    if (opts?.queueFolder) queueFolderMedia(file);
+    setPlayingAudioFile(null);
+    setVideoStartAt(0);
+    setVideoPlayerInitialTab(tab ?? 'player');
+    setVideoPlacement(prev => (tab && tab !== 'player' ? 'window' : playingVideoFile ? prev : 'panel'));
+    setPlayingVideoFile(file);
+  };
+
+  /** Start a song or video, closing the other player. */
+  const playQueueItem = (file: FileItem) => {
+    openFileSelection(file);
+    if (file.category === 'video') {
+      startVideo(file);
+      return;
+    }
+    setPlayingVideoFile(null);
+    setPlayingAudioFile(file);
+  };
+
+  /** Thumbnails dropped on the Playing Next panel: queue the songs and videos to play next (or start them if nothing is playing). */
+  const queueFilesToPlayNext = (ids: string[]) => {
+    const dropped = ids
+      .map(id => files.find(f => f.id === id))
+      .filter((f): f is FileItem => !!f);
+    const isMedia = (f: FileItem) => f.category === 'audio' || f.category === 'video';
+    const media = dropped.filter(f => isMedia(f) && f.id !== playingAudioFile?.id && f.id !== playingVideoFile?.id);
+    const skipped = dropped.filter(f => !isMedia(f)).length;
+    if (!media.length) {
+      showToast(dropped.length ? 'Only songs and videos can be queued. Drag media into the panel.' : 'Nothing to queue');
+      return;
+    }
+    const skippedNote = skipped ? ` (${skipped} that aren’t songs or videos left out)` : '';
+    if (!playingAudioFile && !playingVideoFile) {
+      const [first, ...rest] = media;
+      playQueueItem(first);
+      if (rest.length) setPlayNextIds(prev => [...prev, ...rest.map(f => f.id).filter(id => !prev.includes(id))]);
+      showToast(`Playing “${first.name}”${rest.length ? ` · ${rest.length} more queued` : ''}${skippedNote}`);
+      return;
+    }
+    setPlayNextIds(prev => [...prev, ...media.map(f => f.id).filter(id => !prev.includes(id))]);
+    showToast(media.length === 1 ? `“${media[0].name}” plays next${skippedNote}` : `${media.length} items queued to play next${skippedNote}`);
+  };
+
+  // The video player's next button and end-of-video autoplay: a queued item first, else the next video in the list.
+  const canNextMedia = !!queuedFirst || (videoIndex >= 0 && videoIndex < videoFiles.length - 1);
+  const nextVideoFile = queuedFirst ?? (videoIndex >= 0 ? videoFiles[videoIndex + 1] ?? null : null);
   const onPreviousMedia = () => playVideoAt(videoIndex - 1);
-  const onNextMedia = () => playVideoAt(videoIndex + 1);
+  const onNextMedia = () => {
+    if (queuedFirst) playQueueItem(queuedFirst);
+    else playVideoAt(videoIndex + 1);
+  };
 
   const {
-    isDraggingOver,
     handleSavePhotoVersion, handleSaveDocument, handleSaveTrimmedVideo, handleToggleEncrypt, handleDeleteFile,
     handleRenameFile, handleDuplicateFiles, handleCopyFileNames, handlePasteFiles,
     handleMoveFile, handleCompressFile, handleCompressFiles, clipboardFileIds, handleToggleTag,
-    handleBatchRestore, handleBatchDelete, handleUploadFiles, handleUnzipFile, handleDragOver, handleDragLeave, handleDrop,
+    handleBatchRestore, handleBatchDelete, handleUploadFiles, handleUnzipFile, handleDragOver, handleDrop,
   } = useFileActions({
     files,
     setFiles,
@@ -756,7 +900,6 @@ export default function App() {
     <div 
       className="relative flex flex-col h-screen w-screen overflow-hidden select-none"
       onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       style={{
         background: 'radial-gradient(circle at 15% 15%, #3b3c40 0%, #242426 45%, #171719 100%)',
@@ -768,7 +911,6 @@ export default function App() {
       <div className="absolute bottom-1/4 right-1/4 w-[30rem] h-[30rem] rounded-full bg-white/[0.035] blur-[140px] pointer-events-none" />
       <div className="absolute top-2/3 left-1/3 w-80 h-80 rounded-full bg-white/[0.03] blur-[100px] pointer-events-none" />
 
-      {isDraggingOver && <DropOverlay />}
 
       {toastNotification && <Toast message={toastNotification} />}
 
@@ -778,7 +920,9 @@ export default function App() {
         multiple
         className="hidden"
         onChange={e => {
-          if (e.target.files?.length) handleUploadFiles(e.target.files);
+          // Copy the list first: clearing the input below empties the live FileList before the async upload reads it.
+          const picked = Array.from(e.target.files ?? []);
+          if (picked.length) void handleUploadFiles(picked);
           e.target.value = '';
         }}
       />
@@ -831,19 +975,27 @@ export default function App() {
             onToggleSidebar={() => setIsSidebarCollapsed(prev => !prev)}
             isInspectorOpen={isInspectorOpen}
             sidePanelMode={sidePanelMode}
-            onToggleInspector={() => {
-              if (isInspectorOpen && sidePanelMode === 'inspector') {
+            onShowQueue={() => {
+              if (videoInPanel) {
+                setPlayingVideoFile(null);
+                setSidePanelMode('queue');
+                setIsInspectorOpen(true);
+              } else if (isInspectorOpen && sidePanelMode === 'queue') {
                 setIsInspectorOpen(false);
               } else {
-                setSidePanelMode('inspector');
+                setSidePanelMode('queue');
                 setIsInspectorOpen(true);
               }
             }}
-            onShowTerminal={() => {
-              if (isInspectorOpen && sidePanelMode === 'terminal') {
+            onToggleInspector={() => {
+              if (videoInPanel) {
+                setPlayingVideoFile(null);
+                setSidePanelMode('inspector');
+                setIsInspectorOpen(true);
+              } else if (isInspectorOpen && sidePanelMode === 'inspector') {
                 setIsInspectorOpen(false);
               } else {
-                setSidePanelMode('terminal');
+                setSidePanelMode('inspector');
                 setIsInspectorOpen(true);
               }
             }}
@@ -938,6 +1090,8 @@ export default function App() {
             ) : (
               <FileBrowser
                 files={browserFiles}
+                terminalOpen={isInspectorOpen && sidePanelMode === 'terminal'}
+                onShowTerminal={toggleTerminalPanel}
                 selectedSourceId={selectedSourceId}
                 accounts={accounts}
                 selectedAccountId={selectedAccountId}
@@ -947,13 +1101,13 @@ export default function App() {
                 selectedFileId={selectedFileId}
                 viewMode={viewMode}
                 playingAudioFile={playingAudioFile}
-                audioPlaylist={files.filter(f => f.category === 'audio')}
+                audioPlaylist={audioPlayOrder}
+                audioQueuedNext={queuedFirst}
                 onSelectFile={file => openFileSelection(file)}
                 onEditPhoto={file => { void openPhotoFile(file); }}
                 onOpenDocument={file => { void openDocumentFile(file); }}
                 onOpenVideo={async file => {
                   openFileSelection(file);
-                  setPlayingAudioFile(null);
                   if (file.tags.includes('P2P') && file.encryption?.algorithm === 'AES-256-GCM') {
                     const lib = sharedLibraries.find(l => l.fileIds.includes(file.id));
                     if (lib) {
@@ -961,20 +1115,20 @@ export default function App() {
                         showToast('Decrypting P2P stream…');
                         const blob = await p2pBridge.assembleFileBlob(lib.id, file.id, file.mimeType);
                         const url = URL.createObjectURL(blob);
-                        setPlayingVideoFile({ ...file, url });
+                        startVideo({ ...file, url }, undefined, { queueFolder: true });
                         return;
                       } catch (err) {
                         showToast(err instanceof Error ? err.message : String(err));
                       }
                     }
                   }
-                  setPlayingVideoFile(file);
+                  startVideo(file, undefined, { queueFolder: true });
                 }}
                 onOpenAudio={file => {
-                  setPlayingVideoFile(null);
-                  openFileSelection(file);
-                  setPlayingAudioFile(file);
+                  queueFolderMedia(file);
+                  playQueueItem(file);
                 }}
+                onAudioTrackChange={playQueueItem}
                 onCloseAudio={() => setPlayingAudioFile(null)}
                 onShareFile={file => openLibraryShare({ files: [file], folders: [] })}
                 onShareAsLibrary={openLibraryShare}
@@ -1016,7 +1170,7 @@ export default function App() {
             {columnsInspectorLayout && <div className="flex-1 min-w-4" aria-hidden="true" />}
 
             {/* Right panel stays visible on every file screen (browser + document editor) */}
-            {isInspectorOpen && (
+            {(isInspectorOpen || videoInPanel) && (
               <div
                 onMouseDown={startResizeInspector}
                 onDoubleClick={resetInspectorWidth}
@@ -1029,8 +1183,32 @@ export default function App() {
               </div>
             )}
 
-            {isInspectorOpen && sidePanelMode === 'terminal' && (
+            {videoInPanel && playingVideoFile && (
+              <VideoSidePanel
+                width={inspectorWidth}
+                file={playingVideoFile}
+                nextMedia={nextVideoFile}
+                upcoming={playingNextItems}
+                queuedIds={playNextIds}
+                canPrevious={canPreviousMedia}
+                canNext={canNextMedia}
+                onPrevious={onPreviousMedia}
+                onNext={onNextMedia}
+                onClose={() => setPlayingVideoFile(null)}
+                onExpand={at => {
+                  setVideoStartAt(at);
+                  setVideoPlacement('window');
+                }}
+                onPlay={playQueueItem}
+                onQueueDrop={queueFilesToPlayNext}
+                onRemoveQueued={file => setPlayNextIds(prev => prev.filter(id => id !== file.id))}
+              />
+            )}
+
+            {/* Once opened, the terminal stays mounted (hidden) so its shells keep running while other panels show. */}
+            {terminalMounted && (
               <SystemTerminal
+                visible={showTerminal}
                 width={inspectorWidth}
                 context={{
                   cwdLabel: activePathTitle || 'All Files',
@@ -1043,7 +1221,19 @@ export default function App() {
               />
             )}
 
-            {isInspectorOpen && sidePanelMode === 'inspector' && (
+            {!videoInPanel && isInspectorOpen && sidePanelMode === 'queue' && (
+              <PlayingNextPanel
+                width={inspectorWidth}
+                nowPlaying={playingAudioFile ?? playingVideoFile}
+                upcoming={playingNextItems}
+                onPlay={playQueueItem}
+                queuedIds={playNextIds}
+                onQueueDrop={queueFilesToPlayNext}
+                onRemoveQueued={file => setPlayNextIds(prev => prev.filter(id => id !== file.id))}
+              />
+            )}
+
+            {!videoInPanel && isInspectorOpen && sidePanelMode === 'inspector' && (
               <FileInspector
                 file={selectedFile ?? editingDocumentFile}
                 photoNav={photoNav}
@@ -1054,9 +1244,7 @@ export default function App() {
                 onOpenDocument={file => { void openDocumentFile(file); }}
                 onOpenVideo={(file, tab) => {
                   openFileSelection(file);
-                  setPlayingAudioFile(null);
-                  setPlayingVideoFile(file);
-                  if (tab) setVideoPlayerInitialTab(tab);
+                  startVideo(file, tab, { queueFolder: !tab || tab === 'player' });
                 }}
                 onOpenAudio={file => {
                   setPlayingVideoFile(null);
@@ -1118,7 +1306,9 @@ export default function App() {
         editingPhotoFile={editingPhotoFile}
         onOpenDocument={file => { void openDocumentFile(file); }}
         handleSavePhotoVersion={handleSavePhotoVersion}
-        playingVideoFile={playingVideoFile}
+        playingVideoFile={playingVideoFile && videoPlacement === 'window' ? playingVideoFile : null}
+        videoStartAt={videoStartAt}
+        onOpenVideo={file => startVideo(file, undefined, { queueFolder: true })}
         handleSaveTrimmedVideo={handleSaveTrimmedVideo}
         videoPlayerInitialTab={videoPlayerInitialTab}
         canPreviousMedia={canPreviousMedia}

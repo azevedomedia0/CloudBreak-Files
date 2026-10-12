@@ -1,14 +1,15 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  SkipBack, SkipForward, Pause, Play, Shuffle, Repeat, MoreHorizontal, X,
-  Volume2, VolumeX, ListMusic,
+  SkipBack, SkipForward, Pause, Play, Shuffle, Repeat, X,
+  Volume2, VolumeX,
 } from '@/src/icons';
 import { FileItem } from '../types';
-import { formatTimecode } from '../utils/format';
 
 interface AudioPlayerBarProps {
   file: FileItem;
   playlist: FileItem[];
+  /** What the user queued to play next (a song or a video); it goes first even with shuffle on. */
+  queuedNext?: FileItem | null;
   onSelectTrack: (file: FileItem) => void;
   onClose: () => void;
 }
@@ -43,31 +44,22 @@ function loadVolume(): number {
 export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
   file,
   playlist,
+  queuedNext = null,
   onSelectTrack,
   onClose,
 }) => {
   const audioRef = useRef<HTMLAudioElement>(null);
-  const queueRef = useRef<HTMLDivElement>(null);
   const [playing, setPlaying] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(file.videoMeta?.durationSeconds ?? 0);
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [queueOpen, setQueueOpen] = useState(false);
   const [volume, setVolume] = useState(loadVolume);
   const [muted, setMuted] = useState(false);
   const [volumeBeforeMute, setVolumeBeforeMute] = useState(0.85);
 
   const index = playlist.findIndex(item => item.id === file.id);
 
-  const upNext = useMemo(() => {
-    if (playlist.length === 0) return [] as FileItem[];
-    if (index < 0) return playlist.filter(item => item.id !== file.id);
-    const after = playlist.slice(index + 1);
-    const before = playlist.slice(0, index);
-    return [...after, ...before];
-  }, [playlist, index, file.id]);
 
   useEffect(() => {
     const el = audioRef.current;
@@ -77,7 +69,6 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
     void el.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
     setCurrentTime(0);
     setDuration(file.videoMeta?.durationSeconds ?? 0);
-    setMenuOpen(false);
   }, [file.id, file.url]);
 
   useEffect(() => {
@@ -101,34 +92,12 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
     }
   }, [volume]);
 
-  useEffect(() => {
-    if (!queueOpen && !menuOpen) return;
-    const onPointer = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (queueRef.current?.contains(target)) return;
-      const bar = document.querySelector('.audio-player-bar');
-      if (bar?.contains(target) && (event.target as HTMLElement).closest('.audio-player-queue-btn, .audio-player-more-btn')) {
-        return;
-      }
-      setQueueOpen(false);
-      setMenuOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setQueueOpen(false);
-        setMenuOpen(false);
-      }
-    };
-    window.addEventListener('mousedown', onPointer);
-    window.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('mousedown', onPointer);
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [queueOpen, menuOpen]);
-
   const goRelative = (delta: number) => {
     if (playlist.length === 0) return;
+    if (delta > 0 && queuedNext && queuedNext.id !== file.id) {
+      onSelectTrack(queuedNext);
+      return;
+    }
     if (shuffle && playlist.length > 1) {
       let next = Math.floor(Math.random() * playlist.length);
       if (next === index) next = (next + 1) % playlist.length;
@@ -297,18 +266,6 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
       <div className="relative flex items-center gap-1 px-3 shrink-0">
         <button
           type="button"
-          onClick={() => {
-            setQueueOpen(q => !q);
-            setMenuOpen(false);
-          }}
-          className={`audio-player-btn audio-player-queue-btn p-1.5 rounded-full transition-colors ${queueOpen ? 'audio-player-btn-active' : ''}`}
-          title="Up next"
-          aria-expanded={queueOpen}
-        >
-          <ListMusic className="w-4 h-4" />
-        </button>
-        <button
-          type="button"
           onClick={() => setShuffle(s => !s)}
           className={`audio-player-btn p-1.5 rounded-full transition-colors ${shuffle ? 'audio-player-btn-active' : ''}`}
           title="Shuffle"
@@ -325,121 +282,13 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({
         </button>
         <button
           type="button"
-          onClick={() => {
-            setMenuOpen(m => !m);
-            setQueueOpen(false);
-          }}
-          className="audio-player-btn audio-player-more-btn p-1.5 rounded-full transition-colors"
-          title="More"
+          onClick={onClose}
+          className="audio-player-btn p-1.5 rounded-full transition-colors"
+          title="Close player"
+          aria-label="Close player"
         >
-          <MoreHorizontal className="w-4 h-4" />
+          <X className="w-4 h-4" />
         </button>
-
-        {menuOpen && (
-          <div className="audio-player-menu absolute right-2 bottom-full mb-2 min-w-[140px] rounded-lg py-1 z-40 shadow-xl">
-            <button
-              type="button"
-              onClick={onClose}
-              className="audio-player-menu-item w-full flex items-center gap-2 px-3 py-2 text-xs"
-            >
-              <X className="w-3.5 h-3.5" />
-              Close player
-            </button>
-          </div>
-        )}
-
-        {queueOpen && (
-          <div
-            ref={queueRef}
-            className="audio-player-queue absolute right-2 bottom-full mb-2 w-[320px] max-h-[360px] rounded-xl z-40 shadow-xl flex flex-col overflow-hidden"
-          >
-            <div className="audio-player-queue-header px-3 py-2.5 flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-2 min-w-0">
-                <ListMusic className="w-3.5 h-3.5 shrink-0" />
-                <span className="text-xs font-semibold tracking-tight">Up Next</span>
-                <span className="audio-player-queue-count text-[10px] font-mono px-1.5 py-0.5 rounded">
-                  {upNext.length}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setQueueOpen(false)}
-                className="audio-player-btn p-1 rounded-md"
-                title="Close queue"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            <div className="audio-player-queue-now px-3 py-2 shrink-0">
-              <p className="audio-player-queue-label text-[10px] font-semibold uppercase tracking-wider mb-1.5">
-                Now Playing
-              </p>
-              <button
-                type="button"
-                onClick={() => setQueueOpen(false)}
-                className="audio-player-queue-row audio-player-queue-row-current w-full flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-left"
-              >
-                <div className="audio-player-art w-9 h-9 rounded-md overflow-hidden shrink-0">
-                  {art ? (
-                    <img src={art} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full bg-gradient-to-br from-neutral-700 to-neutral-850" />
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-medium truncate">{trackLabel(file)}</p>
-                  <p className="audio-player-time text-[10px] font-mono">
-                    {file.videoMeta ? formatTimecode(file.videoMeta.durationSeconds) : '—'}
-                  </p>
-                </div>
-                {playing && <span className="audio-player-queue-live text-[9px] font-semibold uppercase tracking-wide shrink-0">Live</span>}
-              </button>
-            </div>
-
-            <div className="px-3 pb-1 pt-0.5 shrink-0">
-              <p className="audio-player-queue-label text-[10px] font-semibold uppercase tracking-wider">
-                Next Playing
-              </p>
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5 min-h-0">
-              {upNext.length === 0 ? (
-                <p className="audio-player-time text-xs px-2 py-3">No more tracks in the queue.</p>
-              ) : (
-                upNext.map((track, i) => (
-                  <button
-                    key={track.id}
-                    type="button"
-                    onClick={() => {
-                      onSelectTrack(track);
-                      setQueueOpen(false);
-                    }}
-                    className="audio-player-queue-row w-full flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-left"
-                  >
-                    <span className="audio-player-time text-[10px] font-mono w-4 shrink-0 text-center">
-                      {i + 1}
-                    </span>
-                    <div className="audio-player-art w-9 h-9 rounded-md overflow-hidden shrink-0">
-                      {track.thumbnailUrl ? (
-                        <img src={track.thumbnailUrl} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-neutral-700 to-neutral-850" />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-medium truncate">{trackLabel(track)}</p>
-                      <p className="audio-player-time text-[10px] font-mono truncate">
-                        {track.videoMeta ? formatTimecode(track.videoMeta.durationSeconds) : '—'}
-                      </p>
-                    </div>
-                    <Play className="audio-player-queue-play w-3 h-3 shrink-0 opacity-0" />
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Folder, RotateCcw, Trash2, ChevronRight, HardDrive, Search } from '@/src/icons';
+import { Folder, RotateCcw, Trash2, ChevronRight, HardDrive, Search, SquareTerminal } from '@/src/icons';
 import { FileItem, CloudAccount, FolderItem, SharedLibrary, CloudProviderId, FileCategory } from '../types';
 import { MacViewMode } from './MacFinderToolbar';
 import { LibraryBanner } from './file-browser/LibraryBanner';
@@ -35,13 +35,20 @@ interface FileBrowserProps {
   viewMode: MacViewMode;
   playingAudioFile?: FileItem | null;
   audioPlaylist?: FileItem[];
+  /** What the user queued to play next (song or video), if anything. */
+  audioQueuedNext?: FileItem | null;
   onSelectFile: (file: FileItem) => void;
   onEditPhoto: (file: FileItem) => void;
   onOpenDocument: (file: FileItem) => void;
   onOpenVideo: (file: FileItem) => void;
   onOpenAudio: (file: FileItem) => void;
+  /** The audio bar moved to another track on its own (next, previous or end of song); not a fresh open. */
+  onAudioTrackChange?: (file: FileItem) => void;
   onCloseAudio?: () => void;
   onShareFile: (file: FileItem) => void;
+  /** Whether the system terminal is the open side panel, and how to toggle it. */
+  terminalOpen?: boolean;
+  onShowTerminal?: () => void;
   /** Make the picked files and folders into an outgoing library. */
   onShareAsLibrary?: (selection: { files: FileItem[]; folders: FolderItem[] }) => void;
   onToggleEncrypt: (file: FileItem) => void;
@@ -86,14 +93,18 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   viewMode,
   playingAudioFile = null,
   audioPlaylist = [],
+  audioQueuedNext = null,
   onSelectFile,
   onEditPhoto,
   onOpenDocument,
   onOpenVideo,
   onOpenAudio,
+  onAudioTrackChange,
   onCloseAudio,
   onShareFile,
   onShareAsLibrary,
+  terminalOpen = false,
+  onShowTerminal,
   onToggleEncrypt,
   onDeleteFile,
   onBatchRestore,
@@ -511,9 +522,6 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
               <Folder className="w-8 h-8" />
             </div>
             <p className="text-sm font-medium text-neutral-300">This directory is empty</p>
-            <p className="text-xs text-neutral-400 mt-1 max-w-sm">
-              Drag & drop media files to upload directly into this cloud storage bucket.
-            </p>
           </div>
         )}
 
@@ -572,9 +580,10 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         <AudioPlayerBar
           file={playingAudioFile}
           playlist={audioPlaylist.length > 0 ? audioPlaylist : [playingAudioFile]}
+          queuedNext={audioQueuedNext}
           onSelectTrack={track => {
             selectFile(track);
-            onOpenAudio(track);
+            (onAudioTrackChange ?? onOpenAudio)(track);
           }}
           onClose={() => onCloseAudio?.()}
         />
@@ -637,6 +646,23 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                 aria-label="Icon size"
               />
             </div>
+          )}
+
+          {onShowTerminal && (
+            <button
+              type="button"
+              onClick={onShowTerminal}
+              className={`p-1 rounded-md transition-all ${
+                terminalOpen
+                  ? 'text-[#65a30d] bg-[#65a30d]/15 hover:bg-[#65a30d]/25 border border-[#65a30d]/30'
+                  : 'text-neutral-400 hover:text-white hover:bg-white/10'
+              }`}
+              title={terminalOpen ? 'Terminal open' : 'Show system terminal'}
+              aria-label="Show system terminal"
+              aria-pressed={terminalOpen}
+            >
+              <SquareTerminal className="w-4 h-4" />
+            </button>
           )}
         </div>
       </div>

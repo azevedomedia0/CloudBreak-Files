@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   X, Share2, Users, Shield, Copy, Check, Lock, UserPlus,
-  Mail, Clock, Key, Globe, Eye, Sparkles, ChevronDown, Trash2,
+  Mail, Clock, Key, Globe, Eye, ChevronDown, Trash2,
   Radio, Wifi, ArrowUpRight, ArrowDownLeft, ShieldCheck, Play, Pause, FolderDown, Unlink,
 } from '@/src/icons';
 import { SharedLibrary, SharedMember, P2PPeer } from '../types';
@@ -183,9 +183,8 @@ export const ShareLibraryModal: React.FC<ShareLibraryModalProps> = ({
 
         {/* Status Notification */}
         {showNotification && (
-          <div className="bg-sky-950/60 border-b border-sky-500/30 px-6 py-2.5 text-xs text-sky-200 flex items-center gap-2">
-            <Sparkles className="w-3.5 h-3.5 text-sky-400" />
-            <span>{showNotification}</span>
+          <div role="status" className="bg-sky-950/60 border-b border-sky-500/30 px-6 py-2.5 text-xs text-sky-200">
+            {showNotification}
           </div>
         )}
 

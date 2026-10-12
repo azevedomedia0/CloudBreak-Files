@@ -27,6 +27,10 @@ export interface AppModalsProps {
   setEditingPhotoFile: (file: FileItem | null) => void;
   onEditPhoto?: (file: FileItem) => void;
   setPlayingVideoFile: (file: FileItem | null) => void;
+  /** Where to start the full player window, in seconds (when expanding from the side panel). */
+  videoStartAt?: number;
+  /** Open a video the normal way (the right-hand panel). */
+  onOpenVideo: (file: FileItem) => void;
   sharedLibraries: SharedLibrary[];
   setSharingLibrary: (library: SharedLibrary | null) => void;
   editingPhotoFile: FileItem | null;
@@ -106,6 +110,8 @@ export const AppModals: React.FC<AppModalsProps> = ({
   setEditingPhotoFile,
   onEditPhoto,
   setPlayingVideoFile,
+  videoStartAt = 0,
+  onOpenVideo,
   sharedLibraries,
   setSharingLibrary,
   editingPhotoFile,
@@ -188,7 +194,7 @@ export const AppModals: React.FC<AppModalsProps> = ({
       setIsQuickLookOpen(false);
       onOpenDocument(file);
     }}
-    onOpenVideo={file => setPlayingVideoFile(file)}
+    onOpenVideo={onOpenVideo}
     onShare={file => {
       const firstLib = sharedLibraries[0];
       if (firstLib) setSharingLibrary(firstLib);
@@ -216,6 +222,7 @@ export const AppModals: React.FC<AppModalsProps> = ({
       onClose={() => setPlayingVideoFile(null)}
       onSaveTrimmedVideo={handleSaveTrimmedVideo}
       initialTab={videoPlayerInitialTab}
+      startAt={videoStartAt}
       accounts={accounts}
       folders={folders}
       canPreviousMedia={canPreviousMedia}
