@@ -4,6 +4,7 @@ pub mod credentials_store;
 pub mod oauth_google;
 pub mod oauth_pkce;
 pub mod rclone;
+pub mod window_controls;
 pub mod crypto;
 pub mod local_fs;
 pub mod macos_full_disk_access;
@@ -122,6 +123,7 @@ pub fn run() {
             oauth_pkce::oauth_sign_in,
             oauth_pkce::oauth_refresh,
             oauth_pkce::nextcloud_login_flow,
+            window_controls::set_window_controls_hidden,
             rclone::rclone_status,
             rclone::rclone_google_authorize,
             rclone::rclone_drive_info,

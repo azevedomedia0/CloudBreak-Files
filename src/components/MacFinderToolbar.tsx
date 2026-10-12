@@ -3,13 +3,14 @@ import {
   ChevronLeft, ChevronRight, LayoutGrid, List, Columns,
   GalleryVertical, Search, HardDrive, PanelLeft, Bell,
   ArrowUpDown, ArrowUpAZ, ArrowDownAZ, Check, ListFilter,
-  FileText, Image as ImageIcon, Video, Music, Archive, Star, SquareTerminal,
+  FileText, Image as ImageIcon, Video, Music, Archive, Star, ListMusic,
 } from '@/src/icons';
 import { isTauri } from '@tauri-apps/api/core';
 import { CloudAccount, AppNotification, FileCategory } from '../types';
 import { DateFilter, FileSortDirection, FileSortKey } from '../utils/filterFiles';
 import { NotificationPanel } from './NotificationPanel';
 import { FileInspectorIcon } from './file-browser/FileInspectorIcon';
+import { isMacLike, WindowControls } from './WindowControls';
 
 export type MacViewMode = 'icons' | 'list' | 'columns' | 'gallery';
 
@@ -47,9 +48,10 @@ interface MacFinderToolbarProps {
   onToggleSidebar?: () => void;
   isInspectorOpen?: boolean;
   onToggleInspector?: () => void;
-  /** Right panel content: file inspector vs system terminal. */
-  sidePanelMode?: 'inspector' | 'terminal';
-  onShowTerminal?: () => void;
+  /** Which content the right panel is showing (the inspector button lights up for 'inspector'). */
+  sidePanelMode?: 'inspector' | 'queue' | 'terminal';
+  /** Show or hide the Playing Next queue in the right panel. */
+  onShowQueue?: () => void;
   isNotificationOpen?: boolean;
   onToggleNotifications?: () => void;
   onCloseNotifications?: () => void;
@@ -113,7 +115,7 @@ export const MacFinderToolbar: React.FC<MacFinderToolbarProps> = ({
   isInspectorOpen = true,
   onToggleInspector,
   sidePanelMode = 'inspector',
-  onShowTerminal,
+  onShowQueue,
   isNotificationOpen = false,
   onToggleNotifications,
   onCloseNotifications,
@@ -166,10 +168,9 @@ export const MacFinderToolbar: React.FC<MacFinderToolbarProps> = ({
   return (
     <div data-tauri-drag-region className="h-10 px-3 flex items-center justify-between gap-2 sm:gap-3 macos-toolbar-glass select-none shrink-0 z-30">
 
-      {/* Left Section: Navigation — native traffic lights sit in this row (see trafficLightPosition). */}
+      {/* Left Section: window controls, then the title and navigation. */}
       <div data-tauri-drag-region className="flex items-center gap-2.5 sm:gap-3 shrink-0">
-        {/* Native traffic lights overlay this inset; width clears the cluster before the title. */}
-        {isTauri() && <div data-tauri-drag-region className="w-[60px] self-stretch shrink-0" aria-hidden="true" />}
+        {isMacLike && <WindowControls />}
 
         <span
           data-tauri-drag-region
@@ -529,49 +530,37 @@ export const MacFinderToolbar: React.FC<MacFinderToolbarProps> = ({
         </div>
 
         <div data-tauri-drag-region className="ml-auto shrink-0 flex items-center gap-0.5">
-          {onShowTerminal && (
-            <button
-              type="button"
-              onClick={onShowTerminal}
-              className={`p-1.5 rounded-lg transition-all ${
-                isInspectorOpen && sidePanelMode === 'terminal'
-                  ? 'text-[#65a30d] bg-[#65a30d]/15 hover:bg-[#65a30d]/25 border border-[#65a30d]/30'
-                  : 'text-neutral-400 hover:text-white hover:bg-white/10'
-              }`}
-              title={
-                isInspectorOpen && sidePanelMode === 'terminal'
-                  ? 'Terminal open'
-                  : 'Show system terminal'
-              }
-              aria-label="Show system terminal"
-              aria-pressed={isInspectorOpen && sidePanelMode === 'terminal'}
-            >
-              <SquareTerminal className="w-[18px] h-[18px]" />
-            </button>
-          )}
           {onToggleInspector && (
-            <button
-              type="button"
-              onClick={onToggleInspector}
-              className={`inline-flex items-center justify-center p-1.5 rounded-lg transition-all ${
-                isInspectorOpen && sidePanelMode === 'inspector'
-                  ? 'text-sky-300 bg-sky-400/15 hover:bg-sky-400/25 border border-sky-400/30'
-                  : 'text-neutral-400 hover:text-white hover:bg-white/10'
-              }`}
-              title={
-                isInspectorOpen && sidePanelMode === 'inspector'
-                  ? 'Hide File Inspector'
-                  : 'Show File Inspector'
-              }
-              aria-label={
-                isInspectorOpen && sidePanelMode === 'inspector'
-                  ? 'Hide File Inspector'
-                  : 'Show File Inspector'
-              }
-              aria-pressed={isInspectorOpen && sidePanelMode === 'inspector'}
+            <div
+              role="group"
+              aria-label="Right panel"
+              className="inline-flex items-center rounded-lg border border-white/10 p-0.5 gap-0.5"
             >
-              <FileInspectorIcon className="w-[18px] h-[18px]" />
-            </button>
+              {([
+                { mode: 'inspector' as const, label: 'File Inspector', onClick: onToggleInspector, icon: <FileInspectorIcon className="w-[18px] h-[18px]" /> },
+                { mode: 'queue' as const, label: 'Playing Next', onClick: onShowQueue, icon: <ListMusic className="w-[18px] h-[18px]" /> },
+              ]).map(({ mode, label, onClick, icon }) => {
+                const active = isInspectorOpen && sidePanelMode === mode;
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={onClick}
+                    disabled={!onClick}
+                    className={`inline-flex items-center justify-center p-1.5 rounded-md transition-all ${
+                      active
+                        ? 'text-sky-300 bg-sky-400/15 hover:bg-sky-400/25'
+                        : 'text-neutral-400 hover:text-white hover:bg-white/10'
+                    }`}
+                    title={active ? `Hide ${label}` : `Show ${label}`}
+                    aria-label={active ? `Hide ${label}` : `Show ${label}`}
+                    aria-pressed={active}
+                  >
+                    {icon}
+                  </button>
+                );
+              })}
+            </div>
           )}
         </div>
       </div>
