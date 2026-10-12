@@ -179,6 +179,9 @@ pub fn run() {
             tray::tray_refresh_status,
             terminal::terminal_create,
             terminal::terminal_write,
+            terminal::terminal_write_binary,
+            terminal::terminal_cwd,
+            terminal::terminal_open_url,
             terminal::terminal_resize,
             terminal::terminal_kill,
         ])
