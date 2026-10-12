@@ -28,6 +28,7 @@ import { VideoPlayerModal } from './components/VideoPlayerModal';
 import { PhotoNav } from './components/PhotoNavArrows';
 import { UserProfile } from './components/ProfileSettingsModal';
 import { Toast } from './components/Toast';
+import { UploadConfirmModal } from './components/UploadConfirmModal';
 import { FileBrowser } from './components/FileBrowser';
 import { FileInspector } from './components/FileInspector';
 import { SystemTerminal } from './components/SystemTerminal';
@@ -726,6 +727,7 @@ export default function App() {
     handleRenameFile, handleDuplicateFiles, handleCopyFileNames, handlePasteFiles,
     handleMoveFile, handleCompressFile, handleCompressFiles, clipboardFileIds, handleToggleTag,
     handleBatchRestore, handleBatchDelete, handleUploadFiles, handleUnzipFile, handleDragOver, handleDrop,
+    pendingDrop, confirmPendingDrop, cancelPendingDrop,
   } = useFileActions({
     files,
     setFiles,
@@ -919,6 +921,15 @@ export default function App() {
 
 
       {toastNotification && <Toast message={toastNotification} />}
+
+      {pendingDrop && (
+        <UploadConfirmModal
+          files={pendingDrop}
+          vaultUnlocked={isVaultUnlocked}
+          onConfirm={confirmPendingDrop}
+          onCancel={cancelPendingDrop}
+        />
+      )}
 
       <input
         ref={uploadInputRef}

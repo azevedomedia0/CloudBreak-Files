@@ -643,6 +643,9 @@ export function useFileActions({
     }
   };
 
+  // Files dropped from outside the app wait here until the person confirms in UploadConfirmModal.
+  const [pendingDrop, setPendingDrop] = useState<File[] | null>(null);
+
   // Files dropped from outside the app are added as a local preview. There is no drop overlay.
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -651,13 +654,25 @@ export function useFileActions({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleUploadFiles(e.dataTransfer.files);
+      // Copy now: the browser's FileList is only valid during this event.
+      setPendingDrop(Array.from(e.dataTransfer.files));
     }
   };
+
+  const confirmPendingDrop = () => {
+    const files = pendingDrop;
+    setPendingDrop(null);
+    if (files?.length) void handleUploadFiles(files);
+  };
+
+  const cancelPendingDrop = () => setPendingDrop(null);
 
   return {
     handleSavePhotoVersion,
     handleSaveDocument,
+    pendingDrop,
+    confirmPendingDrop,
+    cancelPendingDrop,
     handleSaveTrimmedVideo,
     handleToggleEncrypt,
     handleDeleteFile,
