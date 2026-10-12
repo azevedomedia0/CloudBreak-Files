@@ -29,6 +29,7 @@ import { PhotoNav } from './components/PhotoNavArrows';
 import { UserProfile } from './components/ProfileSettingsModal';
 import { Toast } from './components/Toast';
 import { UploadConfirmModal } from './components/UploadConfirmModal';
+import { PanelModeSwitch, type RightPanelMode } from './components/PanelModeSwitch';
 import { FileBrowser } from './components/FileBrowser';
 import { FileInspector } from './components/FileInspector';
 import { SystemTerminal } from './components/SystemTerminal';
@@ -762,6 +763,13 @@ export default function App() {
     startVideo(file, undefined, { queueFolder: true, placement });
   };
 
+  /** Show a right-panel mode from the header switch. A video in the side panel gives way, as the toolbar does. */
+  const showRightPanel = (mode: RightPanelMode) => {
+    if (videoInPanel) setPlayingVideoFile(null);
+    setSidePanelMode(mode);
+    setIsInspectorOpen(true);
+  };
+
   /** Start a song or video, closing the other player. */
   const playQueueItem = (file: FileItem) => {
     openFileSelection(file);
@@ -1110,29 +1118,12 @@ export default function App() {
             onGoForward={goForward}
             isSidebarCollapsed={isSidebarCollapsed}
             onToggleSidebar={() => setIsSidebarCollapsed(prev => !prev)}
-            isInspectorOpen={isInspectorOpen}
-            sidePanelMode={sidePanelMode}
-            onShowQueue={() => {
-              if (videoInPanel) {
-                setPlayingVideoFile(null);
-                setSidePanelMode('queue');
-                setIsInspectorOpen(true);
-              } else if (isInspectorOpen && sidePanelMode === 'queue') {
+            isRightPanelOpen={isInspectorOpen || videoInPanel}
+            onToggleRightPanel={() => {
+              if (isInspectorOpen || videoInPanel) {
                 setIsInspectorOpen(false);
+                if (videoInPanel) setPlayingVideoFile(null);
               } else {
-                setSidePanelMode('queue');
-                setIsInspectorOpen(true);
-              }
-            }}
-            onToggleInspector={() => {
-              if (videoInPanel) {
-                setPlayingVideoFile(null);
-                setSidePanelMode('inspector');
-                setIsInspectorOpen(true);
-              } else if (isInspectorOpen && sidePanelMode === 'inspector') {
-                setIsInspectorOpen(false);
-              } else {
-                setSidePanelMode('inspector');
                 setIsInspectorOpen(true);
               }
             }}
@@ -1351,12 +1342,15 @@ export default function App() {
                 onQueueDrop={queueFilesToPlayNext}
                 onRemoveQueued={file => setPlayNextIds(prev => prev.filter(id => id !== file.id))}
                 onClose={() => setIsInspectorOpen(false)}
+                modeSwitch={<PanelModeSwitch mode="queue" onChange={showRightPanel} />}
               />
             )}
 
             {!videoInPanel && isInspectorOpen && sidePanelMode === 'inspector' && (
               <FileInspector
                 file={selectedFile ?? editingDocumentFile}
+                pauseVideo={!!playingVideoFile && videoPlacement === 'window'}
+                modeSwitch={<PanelModeSwitch mode="inspector" onChange={showRightPanel} />}
                 photoNav={photoNav}
                 accounts={accounts}
                 folders={folders}

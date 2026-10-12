@@ -52,6 +52,10 @@ interface FileInspectorProps {
   onClose?: () => void;
   /** Save a cloud file that has to be downloaded first (opens the save dialog when it is ready). */
   onDownloadRemote?: (file: FileItem) => void;
+  /** True while the full video player is open: any video playing here is paused. */
+  pauseVideo?: boolean;
+  /** Replaces the title in the header: the File Inspector / Playing Next switch. */
+  modeSwitch?: React.ReactNode;
   /** Grow to fill leftover horizontal space (e.g. Columns view). */
   expand?: boolean;
   photoNav?: PhotoNav | null;
@@ -82,10 +86,18 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
   photoNav,
   onClose,
   onDownloadRemote,
+  pauseVideo = false,
+  modeSwitch,
 }) => {
   const [isBodyCollapsed, setIsBodyCollapsed] = useState<boolean>(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  // Stop the preview video when the full player takes over, so two videos never play at once.
+  useEffect(() => {
+    if (!pauseVideo || !videoRef.current) return;
+    videoRef.current.pause();
+    setIsPlaying(false);
+  }, [pauseVideo]);
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [duration, setDuration] = useState<number>(file?.videoMeta?.durationSeconds || 15);
   const [isMuted, setIsMuted] = useState<boolean>(false);
@@ -188,10 +200,7 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
         className={panelClass}
       >
         <div className="flex items-center px-3.5 py-2.5 macos-toolbar-glass border-b border-white/8 shrink-0">
-          <div className="flex items-center gap-2 leading-none">
-            <FileInspectorIcon className="w-4 h-4 text-sky-400" title="File Inspector" />
-            <span className="text-xs font-semibold text-neutral-200">File Inspector</span>
-          </div>
+          {modeSwitch ?? (<div className="flex items-center gap-2 leading-none"><FileInspectorIcon className="w-4 h-4 text-sky-400" title="File Inspector" /><span className="text-xs font-semibold text-neutral-200">File Inspector</span></div>)}
           <button
             type="button"
             onClick={onClose}
@@ -238,10 +247,7 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
       
       {/* Inspector Header */}
       <div className="flex items-center px-3.5 py-2.5 macos-toolbar-glass border-b border-white/8 shrink-0">
-        <div className="flex items-center gap-2 leading-none">
-          <FileInspectorIcon className="w-4 h-4 text-sky-400" title="File Inspector" />
-          <span className="text-xs font-semibold text-neutral-200">File Inspector</span>
-        </div>
+        {modeSwitch ?? (<div className="flex items-center gap-2 leading-none"><FileInspectorIcon className="w-4 h-4 text-sky-400" title="File Inspector" /><span className="text-xs font-semibold text-neutral-200">File Inspector</span></div>)}
         <button
           type="button"
           onClick={onClose}
@@ -324,7 +330,8 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                 <img
                   src={nativePreview || file.thumbnailUrl || file.url}
                   alt={file.name}
-                  className="w-full h-full object-cover"
+                  // Whole photo, centred both ways; the frame's black shows around it.
+                  className="absolute inset-0 w-full h-full object-contain"
                   onContextMenu={event => {
                     event.preventDefault();
                     emitFileContextMenu(file, event.clientX, event.clientY);

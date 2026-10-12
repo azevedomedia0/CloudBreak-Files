@@ -138,11 +138,13 @@ interface PlayingNextPanelProps {
   onRemoveQueued?: (file: FileItem) => void;
   /** Hide the panel (the close button in the header). */
   onClose?: () => void;
+  /** Replaces the title in the header: the File Inspector / Playing Next switch. */
+  modeSwitch?: React.ReactNode;
 }
 
 /** Right side panel listing what is playing and what comes next. Thumbnails dragged here play next. */
 export const PlayingNextPanel: React.FC<PlayingNextPanelProps> = ({
-  width = 320, nowPlaying, upcoming, onPlay, queuedIds = [], onQueueDrop, onRemoveQueued, onClose,
+  width = 320, nowPlaying, upcoming, onPlay, queuedIds = [], onQueueDrop, onRemoveQueued, onClose, modeSwitch,
 }) => {
   const { dragOver, zoneProps } = useQueueDropZone(onQueueDrop);
   return (
@@ -154,10 +156,12 @@ export const PlayingNextPanel: React.FC<PlayingNextPanelProps> = ({
       {dragOver && <QueueDropOverlay message={nowPlaying ? 'Drop to play next' : 'Drop to start playing'} />}
 
       <div className="flex items-center justify-between px-3.5 py-2.5 macos-toolbar-glass border-b border-white/8 shrink-0">
-        <div className="flex items-center gap-2 leading-none">
-          <ListMusic className="w-4 h-4 text-sky-400" />
-          <span className="text-xs font-semibold text-neutral-200">Playing Next</span>
-        </div>
+        {modeSwitch ?? (
+          <div className="flex items-center gap-2 leading-none">
+            <ListMusic className="w-4 h-4 text-sky-400" />
+            <span className="text-xs font-semibold text-neutral-200">Playing Next</span>
+          </div>
+        )}
         <div className="flex items-center gap-2">
           {nowPlaying && (
             <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/8 text-neutral-300">{upcoming.length}</span>
