@@ -88,6 +88,10 @@ export interface FileItem {
   documentBody?: string;
   /** Absolute path on disk, for files added from a local folder in the desktop app. Edits are saved here. */
   localPath?: string;
+  /** Set for cloud files that have no download link: they are downloaded on demand, then `url` is filled in. */
+  remoteFetch?: { kind: 'rclone'; path: string };
+  /** The downloaded copy in the app's temp folder (what Save copies out). Not a place edits are written. */
+  stagedPath?: string;
   /** Names of outgoing libraries this file is currently seeded in (set for display only). */
   seedingLibraries?: string[];
   /**

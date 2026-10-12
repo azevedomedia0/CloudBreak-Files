@@ -82,6 +82,8 @@ export async function syncRcloneDrive(creds: ProviderCredentials): Promise<{
     sizeBytes: e.sizeBytes,
     mimeType: e.isFolder ? 'inode/directory' : e.mimeType || 'application/octet-stream',
     updatedAt: e.modifiedAt || new Date().toISOString(),
+    // Opened or saved on demand: rclone downloads the file when it is needed.
+    rclonePath: e.isFolder ? undefined : e.path,
   }));
   return { account, entries };
 }

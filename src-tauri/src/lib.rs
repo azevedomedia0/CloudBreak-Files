@@ -128,6 +128,7 @@ pub fn run() {
             rclone::rclone_google_authorize,
             rclone::rclone_drive_info,
             rclone::rclone_drive_list,
+            rclone::rclone_drive_fetch,
             credentials_store::credentials_list,
             credentials_store::credentials_get,
             credentials_store::credentials_save,

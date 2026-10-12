@@ -37,6 +37,8 @@ export interface RemoteEntry {
   updatedAt: string;
   downloadUrl?: string;
   thumbnailUrl?: string;
+  /** Path to pass to the bundled rclone when the file has no download URL (Drive signed in through rclone). */
+  rclonePath?: string;
 }
 
 export interface ProviderAccountInfo {

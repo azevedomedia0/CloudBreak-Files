@@ -68,6 +68,7 @@ import {
 import { p2pBridge } from './services/p2pBridge';
 import { localFs } from './services/localFsBridge';
 import { previewBridge, withNativeRaster } from './services/previewBridge';
+import { downloadRemoteFile } from './services/cloud/remoteFiles';
 import {
   isEditableDocument,
   isPlainTextDocument,
@@ -374,9 +375,61 @@ export default function App() {
     markFileOpened(file.id);
   };
 
+  // Google Drive files signed in through rclone have no URL until they are downloaded. One download per
+  // file at a time: a double-click or a queue advance while it runs waits for the same download.
+  const remoteDownloads = useRef(new Map<string, Promise<FileItem | null>>());
+  const needsDownload = (file: FileItem) => !!file.remoteFetch && !file.url;
+  const downloadRemote = (file: FileItem): Promise<FileItem | null> => {
+    const running = remoteDownloads.current.get(file.id);
+    if (running) return running;
+    showToast(`Downloading “${file.name}”…`);
+    const job = downloadRemoteFile(file)
+      .then(got => {
+        const patch = { url: got.url, stagedPath: got.stagedPath, sizeBytes: got.sizeBytes || file.sizeBytes };
+        setFiles(prev => prev.map(f => (f.id === file.id ? { ...f, ...patch } : f)));
+        return { ...file, ...patch };
+      })
+      .catch(err => {
+        showToast(err instanceof Error ? err.message : String(err));
+        return null;
+      })
+      .finally(() => remoteDownloads.current.delete(file.id));
+    remoteDownloads.current.set(file.id, job);
+    return job;
+  };
+  /** Run `open` with the file, downloading it first when it has to be. */
+  const whenDownloaded = (file: FileItem, open: (ready: FileItem) => void) => {
+    if (!needsDownload(file)) {
+      open(file);
+      return;
+    }
+    void downloadRemote(file).then(ready => {
+      if (ready) open(ready);
+    });
+  };
+  /** Download a cloud file if needed, then copy it out with the save dialog. */
+  const saveRemoteFile = async (file: FileItem) => {
+    const ready = needsDownload(file) ? await downloadRemote(file) : file;
+    if (!ready) return;
+    if (!ready.stagedPath || !localFs.available()) {
+      showToast('Saving needs the Cloudbreak desktop app.');
+      return;
+    }
+    try {
+      const saved = await localFs.saveFromTemp(ready.stagedPath, ready.name);
+      if (saved) showToast(`Saved “${saved.name}”`);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err));
+    }
+  };
+
   /** Open HEIC/RAW/TIFF via a web-viewable raster when needed, then Photo Studio. */
   const openPhotoFile = async (file: FileItem) => {
     openFileSelection(file);
+    if (needsDownload(file)) {
+      whenDownloaded(file, downloaded => { void openPhotoFile(downloaded); });
+      return;
+    }
     const ready = await withNativeRaster(file);
     if (ready.thumbnailUrl && ready.thumbnailUrl !== file.thumbnailUrl) {
       setFiles(prev => prev.map(f => (f.id === file.id ? { ...f, thumbnailUrl: ready.thumbnailUrl, url: ready.url } : f)));
@@ -397,6 +450,10 @@ export default function App() {
   /** Load local text; every extracted body is untrusted external content (strict boundaries). */
   const openDocumentFile = async (file: FileItem) => {
     openFileSelection(file);
+    if (needsDownload(file)) {
+      whenDownloaded(file, downloaded => { void openDocumentFile(downloaded); });
+      return;
+    }
     if (isSystemPreviewDocument(file)) {
       openOtherFile(file);
       return;
@@ -670,6 +727,10 @@ export default function App() {
    * A video that follows another one stays wherever the first was playing.
    */
   const startVideo = (file: FileItem, tab?: 'player' | 'trim' | 'convert', opts?: { queueFolder?: boolean }) => {
+    if (needsDownload(file)) {
+      whenDownloaded(file, downloaded => startVideo(downloaded, tab, opts));
+      return;
+    }
     if (opts?.queueFolder) queueFolderMedia(file);
     setPlayingAudioFile(null);
     setVideoStartAt(0);
@@ -681,6 +742,11 @@ export default function App() {
   /** Start a song or video, closing the other player. */
   const playQueueItem = (file: FileItem) => {
     openFileSelection(file);
+    // A video waits for its download inside startVideo; a song waits here.
+    if (file.category !== 'video' && needsDownload(file)) {
+      whenDownloaded(file, playQueueItem);
+      return;
+    }
     if (file.category === 'video') {
       startVideo(file);
       return;
@@ -1294,12 +1360,9 @@ export default function App() {
                   openFileSelection(file);
                   startVideo(file, tab, { queueFolder: !tab || tab === 'player' });
                 }}
-                onOpenAudio={file => {
-                  setPlayingVideoFile(null);
-                  openFileSelection(file);
-                  setPlayingAudioFile(file);
-                }}
+                onOpenAudio={playQueueItem}
                 onShare={file => openLibraryShare({ files: [file], folders: [] })}
+                onDownloadRemote={file => { void saveRemoteFile(file); }}
                 onClose={() => setIsInspectorOpen(false)}
                 onToggleEncrypt={handleToggleEncrypt}
                 onDeleteFile={handleDeleteFile}

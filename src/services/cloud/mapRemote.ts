@@ -60,6 +60,7 @@ export function mapRemoteEntries(
       updatedAt: entry.updatedAt,
       thumbnailUrl: entry.thumbnailUrl,
       url: entry.downloadUrl || entry.thumbnailUrl || '',
+      remoteFetch: entry.rclonePath ? { kind: 'rclone', path: entry.rclonePath } : undefined,
       starred: false,
       tags: ['Live sync'],
       encryption: {

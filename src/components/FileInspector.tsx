@@ -50,6 +50,8 @@ interface FileInspectorProps {
   width?: number;
   /** Hide the panel (the close button in the header). */
   onClose?: () => void;
+  /** Save a cloud file that has to be downloaded first (opens the save dialog when it is ready). */
+  onDownloadRemote?: (file: FileItem) => void;
   /** Grow to fill leftover horizontal space (e.g. Columns view). */
   expand?: boolean;
   photoNav?: PhotoNav | null;
@@ -79,6 +81,7 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
   expand = false,
   photoNav,
   onClose,
+  onDownloadRemote,
 }) => {
   const [isBodyCollapsed, setIsBodyCollapsed] = useState<boolean>(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -217,6 +220,10 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
   const account = accounts.find(a => a.id === file.accountId);
 
   const handleDownload = () => {
+    if (file.remoteFetch && onDownloadRemote) {
+      onDownloadRemote(file);
+      return;
+    }
     const link = document.createElement('a');
     link.href = file.url;
     link.download = file.name;
