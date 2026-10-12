@@ -4,6 +4,7 @@ import {
   HardDrive, Radio, Shield, FolderDown, RefreshCw,
 } from '@/src/icons';
 import type { RemovableDevice } from '../types';
+import { discoverNetworkServers, type NearbyServerDto } from '../services/volumesBridge';
 import { describeDraft, MAX_LIBRARY_FILES, type LibraryDraft } from '../utils/libraryItems';
 
 function generateInvitePassphrase(length = 20): string {
@@ -774,8 +775,31 @@ export const ConnectServerModal: React.FC<ConnectServerModalProps> = ({
   const [serverName, setServerName] = useState('');
   const [serverAddress, setServerAddress] = useState('');
   const [protocol, setProtocol] = useState<'smb' | 'nfs' | 'sftp' | 'webdav'>('smb');
+  const [nearby, setNearby] = useState<NearbyServerDto[]>([]);
+  const [searching, setSearching] = useState(false);
+
+  // Look for SMB shares on the network each time the panel opens.
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    setSearching(true);
+    setNearby([]);
+    discoverNetworkServers()
+      .then(found => { if (!cancelled) setNearby(found); })
+      .catch(() => { if (!cancelled) setNearby([]); })
+      .finally(() => { if (!cancelled) setSearching(false); });
+    return () => { cancelled = true; };
+  }, [isOpen]);
 
   if (!isOpen) return null;
+
+  // Fill the form from a nearby server; the person still confirms with Add.
+  const pickNearby = (server: NearbyServerDto) => {
+    setServerName(server.name);
+    const portPart = server.port && server.port !== 445 ? `:${server.port}` : '';
+    setServerAddress(`smb://${server.host}${portPart}`);
+    setProtocol('smb');
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -809,6 +833,37 @@ export const ConnectServerModal: React.FC<ConnectServerModalProps> = ({
           >
             <X className="w-4 h-4" />
           </button>
+        </div>
+
+        <div className="px-5 pt-4 space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium text-neutral-300">Nearby on this network</p>
+            {searching && <RefreshCw className="w-3.5 h-3.5 text-neutral-500 animate-spin" />}
+          </div>
+          {!searching && nearby.length === 0 && (
+            <p className="text-[11px] text-neutral-500 leading-relaxed">
+              No SMB shares answered on this network. Connect by address below.
+            </p>
+          )}
+          {nearby.length > 0 && (
+            <ul className="max-h-36 overflow-y-auto space-y-1">
+              {nearby.map(server => (
+                <li key={`${server.name}-${server.host}`}>
+                  <button
+                    type="button"
+                    onClick={() => pickNearby(server)}
+                    className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-sky-400/40 text-left transition-colors"
+                  >
+                    <span className="min-w-0">
+                      <span className="block text-xs font-medium text-neutral-100 truncate">{server.name}</span>
+                      <span className="block text-[10px] font-mono text-neutral-500 truncate">{server.host}</span>
+                    </span>
+                    <span className="text-[10px] font-mono text-sky-300 shrink-0">SMB</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4">

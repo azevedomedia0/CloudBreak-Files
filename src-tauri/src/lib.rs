@@ -11,6 +11,7 @@ pub mod macos_full_disk_access;
 #[cfg(target_os = "macos")]
 pub mod macos_local_network;
 pub mod mounted_volumes;
+pub mod network_discovery;
 pub mod media;
 pub mod preview;
 pub mod p2p;
@@ -169,6 +170,7 @@ pub fn run() {
             mounted_volumes::probe_network_server,
             mounted_volumes::open_network_share,
             mounted_volumes::eject_volume,
+            network_discovery::discover_network_servers,
             macos_full_disk_access::macos_full_disk_access_status,
             macos_full_disk_access::macos_request_full_disk_access,
             p2p::commands::p2p_get_identity,

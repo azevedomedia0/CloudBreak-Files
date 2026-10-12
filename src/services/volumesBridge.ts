@@ -130,3 +130,17 @@ export function persistSavedNetworkServers(servers: SavedNetworkServer[]): void 
     // ignore quota / private mode
   }
 }
+
+export interface NearbyServerDto {
+  name: string;
+  /** The Bonjour host name, e.g. `nas.local`. */
+  host: string;
+  port: number;
+  protocol: string;
+}
+
+/** SMB servers Bonjour can see on this network, found in a few seconds. Empty outside the desktop app. */
+export async function discoverNetworkServers(): Promise<NearbyServerDto[]> {
+  if (!isTauri()) return [];
+  return invoke<NearbyServerDto[]>('discover_network_servers');
+}
