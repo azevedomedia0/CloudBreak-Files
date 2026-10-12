@@ -33,7 +33,6 @@ interface MacFinderToolbarProps {
   onSortKeyChange: (key: FileSortKey) => void;
   sortDirection: FileSortDirection;
   onSortDirectionChange: (dir: FileSortDirection) => void;
-  onQuickLook: () => void;
   hasSelectedFile: boolean;
   onShare: () => void;
   onUploadFiles: (files: FileList) => void;

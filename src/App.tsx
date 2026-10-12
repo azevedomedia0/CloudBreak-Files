@@ -23,6 +23,8 @@ import { localPathFromFolderId } from './components/file-browser/FolderContextMe
 import { FILE_MENU_ACTION_EVENT, type FileMenuActionDetail } from './utils/fileMenuBus';
 import { mergeSystemSearchResults, systemSearchBridge } from './services/systemSearchBridge';
 import { AppModals } from './components/AppModals';
+import { PhotoEditorModal } from './components/PhotoEditorModal';
+import { VideoPlayerModal } from './components/VideoPlayerModal';
 import { PhotoNav } from './components/PhotoNavArrows';
 import { UserProfile } from './components/ProfileSettingsModal';
 import { Toast } from './components/Toast';
@@ -64,7 +66,7 @@ import {
 } from './utils/appPreferences';
 import { p2pBridge } from './services/p2pBridge';
 import { localFs } from './services/localFsBridge';
-import { withNativeRaster } from './services/previewBridge';
+import { previewBridge, withNativeRaster } from './services/previewBridge';
 import {
   isEditableDocument,
   isPlainTextDocument,
@@ -113,7 +115,6 @@ export default function App() {
   const [viewMode, setViewMode] = useState<MacViewMode>(() => loadPreferences().defaultView);
 
   // Modals & Panels
-  const [isQuickLookOpen, setIsQuickLookOpen] = useState<boolean>(false);
   const [editingPhotoFile, setEditingPhotoFile] = useState<FileItem | null>(null);
   const [editingDocumentFile, setEditingDocumentFile] = useState<FileItem | null>(null);
   /** Staged file open waiting on Confirm / Deny — body must not enter the editor until confirmed. */
@@ -157,9 +158,6 @@ export default function App() {
     useResizablePanel({ initial: 240, min: 180, max: 380, grow: 'right' });
   const { width: inspectorWidth, isResizing: isResizingInspector, startResize: startResizeInspector, reset: resetInspectorWidth } =
     useResizablePanel({ initial: 320, min: 260, max: () => Math.max(480, Math.round(window.innerWidth * 0.65)), grow: 'left' });
-  /** Columns view: equal-width columns hug content; inspector stays on the right (resizable). */
-  const columnsInspectorLayout =
-    viewMode === 'columns' && isInspectorOpen && sidePanelMode === 'inspector' && !editingDocumentFile;
 
   const { toast: toastNotification, showToast } = useToast();
 
@@ -324,9 +322,7 @@ export default function App() {
   useWindowControlsHidden(isMacLike);
 
   useGlobalShortcuts({
-    canQuickLook: !!selectedFileId && !editingPhotoFile && !editingDocumentFile && !playingVideoFile && !playingAudioFile && !sharingLibrary,
     onToggleSidebar: () => setIsSidebarCollapsed(prev => !prev),
-    onToggleQuickLook: () => setIsQuickLookOpen(prev => !prev),
   });
 
   const uploadInputRef = useRef<HTMLInputElement>(null);
@@ -387,11 +383,21 @@ export default function App() {
     setEditingPhotoFile(ready);
   };
 
+  /** Files with no viewer in the app (Office, Pages, unknown types) open in the system's default app. */
+  const openOtherFile = (file: FileItem) => {
+    openFileSelection(file);
+    if (file.localPath && previewBridge.available()) {
+      void previewBridge.openWithDefault(file.localPath).catch(() => showToast('Could not open this file'));
+    } else {
+      showToast('Cloudbreak has no viewer for this file type');
+    }
+  };
+
   /** Load local text; every extracted body is untrusted external content (strict boundaries). */
   const openDocumentFile = async (file: FileItem) => {
     openFileSelection(file);
     if (isSystemPreviewDocument(file)) {
-      setIsQuickLookOpen(true);
+      openOtherFile(file);
       return;
     }
 
@@ -957,7 +963,6 @@ export default function App() {
             onSortKeyChange={setSortKey}
             sortDirection={sortDirection}
             onSortDirectionChange={setSortDirection}
-            onQuickLook={() => setIsQuickLookOpen(true)}
             hasSelectedFile={selectedFile !== null}
             onShare={() => {
               if (selectedFile) openLibraryShare({ files: [selectedFile], folders: [] });
@@ -1087,6 +1092,34 @@ export default function App() {
                   setEditingDocumentFile(updated);
                 }}
               />
+            ) : editingPhotoFile ? (
+              <PhotoEditorModal
+                key={editingPhotoFile.id}
+                file={editingPhotoFile}
+                isOpen={true}
+                embedded
+                onClose={() => setEditingPhotoFile(null)}
+                onSaveAsVersion={handleSavePhotoVersion}
+                photoNav={editorPhotoNav}
+              />
+            ) : playingVideoFile && videoPlacement === 'window' ? (
+              <VideoPlayerModal
+                key={playingVideoFile.id}
+                file={playingVideoFile}
+                isOpen={true}
+                embedded
+                onClose={() => setPlayingVideoFile(null)}
+                onSaveTrimmedVideo={handleSaveTrimmedVideo}
+                initialTab={videoPlayerInitialTab}
+                startAt={videoStartAt}
+                accounts={accounts}
+                folders={folders}
+                canPreviousMedia={canPreviousMedia}
+                canNextMedia={canNextMedia}
+                nextMedia={nextVideoFile}
+                onPreviousMedia={onPreviousMedia}
+                onNextMedia={onNextMedia}
+              />
             ) : (
               <FileBrowser
                 files={browserFiles}
@@ -1142,7 +1175,8 @@ export default function App() {
                 onToggleTag={handleToggleTag}
                 onUnzipFile={file => { void handleUnzipFile(file); }}
                 onCompressFiles={items => { void handleCompressFiles(items); }}
-                onOpenQuickLook={() => setIsQuickLookOpen(true)}
+                onAddToPlayingNext={items => queueFilesToPlayNext(items.map(item => item.id))}
+                onOpenOther={openOtherFile}
                 folders={folders}
                 onSelectFolder={id => {
                   if (selectedCategory === 'files' || selectedCategory === 'photo' || selectedCategory === 'video') {
@@ -1159,15 +1193,11 @@ export default function App() {
                 swarmStatus={swarmStatus}
                 onCopyLibraryInvite={() => { void copyLibraryInvite(); }}
                 onRefreshSwarm={() => { void refreshSwarm(); }}
-                hugContent={columnsInspectorLayout}
                 systemSearchActive={searchQuery.trim().length >= 2 && systemSearchBridge.available()}
                 systemSearching={systemSearching}
                 systemHitCount={systemResults.length}
               />
             )}
-
-            {/* Spacer so Columns view keeps equal-width panes while the inspector sits on the right. */}
-            {columnsInspectorLayout && <div className="flex-1 min-w-4" aria-hidden="true" />}
 
             {/* Right panel stays visible on every file screen (browser + document editor) */}
             {(isInspectorOpen || videoInPanel) && (
@@ -1294,31 +1324,10 @@ export default function App() {
       {updateOffer && <UpdateModal offer={updateOffer} onClose={() => setUpdateOffer(null)} />}
 
       <AppModals
-        selectedFile={selectedFile}
-        photoNav={photoNav}
-        editorPhotoNav={editorPhotoNav}
         accounts={accounts}
         folders={folders}
-        isQuickLookOpen={isQuickLookOpen}
-        setIsQuickLookOpen={setIsQuickLookOpen}
-        setEditingPhotoFile={setEditingPhotoFile}
-        onEditPhoto={file => { void openPhotoFile(file); }}
-        setPlayingVideoFile={setPlayingVideoFile}
         sharedLibraries={sharedLibraries}
         setSharingLibrary={setSharingLibrary}
-        editingPhotoFile={editingPhotoFile}
-        onOpenDocument={file => { void openDocumentFile(file); }}
-        handleSavePhotoVersion={handleSavePhotoVersion}
-        playingVideoFile={playingVideoFile && videoPlacement === 'window' ? playingVideoFile : null}
-        videoStartAt={videoStartAt}
-        onOpenVideo={file => startVideo(file, undefined, { queueFolder: true })}
-        handleSaveTrimmedVideo={handleSaveTrimmedVideo}
-        videoPlayerInitialTab={videoPlayerInitialTab}
-        canPreviousMedia={canPreviousMedia}
-        canNextMedia={canNextMedia}
-        nextVideoFile={nextVideoFile}
-        onPreviousMedia={onPreviousMedia}
-        onNextMedia={onNextMedia}
         sharingLibrary={sharingLibrary}
         setSharedLibraries={setSharedLibraries}
         selectedLibraryId={selectedLibraryId}

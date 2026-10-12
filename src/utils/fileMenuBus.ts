@@ -6,7 +6,6 @@ export type FileMenuAction =
   | 'new-folder'
   | 'upload'
   | 'open'
-  | 'quick-look'
   | 'get-info'
   | 'rename'
   | 'duplicate'
@@ -51,7 +50,6 @@ export function fileMenuActionLabel(action: FileMenuAction, encrypted?: boolean)
     case 'new-folder': return 'New Folder';
     case 'upload': return 'Upload Files…';
     case 'open': return 'Open';
-    case 'quick-look': return 'Quick Look';
     case 'get-info': return 'Get Info';
     case 'rename': return 'Rename';
     case 'duplicate': return 'Duplicate';

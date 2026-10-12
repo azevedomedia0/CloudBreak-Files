@@ -26,7 +26,7 @@ export interface ColumnsViewProps {
   onOpenDocument: (file: FileItem) => void;
   onOpenVideo: (file: FileItem) => void;
   onOpenAudio: (file: FileItem) => void;
-  onOpenQuickLook: () => void;
+  onOpenOther: (file: FileItem) => void;
   onFileContextMenu: (file: FileItem, event: React.MouseEvent) => void;
   onFolderContextMenu?: (folder: FolderItem, event: React.MouseEvent) => void;
   onSelectFolder: (folderId: string | null) => void;
@@ -34,15 +34,15 @@ export interface ColumnsViewProps {
 }
 
 /** Shared width so every Columns view pane stays equal (Finder-style). */
-const COLUMN_WIDTH_CLASS = 'w-64';
+const COLUMN_WIDTH_CLASS = 'flex-1 min-w-[16rem]';
 
 export const ColumnsView: React.FC<ColumnsViewProps> = ({
   accent, files, selectedFolder, selectedFileId, selectedIds, folders, totalSize,
-  onSelectFile, onEditPhoto, onOpenDocument, onOpenVideo, onOpenAudio, onOpenQuickLook, onFileContextMenu, onFolderContextMenu, onSelectFolder, toggleSelectOne,
+  onSelectFile, onEditPhoto, onOpenDocument, onOpenVideo, onOpenAudio, onOpenOther, onFileContextMenu, onFolderContextMenu, onSelectFolder, toggleSelectOne,
 }) => (
-    <div className="h-full flex gap-3 overflow-x-auto min-h-[480px] w-max max-w-full">
+    <div className="h-full flex gap-3 overflow-x-auto min-h-[480px] w-full">
       {/* Col 1: Local Files & Folders */}
-      <div className={`${COLUMN_WIDTH_CLASS} macos-glass-card rounded-xl flex flex-col shrink-0 overflow-hidden`}>
+      <div className={`${COLUMN_WIDTH_CLASS} macos-glass-card rounded-xl flex flex-col overflow-hidden`}>
         <div className="px-3 py-2 border-b border-white/8 text-[11px] font-semibold text-neutral-400 uppercase tracking-wider">
           Local Files
         </div>
@@ -104,7 +104,7 @@ export const ColumnsView: React.FC<ColumnsViewProps> = ({
       </div>
 
       {/* Col 2: Files in Folder */}
-      <div className={`${COLUMN_WIDTH_CLASS} macos-glass-card rounded-xl flex flex-col shrink-0 overflow-hidden`}>
+      <div className={`${COLUMN_WIDTH_CLASS} macos-glass-card rounded-xl flex flex-col overflow-hidden`}>
         <div className="px-3 py-2 border-b border-white/8 text-[11px] font-semibold text-neutral-400 uppercase tracking-wider flex justify-between">
           <span>Items ({files.length})</span>
           <span className="font-mono text-neutral-400">{formatBytes(totalSize)}</span>
@@ -135,7 +135,7 @@ export const ColumnsView: React.FC<ColumnsViewProps> = ({
                   else if (file.category === 'video') onOpenVideo(file);
                   else if (file.category === 'audio') onOpenAudio(file);
                   else if (isEditableDocument(file)) onOpenDocument(file);
-                  else onOpenQuickLook();
+                  else onOpenOther(file);
                 }}
                 className={`group w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs transition-all cursor-pointer ${
                   isCurrent

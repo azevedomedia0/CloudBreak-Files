@@ -1,5 +1,5 @@
 import React from 'react';
-import { RefreshCw, Check, Sparkles, HardDrive, Monitor, FolderOpen } from '@/src/icons';
+import { RefreshCw, Check, HardDrive, Monitor, FolderOpen } from '@/src/icons';
 import { VideoTrimIcon } from './VideoTrimIcon';
 import { VideoConvertOptions, FileItem, CloudAccount, CloudProviderId, FolderItem, isAudioConvertFormat } from '../../types';
 import { formatTimecode } from '../../utils/format';
@@ -281,10 +281,7 @@ export const ConvertPanel: React.FC<ConvertPanelProps> = ({
       {isTranscoding ? (
         <div className="p-4 bg-neutral-950/80 rounded-xl border border-neutral-800 space-y-3">
           <div className="flex items-center justify-between text-xs text-neutral-300">
-            <span className="flex items-center gap-1.5">
-              <Sparkles className="w-4 h-4 text-amber-400 animate-spin" />
-              <span>Converting...</span>
-            </span>
+            <span>Converting...</span>
             <span className="font-mono text-amber-400 font-semibold">{transcodeProgress}%</span>
           </div>
           <div className="w-full bg-neutral-800 h-2 rounded-full overflow-hidden">

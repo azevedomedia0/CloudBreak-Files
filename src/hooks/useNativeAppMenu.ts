@@ -43,7 +43,6 @@ export function useNativeAppMenu(state: NativeAppMenuState) {
           upload,
           sep1,
           open,
-          quickLook,
           sep2,
           getInfo,
           rename,
@@ -74,7 +73,6 @@ export function useNativeAppMenu(state: NativeAppMenuState) {
           }),
           PredefinedMenuItem.new({ item: 'Separator' }),
           needsSelection('open', 'Open', 'CmdOrCtrl+Down'),
-          needsSelection('quick-look', 'Quick Look', 'CmdOrCtrl+Y'),
           PredefinedMenuItem.new({ item: 'Separator' }),
           needsSelection('get-info', 'Get Info', 'CmdOrCtrl+I'),
           needsSelection('rename', 'Rename'),
@@ -112,7 +110,6 @@ export function useNativeAppMenu(state: NativeAppMenuState) {
 
         itemsRef.current = new Map([
           ['open', open],
-          ['quick-look', quickLook],
           ['get-info', getInfo],
           ['rename', rename],
           ['duplicate', duplicate],
@@ -130,8 +127,7 @@ export function useNativeAppMenu(state: NativeAppMenuState) {
             upload,
             sep1,
             open,
-            quickLook,
-            sep2,
+              sep2,
             getInfo,
             rename,
             duplicate,

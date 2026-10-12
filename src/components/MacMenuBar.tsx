@@ -19,8 +19,7 @@ type MenuId = 'file' | null;
 const FILE_ITEMS: { action: FileMenuAction; shortcut?: string; needsSelection?: boolean; separatorAfter?: boolean }[] = [
   { action: 'new-folder', shortcut: '⇧⌘N', separatorAfter: true },
   { action: 'upload', shortcut: '⌘U', separatorAfter: true },
-  { action: 'open', shortcut: '⌘↓', needsSelection: true },
-  { action: 'quick-look', shortcut: '␣', needsSelection: true, separatorAfter: true },
+  { action: 'open', shortcut: '⌘↓', needsSelection: true, separatorAfter: true },
   { action: 'get-info', shortcut: '⌘I', needsSelection: true },
   { action: 'rename', needsSelection: true },
   { action: 'duplicate', shortcut: '⌘D', needsSelection: true, separatorAfter: true },

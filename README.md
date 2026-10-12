@@ -27,11 +27,11 @@ Manage local folders, network volumes, multiple cloud accounts, a client-side en
 - Icons, list, columns, and gallery views with icon size control
 - Back / Forward navigation history (folder, account, library, source, category)
 - Hover select checkboxes on file and folder thumbnails
-- Right-click menus on files and folders (Open, Quick Look, Get Info, Rename, Duplicate, Copy, Share, Tags, Trash, and more)
+- Right-click menus on files and folders (Open, Get Info, Rename, Duplicate, Copy, Share, Tags, Trash, and more)
 - Resizable sidebar and File Inspector (including Columns view)
 - Appearance themes: Dark, Midnight, Graphite, and Light (Preferences menu)
 - Spotlight-style “Search This Mac” on desktop (when available)
-- Full-bleed audio player with queue; Quick Look previews
+- Full-bleed audio player with queue
 - System terminal side panel (desktop)
 - Native-feeling macOS chrome: overlay title bar, traffic lights aligned with the toolbar, transparent window
 

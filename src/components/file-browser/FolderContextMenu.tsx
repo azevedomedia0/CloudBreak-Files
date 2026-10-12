@@ -19,7 +19,6 @@ export interface FolderContextMenuProps {
   y: number;
   onClose: () => void;
   onOpen: (folder: FolderItem) => void;
-  onQuickLook: (folder: FolderItem) => void;
   onGetInfo: (folder: FolderItem) => void;
   onRename: (folder: FolderItem) => void;
   onDuplicate: (folders: FolderItem[]) => void;
@@ -38,7 +37,6 @@ export const FolderContextMenu: React.FC<FolderContextMenuProps> = ({
   y,
   onClose,
   onOpen,
-  onQuickLook,
   onGetInfo,
   onRename,
   onDuplicate,
@@ -88,7 +86,6 @@ export const FolderContextMenu: React.FC<FolderContextMenuProps> = ({
   };
 
   const openWith = [
-    { id: 'quick-look', label: 'Quick Look', action: () => onQuickLook(folder) },
     { id: 'folder', label: 'Open Folder', action: () => onOpen(folder) },
   ];
 
@@ -126,7 +123,6 @@ export const FolderContextMenu: React.FC<FolderContextMenuProps> = ({
       <MenuItem label="Get Info" shortcut="⌘I" onClick={() => run(() => onGetInfo(folder))} />
       <MenuItem label="Rename" disabled={multiple} onClick={() => run(() => onRename(folder))} />
       <MenuItem label="Duplicate" shortcut="⌘D" onClick={() => run(() => onDuplicate(targets))} />
-      <MenuItem label="Quick Look" shortcut="Space" onClick={() => run(() => onQuickLook(folder))} />
       <Separator />
       <MenuItem label="Copy" shortcut="⌘C" onClick={() => run(() => onCopy(targets))} />
       {onShareLibrary ? (

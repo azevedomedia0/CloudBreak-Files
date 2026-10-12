@@ -43,6 +43,8 @@ interface VideoPlayerModalProps {
   nextMedia?: FileItem | null;
   onPreviousMedia?: () => void;
   onNextMedia?: () => void;
+  /** Fill the center pane instead of floating over the app. */
+  embedded?: boolean;
 }
 
 export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
@@ -59,6 +61,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   nextMedia = null,
   onPreviousMedia,
   onNextMedia,
+  embedded = false,
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -507,8 +510,14 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-2 sm:p-4">
-      <div className="relative flex flex-col w-full h-full bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden shadow-2xl">
+    <div className={embedded
+      ? 'flex-1 min-w-0 min-h-0 flex'
+      : 'fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-2 sm:p-4'}
+    >
+      <div className={embedded
+        ? 'relative flex flex-col w-full h-full min-h-0 bg-neutral-900 overflow-hidden'
+        : 'relative flex flex-col w-full h-full bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden shadow-2xl'}
+      >
         
         {/* Header */}
         <PlayerHeader file={file} duration={duration} activeTab={activeTab} setActiveTab={setActiveTab} onClose={onClose} />
@@ -525,9 +534,9 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
         )}
 
         {/* Video Viewport & Controls */}
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 min-w-0 min-h-0 overflow-hidden">
           
-          <div ref={stageRef} className="flex-1 flex flex-col bg-neutral-950 relative">
+          <div ref={stageRef} className="flex-1 min-w-0 flex flex-col bg-neutral-950 relative">
             
             {/* Main Video Screen */}
             <div 

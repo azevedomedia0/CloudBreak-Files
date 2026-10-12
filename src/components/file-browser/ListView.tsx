@@ -43,7 +43,7 @@ export interface ListViewProps {
   onOpenVideo: (file: FileItem) => void;
   onOpenAudio: (file: FileItem) => void;
   onShareFile: (file: FileItem) => void;
-  onOpenQuickLook: () => void;
+  onOpenOther: (file: FileItem) => void;
   onFileContextMenu: (file: FileItem, event: React.MouseEvent) => void;
   onFolderContextMenu?: (folder: FolderItem, event: React.MouseEvent) => void;
   toggleSelectOne: (id: string, e: React.MouseEvent) => void;
@@ -53,7 +53,7 @@ export interface ListViewProps {
 
 export const ListView: React.FC<ListViewProps> = ({
   accent, files, folders = [], selectedFileId, selectedIds, scrollParentRef,
-  onSelectFile, onOpenFolder, onEditPhoto, onOpenDocument, onOpenVideo, onOpenAudio, onShareFile, onOpenQuickLook, onFileContextMenu, onFolderContextMenu, toggleSelectOne, toggleSelectAll, getAccount,
+  onSelectFile, onOpenFolder, onEditPhoto, onOpenDocument, onOpenVideo, onOpenAudio, onShareFile, onOpenOther, onFileContextMenu, onFolderContextMenu, toggleSelectOne, toggleSelectAll, getAccount,
 }) => {
   const localScrollRef = useRef<HTMLDivElement>(null);
   const rows = useMemo<Row[]>(() => {
@@ -185,7 +185,7 @@ export const ListView: React.FC<ListViewProps> = ({
                 else if (file.category === 'video') onOpenVideo(file);
                 else if (file.category === 'audio') onOpenAudio(file);
                 else if (isEditableDocument(file)) onOpenDocument(file);
-                else onOpenQuickLook();
+                else onOpenOther(file);
               }}
               className={`group grid items-center px-3 cursor-pointer transition-colors border-b border-white/5 text-xs ${
                 isCurrent

@@ -10,7 +10,7 @@ import { GalleryView } from './file-browser/GalleryView';
 import { FileContextMenu, FileRenameField } from './file-browser/FileContextMenu';
 import { FolderContextMenu, FolderGetInfo, FolderRenameField } from './file-browser/FolderContextMenu';
 import { FileGetInfo } from './file-browser/FileGetInfo';
-import { isEditableDocument, isMacAppBundle, isSystemPreviewDocument } from '../utils/documentKind';
+import { isEditableDocument, isMacAppBundle } from '../utils/documentKind';
 import { getFolderIcon } from '../utils/folderIcons';
 import { sortLocalRootFolders } from '../utils/defaultLocalFolders';
 import { childFoldersOf, groupFilesByLocalFolders } from '../utils/groupFilesByLocation';
@@ -61,7 +61,8 @@ interface FileBrowserProps {
   onToggleTag: (fileIds: string[], tag: string) => void;
   onUnzipFile: (file: FileItem) => void;
   onCompressFiles?: (files: FileItem[]) => void;
-  onOpenQuickLook: () => void;
+  onAddToPlayingNext?: (files: FileItem[]) => void;
+  onOpenOther: (file: FileItem) => void;
   folders: FolderItem[];
   onSelectFolder: (folderId: string | null) => void;
   onRenameFolder: (folderId: string, name: string) => void;
@@ -73,8 +74,6 @@ interface FileBrowserProps {
   swarmStatus?: SwarmStatus | null;
   onCopyLibraryInvite?: () => void;
   onRefreshSwarm?: () => void;
-  /** Columns mode: size to the equal-width columns so the inspector can fill leftover space. */
-  hugContent?: boolean;
   /** Spotlight “Search This Mac” is active / in flight. */
   systemSearchActive?: boolean;
   systemSearching?: boolean;
@@ -115,7 +114,8 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   onToggleTag,
   onUnzipFile,
   onCompressFiles,
-  onOpenQuickLook,
+  onAddToPlayingNext,
+  onOpenOther,
   folders,
   onSelectFolder,
   onRenameFolder,
@@ -127,7 +127,6 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   swarmStatus = null,
   onCopyLibraryInvite,
   onRefreshSwarm,
-  hugContent = false,
   systemSearchActive = false,
   systemSearching = false,
   systemHitCount = 0,
@@ -215,16 +214,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     else if (file.category === 'audio') onOpenAudio(file);
     else if (isEditableDocument(file)) onOpenDocument(file);
     else if (file.name.toLowerCase().endsWith('.zip') || file.mimeType === 'application/zip') onUnzipFile(file);
-    else if (isSystemPreviewDocument(file)) {
-      // Office / Pages: in-app Quick Look preview (PDF opens in the document editor).
-      onOpenQuickLook();
-    }
-    else onOpenQuickLook();
-  };
-
-  const quickLook = (file: FileItem) => {
-    selectFile(file);
-    onOpenQuickLook();
+    else onOpenOther(file);
   };
 
   const trashFiles = (items: FileItem[]) => {
@@ -319,9 +309,6 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         case 'open':
           openFile(file);
           break;
-        case 'quick-look':
-          quickLook(file);
-          break;
         case 'get-info':
           setInfoFileId(file.id);
           setContextMenu(null);
@@ -355,7 +342,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     return () => window.removeEventListener(FILE_MENU_ACTION_EVENT, onFileMenu);
   }, [
     files, selectedFileId, selectedIds,
-    onCopyFiles, onShareFile, onToggleEncrypt, onBatchDelete, onDeleteFile, onDuplicateFiles, onOpenQuickLook,
+    onCopyFiles, onShareFile, onToggleEncrypt, onBatchDelete, onDeleteFile, onDuplicateFiles, onOpenOther,
     onEditPhoto, onOpenDocument, onOpenVideo, onOpenAudio, onUnzipFile, onSelectFile,
   ]);
 
@@ -378,7 +365,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
             onOpenDocument={onOpenDocument}
             onOpenVideo={onOpenVideo}
             onOpenAudio={onOpenAudio}
-            onOpenQuickLook={onOpenQuickLook}
+            onOpenOther={onOpenOther}
             onFileContextMenu={openContextMenu}
             onFolderContextMenu={openFolderContextMenu}
             toggleSelectOne={toggleSelectOne}
@@ -398,7 +385,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
             onOpenVideo={onOpenVideo}
             onOpenAudio={onOpenAudio}
             onShareFile={onShareFile}
-            onOpenQuickLook={onOpenQuickLook}
+            onOpenOther={onOpenOther}
             onFileContextMenu={openContextMenu}
             onFolderContextMenu={openFolderContextMenu}
             toggleSelectOne={toggleSelectOne}
@@ -441,7 +428,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
       ref={rootRef}
       tabIndex={0}
       onKeyDown={onBrowserKeyDown}
-      className={`${hugContent ? 'shrink-0 w-auto' : 'flex-1 min-w-0'} flex flex-col h-full overflow-hidden select-none relative outline-none`}
+      className={`flex-1 min-w-0 flex flex-col h-full overflow-hidden select-none relative outline-none`}
     >
       
       {/* Batch Selection Banner */}
@@ -516,7 +503,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         className={`flex-1 overflow-y-auto p-4 relative ${viewMode === 'columns' ? 'overflow-x-auto' : 'overflow-x-hidden'}`}
       >
         
-        {files.length === 0 && browseSubfolders.length === 0 && !groupByLocation && (
+        {files.length === 0 && browseSubfolders.length === 0 && !groupByLocation && viewMode !== 'columns' && (
           <div className="h-full flex flex-col items-center justify-center text-center p-8 text-neutral-400">
             <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-neutral-500 mb-3 shadow-inner">
               <Folder className="w-8 h-8" />
@@ -560,13 +547,13 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         ) : (
           <>
             {viewMode === 'icons' && (files.length > 0 || browseSubfolders.length > 0) && (
-              <IconsView accent={accent} files={files} folders={browseSubfolders} selectedFileId={selectedFileId} selectedIds={selectedIds} iconScale={iconScale} onSelectFile={selectFile} onOpenFolder={onSelectFolder} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenAudio={onOpenAudio} onOpenQuickLook={onOpenQuickLook} onFileContextMenu={openContextMenu} onFolderContextMenu={openFolderContextMenu} toggleSelectOne={toggleSelectOne} />
+              <IconsView accent={accent} files={files} folders={browseSubfolders} selectedFileId={selectedFileId} selectedIds={selectedIds} iconScale={iconScale} onSelectFile={selectFile} onOpenFolder={onSelectFolder} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenAudio={onOpenAudio} onOpenOther={onOpenOther} onFileContextMenu={openContextMenu} onFolderContextMenu={openFolderContextMenu} toggleSelectOne={toggleSelectOne} />
             )}
             {viewMode === 'list' && (files.length > 0 || browseSubfolders.length > 0) && (
-              <ListView accent={accent} files={files} folders={browseSubfolders} selectedFileId={selectedFileId} selectedIds={selectedIds} scrollParentRef={browseScrollRef} onSelectFile={selectFile} onOpenFolder={onSelectFolder} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenAudio={onOpenAudio} onShareFile={onShareFile} onOpenQuickLook={onOpenQuickLook} onFileContextMenu={openContextMenu} onFolderContextMenu={openFolderContextMenu} toggleSelectOne={toggleSelectOne} toggleSelectAll={toggleSelectAll} getAccount={getAccount} />
+              <ListView accent={accent} files={files} folders={browseSubfolders} selectedFileId={selectedFileId} selectedIds={selectedIds} scrollParentRef={browseScrollRef} onSelectFile={selectFile} onOpenFolder={onSelectFolder} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenAudio={onOpenAudio} onShareFile={onShareFile} onOpenOther={onOpenOther} onFileContextMenu={openContextMenu} onFolderContextMenu={openFolderContextMenu} toggleSelectOne={toggleSelectOne} toggleSelectAll={toggleSelectAll} getAccount={getAccount} />
             )}
             {viewMode === 'columns' && (
-              <ColumnsView accent={accent} files={files} selectedFolder={selectedFolder} selectedFileId={selectedFileId} selectedIds={selectedIds} folders={folders.filter(f => f.accountId === 'all' ? !f.parentId : true)} totalSize={totalSize} onSelectFile={selectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenAudio={onOpenAudio} onOpenQuickLook={onOpenQuickLook} onFileContextMenu={openContextMenu} onFolderContextMenu={openFolderContextMenu} onSelectFolder={onSelectFolder} toggleSelectOne={toggleSelectOne} />
+              <ColumnsView accent={accent} files={files} selectedFolder={selectedFolder} selectedFileId={selectedFileId} selectedIds={selectedIds} folders={folders.filter(f => f.accountId === 'all' ? !f.parentId : true)} totalSize={totalSize} onSelectFile={selectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenAudio={onOpenAudio} onOpenOther={onOpenOther} onFileContextMenu={openContextMenu} onFolderContextMenu={openFolderContextMenu} onSelectFolder={onSelectFolder} toggleSelectOne={toggleSelectOne} />
             )}
               {viewMode === 'gallery' && selectedFile && (
               <GalleryView accent={accent} files={files} selectedFile={selectedFile} selectedIds={selectedIds} onSelectFile={selectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onFileContextMenu={openContextMenu} toggleSelectOne={toggleSelectOne} />
@@ -675,7 +662,6 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
           y={contextMenu.y}
           onClose={() => setContextMenu(null)}
           onOpen={openFile}
-          onQuickLook={quickLook}
           onGetInfo={file => setInfoFileId(file.id)}
           onRename={file => setRenaming({ file, x: contextMenu.x, y: contextMenu.y })}
           onDuplicate={duplicateFiles}
@@ -684,6 +670,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
           onShareLibrary={onShareAsLibrary ? () => shareSelectionAsLibrary(contextMenu.file) : undefined}
           onUnzip={onUnzipFile}
           onCompress={onCompressFiles}
+          onAddToPlayingNext={onAddToPlayingNext}
           onTrash={trashFiles}
           onToggleTag={(items, tag) => onToggleTag(items.map(item => item.id), tag)}
           onToggleEncrypt={onToggleEncrypt}
@@ -698,7 +685,6 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
           y={folderMenu.y}
           onClose={() => setFolderMenu(null)}
           onOpen={folder => onSelectFolder(folder.id)}
-          onQuickLook={folder => setInfoFolderId(folder.id)}
           onGetInfo={folder => setInfoFolderId(folder.id)}
           onRename={folder => setRenamingFolder({ folder, x: folderMenu.x, y: folderMenu.y })}
           onDuplicate={onDuplicateFolders}

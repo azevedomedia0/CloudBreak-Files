@@ -17,6 +17,8 @@ interface PhotoEditorModalProps {
   onClose: () => void;
   onSaveAsVersion: (updatedFile: FileItem, dataUrl: string) => void;
   photoNav?: PhotoNav | null;
+  /** Fill the center pane instead of floating over the app. */
+  embedded?: boolean;
 }
 
 const ZOOM_MIN = 25;
@@ -252,6 +254,7 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
   onClose,
   onSaveAsVersion,
   photoNav = null,
+  embedded = false,
 }) => {
   const [adjustments, setAdjustments] = useState<PhotoAdjustments>(DEFAULT_ADJUSTMENTS);
   const [activeTab, setActiveTab] = useState<'adjust' | 'presets' | 'geometry'>('adjust');
@@ -761,8 +764,14 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-2 sm:p-4">
-      <div className="app-modal-panel relative flex flex-col w-full h-[95vh] max-w-7xl bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden shadow-2xl">
+    <div className={embedded
+      ? 'flex-1 min-w-0 min-h-0 flex'
+      : 'fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-2 sm:p-4'}
+    >
+      <div className={embedded
+        ? 'relative flex flex-col w-full h-full min-h-0 bg-neutral-900 overflow-hidden'
+        : 'app-modal-panel relative flex flex-col w-full h-[95vh] max-w-7xl bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden shadow-2xl'}
+      >
         
         {/* Top Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-neutral-800 bg-neutral-950/80">
@@ -840,12 +849,12 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
         )}
 
         {/* Main Body */}
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 min-w-0 min-h-0 overflow-hidden">
           
           {/* Canvas Viewport Area */}
           <div
             ref={stageRef}
-            className="flex-1 flex flex-col items-center justify-center p-4 bg-neutral-950/60 relative overflow-hidden select-none"
+            className="flex-1 min-w-0 flex flex-col items-center justify-center p-4 bg-neutral-950/60 relative overflow-hidden select-none"
           >
             {photoNav && <PhotoNavArrows nav={photoNav} />}
 

@@ -13,7 +13,6 @@ export interface FileContextMenuProps {
   y: number;
   onClose: () => void;
   onOpen: (file: FileItem) => void;
-  onQuickLook: (file: FileItem) => void;
   onGetInfo: (file: FileItem) => void;
   onRename: (file: FileItem) => void;
   onDuplicate: (files: FileItem[]) => void;
@@ -23,6 +22,8 @@ export interface FileContextMenuProps {
   onShareLibrary?: (files: FileItem[]) => void;
   onUnzip?: (file: FileItem) => void;
   onCompress?: (files: FileItem[]) => void;
+  /** Queue the selected songs and videos to play after the current one. */
+  onAddToPlayingNext?: (files: FileItem[]) => void;
   onTrash: (files: FileItem[]) => void;
   onToggleTag: (files: FileItem[], tag: string) => void;
   onToggleEncrypt?: (file: FileItem) => void;
@@ -35,7 +36,6 @@ export const FileContextMenu: React.FC<FileContextMenuProps> = ({
   y,
   onClose,
   onOpen,
-  onQuickLook,
   onGetInfo,
   onRename,
   onDuplicate,
@@ -44,6 +44,7 @@ export const FileContextMenu: React.FC<FileContextMenuProps> = ({
   onShareLibrary,
   onUnzip,
   onCompress,
+  onAddToPlayingNext,
   onTrash,
   onToggleTag,
   onToggleEncrypt,
@@ -89,7 +90,6 @@ export const FileContextMenu: React.FC<FileContextMenuProps> = ({
 
   const isApp = isMacAppBundle(file);
   const openWith = [
-    { id: 'quick-look', label: 'Quick Look', enabled: true, action: () => onQuickLook(file) },
     { id: 'app', label: 'Open Application', enabled: isApp, action: () => onOpen(file) },
     { id: 'photo', label: 'Photo Studio', enabled: file.category === 'photo' && !isApp, action: () => onOpen(file) },
     { id: 'video', label: 'Video Player', enabled: file.category === 'video', action: () => onOpen(file) },
@@ -135,6 +135,9 @@ export const FileContextMenu: React.FC<FileContextMenuProps> = ({
       {onUnzip && isZipArchive(file) && !multiple && (
         <MenuItem label="Unzip / Extract" onClick={() => run(() => onUnzip(file))} />
       )}
+      {onAddToPlayingNext && targets.some(item => item.category === 'audio' || item.category === 'video') && (
+        <MenuItem label="Add to Playing Next" onClick={() => run(() => onAddToPlayingNext(targets))} />
+      )}
 
       <Separator />
       <MenuItem label="Move to Trash" onClick={() => run(() => onTrash(targets))} />
@@ -149,7 +152,6 @@ export const FileContextMenu: React.FC<FileContextMenuProps> = ({
         />
       )}
       <MenuItem label="Duplicate" shortcut="⌘D" onClick={() => run(() => onDuplicate(targets))} />
-      <MenuItem label="Quick Look" shortcut="Space" onClick={() => run(() => onQuickLook(file))} />
       <Separator />
       <MenuItem label="Copy" shortcut="⌘C" onClick={() => run(() => onCopy(targets))} />
       {onShareLibrary ? (

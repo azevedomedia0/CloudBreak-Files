@@ -1,10 +1,7 @@
 import React from 'react';
 import type { LibraryDraft } from '../utils/libraryItems';
 import { CloudAccount, CloudProviderId, FileItem, FolderItem, RemovableDevice, SharedLibrary } from '../types';
-import { QuickLookModal } from './QuickLookModal';
 import { PhotoNav } from './PhotoNavArrows';
-import { PhotoEditorModal } from './PhotoEditorModal';
-import { VideoPlayerModal } from './VideoPlayerModal';
 import { ShareLibraryModal } from './ShareLibraryModal';
 import { VaultSecurityModal } from './VaultSecurityModal';
 import { ProfileSettingsModal, UserProfile } from './ProfileSettingsModal';
@@ -17,33 +14,10 @@ import {
 } from './SidebarModals';
 
 export interface AppModalsProps {
-  selectedFile: FileItem | null;
-  photoNav: PhotoNav | null;
-  editorPhotoNav?: PhotoNav | null;
   accounts: CloudAccount[];
   folders: FolderItem[];
-  isQuickLookOpen: boolean;
-  setIsQuickLookOpen: (open: boolean) => void;
-  setEditingPhotoFile: (file: FileItem | null) => void;
-  onEditPhoto?: (file: FileItem) => void;
-  setPlayingVideoFile: (file: FileItem | null) => void;
-  /** Where to start the full player window, in seconds (when expanding from the side panel). */
-  videoStartAt?: number;
-  /** Open a video the normal way (the right-hand panel). */
-  onOpenVideo: (file: FileItem) => void;
   sharedLibraries: SharedLibrary[];
   setSharingLibrary: (library: SharedLibrary | null) => void;
-  editingPhotoFile: FileItem | null;
-  onOpenDocument: (file: FileItem) => void;
-  handleSavePhotoVersion: (file: FileItem, dataUrl: string) => void;
-  playingVideoFile: FileItem | null;
-  handleSaveTrimmedVideo: (file: FileItem) => void;
-  videoPlayerInitialTab: 'player' | 'trim' | 'convert';
-  canPreviousMedia?: boolean;
-  canNextMedia?: boolean;
-  nextVideoFile?: FileItem | null;
-  onPreviousMedia?: () => void;
-  onNextMedia?: () => void;
   sharingLibrary: SharedLibrary | null;
   setSharedLibraries: React.Dispatch<React.SetStateAction<SharedLibrary[]>>;
   selectedLibraryId?: string | null;
@@ -100,31 +74,10 @@ export interface AppModalsProps {
 
 /** Every modal the app can open. Each one renders nothing while it is closed. */
 export const AppModals: React.FC<AppModalsProps> = ({
-  selectedFile,
-  photoNav,
-  editorPhotoNav = null,
   accounts,
   folders,
-  isQuickLookOpen,
-  setIsQuickLookOpen,
-  setEditingPhotoFile,
-  onEditPhoto,
-  setPlayingVideoFile,
-  videoStartAt = 0,
-  onOpenVideo,
   sharedLibraries,
   setSharingLibrary,
-  editingPhotoFile,
-  onOpenDocument,
-  handleSavePhotoVersion,
-  playingVideoFile,
-  handleSaveTrimmedVideo,
-  videoPlayerInitialTab,
-  canPreviousMedia,
-  canNextMedia,
-  nextVideoFile = null,
-  onPreviousMedia,
-  onNextMedia,
   sharingLibrary,
   setSharedLibraries,
   selectedLibraryId = null,
@@ -179,60 +132,6 @@ export const AppModals: React.FC<AppModalsProps> = ({
   handleDisconnectAccount,
 }) => (
   <>
-  {/* macOS Quick Look Preview Modal (Spacebar) */}
-  <QuickLookModal
-    file={selectedFile}
-    accounts={accounts}
-    isOpen={isQuickLookOpen}
-    onClose={() => setIsQuickLookOpen(false)}
-    onEditPhoto={file => {
-      setIsQuickLookOpen(false);
-      if (onEditPhoto) onEditPhoto(file);
-      else setEditingPhotoFile(file);
-    }}
-    onOpenDocument={file => {
-      setIsQuickLookOpen(false);
-      onOpenDocument(file);
-    }}
-    onOpenVideo={onOpenVideo}
-    onShare={file => {
-      const firstLib = sharedLibraries[0];
-      if (firstLib) setSharingLibrary(firstLib);
-    }}
-    photoNav={photoNav}
-  />
-
-  {/* Modal 1: In-Browser Photo Studio */}
-  {editingPhotoFile && (
-    <PhotoEditorModal
-      file={editingPhotoFile}
-      isOpen={true}
-      onClose={() => setEditingPhotoFile(null)}
-      onSaveAsVersion={handleSavePhotoVersion}
-      photoNav={editorPhotoNav}
-    />
-  )}
-
-  {/* Modal 2: Cinema Video Player, Trimmer & Converter */}
-  {playingVideoFile && (
-    <VideoPlayerModal
-      key={playingVideoFile.id}
-      file={playingVideoFile}
-      isOpen={true}
-      onClose={() => setPlayingVideoFile(null)}
-      onSaveTrimmedVideo={handleSaveTrimmedVideo}
-      initialTab={videoPlayerInitialTab}
-      startAt={videoStartAt}
-      accounts={accounts}
-      folders={folders}
-      canPreviousMedia={canPreviousMedia}
-      canNextMedia={canNextMedia}
-      nextMedia={nextVideoFile}
-      onPreviousMedia={onPreviousMedia}
-      onNextMedia={onNextMedia}
-    />
-  )}
-
   {/* Modal 3: Collaborative Shared Media Library Management */}
   {sharingLibrary && (
     <ShareLibraryModal
