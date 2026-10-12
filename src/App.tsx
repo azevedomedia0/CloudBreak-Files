@@ -904,6 +904,38 @@ export default function App() {
     }));
   }, []);
 
+  // The photo and video editors open in the browser's center pane. FileBrowser stays mounted under them,
+  // so the audio bar and whatever is playing in it keep going.
+  const centerEditor = editingPhotoFile ? (
+    <PhotoEditorModal
+      key={editingPhotoFile.id}
+      file={editingPhotoFile}
+      isOpen={true}
+      embedded
+      onClose={() => setEditingPhotoFile(null)}
+      onSaveAsVersion={handleSavePhotoVersion}
+      photoNav={editorPhotoNav}
+    />
+  ) : playingVideoFile && videoPlacement === 'window' ? (
+    <VideoPlayerModal
+      key={playingVideoFile.id}
+      file={playingVideoFile}
+      isOpen={true}
+      embedded
+      onClose={() => setPlayingVideoFile(null)}
+      onSaveTrimmedVideo={handleSaveTrimmedVideo}
+      initialTab={videoPlayerInitialTab}
+      startAt={videoStartAt}
+      accounts={accounts}
+      folders={folders}
+      canPreviousMedia={canPreviousMedia}
+      canNextMedia={canNextMedia}
+      nextMedia={nextVideoFile}
+      onPreviousMedia={onPreviousMedia}
+      onNextMedia={onNextMedia}
+    />
+  ) : null;
+
   return (
     <div 
       className="relative flex flex-col h-screen w-screen overflow-hidden select-none"
@@ -1103,36 +1135,9 @@ export default function App() {
                   setEditingDocumentFile(updated);
                 }}
               />
-            ) : editingPhotoFile ? (
-              <PhotoEditorModal
-                key={editingPhotoFile.id}
-                file={editingPhotoFile}
-                isOpen={true}
-                embedded
-                onClose={() => setEditingPhotoFile(null)}
-                onSaveAsVersion={handleSavePhotoVersion}
-                photoNav={editorPhotoNav}
-              />
-            ) : playingVideoFile && videoPlacement === 'window' ? (
-              <VideoPlayerModal
-                key={playingVideoFile.id}
-                file={playingVideoFile}
-                isOpen={true}
-                embedded
-                onClose={() => setPlayingVideoFile(null)}
-                onSaveTrimmedVideo={handleSaveTrimmedVideo}
-                initialTab={videoPlayerInitialTab}
-                startAt={videoStartAt}
-                accounts={accounts}
-                folders={folders}
-                canPreviousMedia={canPreviousMedia}
-                canNextMedia={canNextMedia}
-                nextMedia={nextVideoFile}
-                onPreviousMedia={onPreviousMedia}
-                onNextMedia={onNextMedia}
-              />
             ) : (
               <FileBrowser
+                centerOverride={centerEditor}
                 files={browserFiles}
                 terminalOpen={isInspectorOpen && sidePanelMode === 'terminal'}
                 onShowTerminal={toggleTerminalPanel}

@@ -63,6 +63,8 @@ interface FileBrowserProps {
   onCompressFiles?: (files: FileItem[]) => void;
   onAddToPlayingNext?: (files: FileItem[]) => void;
   onOpenOther: (file: FileItem) => void;
+  /** Shown in place of the file view (Photo Studio, full video player). The toolbar, audio bar and status bar stay mounted. */
+  centerOverride?: React.ReactNode;
   folders: FolderItem[];
   onSelectFolder: (folderId: string | null) => void;
   onRenameFolder: (folderId: string, name: string) => void;
@@ -116,6 +118,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   onCompressFiles,
   onAddToPlayingNext,
   onOpenOther,
+  centerOverride = null,
   folders,
   onSelectFolder,
   onRenameFolder,
@@ -497,10 +500,13 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         />
       )}
 
+      {/* Stays mounted under an editor so the audio bar keeps playing; hidden rather than unmounted. */}
+      {centerOverride && <div className="flex-1 min-h-0 min-w-0 flex">{centerOverride}</div>}
+
       {/* Main Viewport Content based on macOS View Mode */}
       <div
         ref={browseScrollRef}
-        className={`flex-1 overflow-y-auto p-4 relative ${viewMode === 'columns' ? 'overflow-x-auto' : 'overflow-x-hidden'}`}
+        className={`flex-1 overflow-y-auto p-4 relative ${viewMode === 'columns' ? 'overflow-x-auto' : 'overflow-x-hidden'} ${centerOverride ? 'hidden' : ''}`}
       >
         
         {files.length === 0 && browseSubfolders.length === 0 && !groupByLocation && viewMode !== 'columns' && (
