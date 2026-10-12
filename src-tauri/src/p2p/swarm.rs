@@ -11,7 +11,7 @@ use crate::p2p::protocol::{
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::net::SocketAddr;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream};
@@ -84,12 +84,9 @@ impl SwarmHandle {
             .await
             .map_err(|e| format!("listen failed: {e}"))?;
         let local = listener.local_addr().map_err(|e| e.to_string())?;
-        // Bind all interfaces for inbound invite-dials; publish loopback in invites
-        // when no public multiaddr is configured (still invite-only, not DHT).
-        let listen_addrs = vec![
-            multiaddr_tcp("127.0.0.1", local.port()),
-            multiaddr_tcp("0.0.0.0", local.port()),
-        ];
+        // Bind all interfaces for inbound invite-dials. The invite carries the LAN address
+        // (so another Mac can dial it) and loopback (so a second copy on this Mac can too).
+        let listen_addrs = advertised_addrs(lan_ipv4(), local.port());
 
         let inner = Arc::new(RwLock::new(SwarmInner {
             identity: identity.clone(),
@@ -199,14 +196,7 @@ impl SwarmHandle {
     }
 
     pub fn listen_addrs(&self) -> Vec<String> {
-        // Prefer concrete loopback for invite embedding (0.0.0.0 is not dialable).
-        self.inner
-            .read()
-            .listen_addrs
-            .iter()
-            .filter(|a| !a.contains("0.0.0.0"))
-            .cloned()
-            .collect()
+        self.inner.read().listen_addrs.clone()
     }
 
     /// Private mode: register invite multiaddrs and dial only those.
@@ -404,6 +394,29 @@ fn find_chunk(inner: &Arc<RwLock<SwarmInner>>, cid: &str) -> Option<Vec<u8>> {
     None
 }
 
+/// The address other devices on this network would reach this Mac at, found without sending anything:
+/// connecting a UDP socket to a non-routable address makes the OS pick its outgoing interface.
+/// `None` when there is no network route (offline), or only loopback.
+pub fn lan_ipv4() -> Option<Ipv4Addr> {
+    let socket = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
+    socket.connect("192.0.2.1:9").ok()?; // TEST-NET-1: never routed, nothing is sent
+    match socket.local_addr().ok()?.ip() {
+        IpAddr::V4(ip) if !ip.is_loopback() && !ip.is_unspecified() => Some(ip),
+        _ => None,
+    }
+}
+
+/// The multiaddrs an invite can carry for a listener on `port`, most reachable first.
+/// Never `0.0.0.0`: it is a bind address, not a place to dial.
+pub fn advertised_addrs(lan: Option<Ipv4Addr>, port: u16) -> Vec<String> {
+    let mut addrs = Vec::with_capacity(2);
+    if let Some(ip) = lan {
+        addrs.push(multiaddr_tcp(&ip.to_string(), port));
+    }
+    addrs.push(multiaddr_tcp("127.0.0.1", port));
+    addrs
+}
+
 /// Fetch chunks by dialing **only** invite-embedded multiaddrs for this root_cid.
 async fn fetch_blocks_invite_only(
     inner: Arc<RwLock<SwarmInner>>,
@@ -504,4 +517,39 @@ async fn fetch_blocks_invite_only(
     }
 
     Ok(got)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::p2p::protocol::parse_tcp_multiaddr;
+
+    #[test]
+    fn invite_carries_the_lan_address_before_loopback() {
+        let addrs = advertised_addrs(Some(Ipv4Addr::new(192, 168, 1, 20)), 7421);
+        assert_eq!(addrs, vec!["/ip4/192.168.1.20/tcp/7421", "/ip4/127.0.0.1/tcp/7421"]);
+    }
+
+    #[test]
+    fn offline_mac_still_advertises_loopback() {
+        assert_eq!(advertised_addrs(None, 7421), vec!["/ip4/127.0.0.1/tcp/7421"]);
+    }
+
+    #[test]
+    fn no_advertised_address_is_the_unspecified_bind_address() {
+        for lan in [None, Some(Ipv4Addr::new(10, 0, 0, 5))] {
+            for addr in advertised_addrs(lan, 7421) {
+                let (host, port) = parse_tcp_multiaddr(&addr).expect("valid multiaddr");
+                assert_ne!(host, "0.0.0.0");
+                assert_eq!(port, 7421);
+            }
+        }
+    }
+
+    #[test]
+    fn detected_lan_address_is_routable_ipv4_or_absent() {
+        if let Some(ip) = lan_ipv4() {
+            assert!(!ip.is_loopback() && !ip.is_unspecified());
+        }
+    }
 }
