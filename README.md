@@ -57,7 +57,7 @@ Manage local folders, network volumes, multiple cloud accounts, a client-side en
 
 ### Media tools
 - Photo adjustments (in-app photo studio)
-- Video trim and convert via ffmpeg (bundled in release builds; Homebrew/PATH in development)
+- Video trim and convert via ffmpeg (an LGPL-only build is bundled in release builds; Homebrew/PATH in development)
 - Converted video can be saved with the native save dialog or into a chosen folder
 - Clear in-app messaging when ffmpeg is missing
 

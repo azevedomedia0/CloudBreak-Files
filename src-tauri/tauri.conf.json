@@ -48,7 +48,8 @@
     ],
     "category": "public.app-category.productivity",
     "resources": {
-      "../THIRD-PARTY-NOTICES.md": "THIRD-PARTY-NOTICES.md"
+      "../THIRD-PARTY-NOTICES.md": "THIRD-PARTY-NOTICES.md",
+      "../licenses": "licenses"
     },
     "icon": [
       "icons/32x32.png",

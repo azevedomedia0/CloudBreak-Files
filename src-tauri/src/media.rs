@@ -565,6 +565,91 @@ fn crf_for_quality(quality: &str) -> &'static str {
     }
 }
 
+/// The H.264 encoder an ffmpeg offers. The ffmpeg bundled with Cloudbreak is LGPL-only, so it has no
+/// libx264 (that is GPL); it uses Apple's VideoToolbox instead. A Homebrew or Linux ffmpeg usually has
+/// libx264, which is preferred when it is there.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum H264Encoder {
+    X264,
+    VideoToolbox,
+}
+
+/// Pick from `ffmpeg -encoders` output, where each encoder line reads `<flags> <name> <description>`.
+fn pick_h264_encoder(listing: &str) -> Option<H264Encoder> {
+    let has = |name: &str| listing.lines().any(|line| line.split_whitespace().nth(1) == Some(name));
+    if has("libx264") {
+        Some(H264Encoder::X264)
+    } else if has("h264_videotoolbox") {
+        Some(H264Encoder::VideoToolbox)
+    } else {
+        None
+    }
+}
+
+fn detect_h264_encoder(ffmpeg: &Path) -> Result<H264Encoder, MediaError> {
+    let out = Command::new(ffmpeg)
+        .args(["-hide_banner", "-encoders"])
+        .output()
+        .map_err(|e| MediaError::Message(format!("Failed to spawn ffmpeg: {e}")))?;
+    pick_h264_encoder(&String::from_utf8_lossy(&out.stdout)).ok_or_else(|| {
+        MediaError::Message(
+            "This ffmpeg has no H.264 encoder (libx264 or h264_videotoolbox). \
+             Install one with Homebrew: brew install ffmpeg"
+                .into(),
+        )
+    })
+}
+
+/// VideoToolbox takes a constant quality (0-100) on Apple Silicon and only a bitrate on Intel.
+fn videotoolbox_quality_args(quality: &str) -> [String; 2] {
+    let level = quality.to_ascii_lowercase();
+    if cfg!(target_arch = "aarch64") {
+        let q = match level.as_str() {
+            "lossless" => "90",
+            "high" => "75",
+            "compact" => "45",
+            _ => "60",
+        };
+        ["-q:v".into(), q.into()]
+    } else {
+        let rate = match level.as_str() {
+            "lossless" => "20M",
+            "high" => "10M",
+            "compact" => "2500k",
+            _ => "5M",
+        };
+        ["-b:v".into(), rate.into()]
+    }
+}
+
+fn h264_args(encoder: H264Encoder, quality: &str) -> Vec<String> {
+    match encoder {
+        H264Encoder::X264 => vec![
+            "-c:v".into(),
+            "libx264".into(),
+            "-preset".into(),
+            "medium".into(),
+            "-crf".into(),
+            crf_for_quality(quality).into(),
+            "-pix_fmt".into(),
+            "yuv420p".into(),
+        ],
+        H264Encoder::VideoToolbox => {
+            let mut args: Vec<String> = vec![
+                "-c:v".into(),
+                "h264_videotoolbox".into(),
+                // A Mac with no hardware encoder falls back to software instead of failing.
+                "-allow_sw".into(),
+                "1".into(),
+                "-pix_fmt".into(),
+                "yuv420p".into(),
+            ];
+            args.extend(videotoolbox_quality_args(quality));
+            args
+        }
+    }
+}
+
 /// Trim / transcode with system ffmpeg. Returns metadata for the output file.
 pub fn trim_video_stream(req: &VideoTrimRequest) -> Result<MediaProcessResult, MediaError> {
     if req.end_seconds <= req.start_seconds {
@@ -661,16 +746,7 @@ pub fn trim_video_stream(req: &VideoTrimRequest) -> Result<MediaProcessResult, M
                 }
             }
             "mkv" | "mp4" | _ => {
-                args.extend([
-                    "-c:v".into(),
-                    "libx264".into(),
-                    "-preset".into(),
-                    "medium".into(),
-                    "-crf".into(),
-                    crf.into(),
-                    "-pix_fmt".into(),
-                    "yuv420p".into(),
-                ]);
+                args.extend(h264_args(detect_h264_encoder(&ffmpeg)?, &req.quality));
                 if req.include_audio {
                     args.extend(["-c:a".into(), "aac".into(), "-b:a".into(), "192k".into()]);
                 } else {
@@ -834,7 +910,7 @@ mod tests {
         let input = dir.join("in.mp4");
         let output = dir.join("out.mp4");
 
-        // 1s color bars, silent audio, H.264
+        // 1s color bars with silent audio (MPEG-4 video: every ffmpeg has that encoder, not every one has H.264)
         let status = Command::new(&ffmpeg)
             .args([
                 "-y",
@@ -848,9 +924,7 @@ mod tests {
                 "anullsrc=r=44100:cl=mono",
                 "-shortest",
                 "-c:v",
-                "libx264",
-                "-pix_fmt",
-                "yuv420p",
+                "mpeg4",
                 "-c:a",
                 "aac",
                 "-t",
@@ -878,5 +952,29 @@ mod tests {
         assert!(result.processed_bytes > 0);
         assert!((result.duration_seconds - 0.5).abs() < 0.01);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn h264_encoder_is_picked_from_the_encoder_list() {
+        let both = " V....D libx264              libx264 H.264\n V....D h264_videotoolbox    VideoToolbox H.264 Encoder\n";
+        let lgpl = " V....D h264_videotoolbox    VideoToolbox H.264 Encoder\n A....D aac                  AAC\n";
+        let none = " V....D mpeg4                MPEG-4 part 2\n";
+        assert_eq!(pick_h264_encoder(both), Some(H264Encoder::X264));
+        assert_eq!(pick_h264_encoder(lgpl), Some(H264Encoder::VideoToolbox));
+        assert_eq!(pick_h264_encoder(none), None);
+        // A longer name that merely starts with libx264 is not libx264.
+        assert_eq!(pick_h264_encoder(" V....D libx264rgb  x\n"), None);
+    }
+
+    #[test]
+    fn h264_args_match_the_encoder() {
+        let x264 = h264_args(H264Encoder::X264, "high");
+        assert!(x264.windows(2).any(|w| w == ["-crf", "20"]));
+        assert!(x264.contains(&"libx264".to_string()));
+        let vt = h264_args(H264Encoder::VideoToolbox, "balanced");
+        assert!(vt.contains(&"h264_videotoolbox".to_string()));
+        assert!(vt.windows(2).any(|w| w == ["-allow_sw", "1"]));
+        assert!(!vt.contains(&"-crf".to_string()), "VideoToolbox has no CRF");
+        assert!(vt.iter().any(|a| a == "-q:v" || a == "-b:v"));
     }
 }

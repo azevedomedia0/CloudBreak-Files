@@ -30,3 +30,46 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
+
+## FFmpeg, LAME, Opus and libvpx
+
+Release builds ship an `ffmpeg` program for video trim and convert. It is an **LGPL-only** build of
+FFmpeg 7.1.1: configured without `--enable-gpl` and without `--enable-nonfree`, so none of FFmpeg's
+GPL parts (libx264, libx265 and others) are in it. It is a separate program that Cloudbreak Files
+starts as a subprocess; it is not linked into the app. H.264 video is encoded with Apple's
+VideoToolbox, which is part of macOS.
+
+| Component | Version | License | Source |
+|---|---|---|---|
+| FFmpeg | 7.1.1 | GNU LGPL 2.1 or later | <https://ffmpeg.org/releases/ffmpeg-7.1.1.tar.xz> |
+| LAME (libmp3lame) | 3.100 | GNU LGPL 2.0 | <https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.tar.gz> |
+| Opus (libopus) | 1.5.2 | BSD 3-Clause | <https://downloads.xiph.org/releases/opus/opus-1.5.2.tar.gz> |
+| libvpx | 1.14.1 | BSD 3-Clause | <https://github.com/webmproject/libvpx/archive/refs/tags/v1.14.1.tar.gz> |
+
+The full license texts are in the `licenses` folder next to this file.
+
+**The source.** All four are built unmodified from the tarballs above. The exact build, including the
+pinned SHA-256 of each tarball and FFmpeg's configure options, is `scripts/build-ffmpeg-lgpl.sh` in
+<https://github.com/azevedomedia0/CloudBreak-Files>. Anyone can rebuild the same `ffmpeg` with
+`bash scripts/build-ffmpeg-lgpl.sh` and use it in place of the bundled one, which satisfies the LGPL's
+requirement that the library can be replaced. If those tarballs are ever no longer available at the
+addresses above, open an issue at <https://github.com/azevedomedia0/CloudBreak-Files/issues> and the
+source will be provided.
+
+**The configuration** the bundled binary reports (`ffmpeg -version`). The `--prefix`, `--pkg-config`
+and include and library paths are the build machine's own folders and are left out; `<arch>` is
+`arm64` or `x86_64`:
+
+```
+--arch=<arch> --cc='clang -arch <arch>' --pkg-config-flags=--static
+--extra-cflags='-O2 -mmacosx-version-min=11.0' --extra-ldflags='-mmacosx-version-min=11.0'
+--disable-autodetect --disable-gpl --disable-nonfree --disable-shared --enable-static
+--disable-doc --disable-debug --disable-ffplay --disable-ffprobe
+--enable-libmp3lame --enable-libopus --enable-libvpx
+--enable-videotoolbox --enable-audiotoolbox --enable-zlib --enable-bzlib --enable-iconv
+--extra-libs=-liconv
+```
+
+If you install your own ffmpeg (for example with Homebrew), Cloudbreak Files will use it when the
+bundled one is missing. That copy is yours, under its own license.
+
