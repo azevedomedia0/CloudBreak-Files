@@ -9,7 +9,7 @@ Cloudbreak Files is a desktop app that runs on your computer. We do not run a se
 - **We collect nothing.** There are no Cloudbreak accounts, no analytics, no crash reporting and no advertising.
 - **Your files and credentials stay on your device.** Passwords and sign-in tokens are kept in your operating system's keychain.
 - **The app talks directly to services you choose** (Google Drive, Dropbox, OneDrive, MEGA, Nextcloud, other people's devices for shared libraries). We are not in the middle.
-- **A few background requests happen automatically**: an update check on GitHub and font downloads from Google Fonts. These are listed below.
+- **A few background requests happen automatically**: an update check on GitHub. These are listed below.
 - The source code is public, so you can check all of this: <https://github.com/azevedomedia0/CloudBreak-Files>.
 
 ## What is stored on your device
@@ -42,13 +42,13 @@ These providers handle your data under their own privacy policies. File names, s
 
 **Update check (GitHub).** A short while after the app starts, it asks GitHub (`github.com`) whether a newer release exists. GitHub receives your IP address and standard request details such as the app's user agent. Updates are downloaded only when you choose to install them.
 
-**Fonts (Google Fonts).** The app loads its interface fonts from Google Fonts (`fonts.googleapis.com`, `fonts.gstatic.com`) when it starts, and more fonts if you pick them in the document editor. Google receives your IP address and standard request details.
+**Fonts.** The interface fonts ship inside the app, so nothing is fetched at launch. If you pick a Google Font in the document editor, that font is downloaded from Google Fonts (`fonts.googleapis.com`, `fonts.gstatic.com`) the first time you use it. Google receives your IP address and standard request details, only then.
 
 **Private libraries (peer to peer).** When you create, join or share a private library, the app connects directly to the devices named in an invite. There is no central server, tracker or public peer discovery. While a library is shared, the app listens for connections on TCP port 7421. People you share with can see your IP address and your library peer ID. File contents and library manifests are encrypted.
 
 **Network shares.** If you save an SMB or NFS server, the app checks whether it is reachable by opening a connection to the address you saved.
 
-Everything else (browsing local folders, photo and video editing, the vault, search and the terminal panel) works on your device without a network connection.
+Everything else (browsing local folders, photo and video editing, the vault, search and the terminal panel, and the interface fonts) works on your device without a network connection.
 
 ## Google API data
 

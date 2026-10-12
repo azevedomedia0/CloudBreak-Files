@@ -73,3 +73,15 @@ and include and library paths are the build machine's own folders and are left o
 If you install your own ffmpeg (for example with Homebrew), Cloudbreak Files will use it when the
 bundled one is missing. That copy is yours, under its own license.
 
+## Interface fonts
+
+The app's interface and document fonts are bundled in `src/assets/fonts` and `licenses/`, under the
+SIL Open Font License 1.1. The fonts are unmodified; they were taken from the Fontsource packages
+(`@fontsource-variable/*` 5.3.0) of the original Google Fonts releases.
+
+| Font | Copyright | License text |
+|---|---|---|
+| Plus Jakarta Sans | Copyright 2020 The Plus Jakarta Sans Project Authors (<https://github.com/tokotype/PlusJakartaSans>) | `licenses/plus-jakarta-sans-OFL-1.1.txt` |
+| Newsreader | Copyright 2020 The Newsreader Project Authors (<http://github.com/productiontype/Newsreader>) | `licenses/newsreader-OFL-1.1.txt` |
+| JetBrains Mono | Copyright 2020 The JetBrains Mono Project Authors (<https://github.com/JetBrains/JetBrainsMono>) | `licenses/jetbrains-mono-OFL-1.1.txt` |
+
