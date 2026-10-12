@@ -5,7 +5,7 @@ import {
   Share2, HardDrive, Sparkles, Key,
   ChevronDown, ChevronUp, ChevronRight, Minimize2, Maximize2,
   Play, Pause, RotateCcw, Volume2, VolumeX,
-  Copy, ClipboardPaste, TextCursorInput, FolderInput, FileArchive, FolderPlus,
+  Copy, ClipboardPaste, TextCursorInput, FolderInput, FileArchive, FolderPlus, X,
 } from '@/src/icons';
 import { FileItem, CloudAccount, FolderItem } from '../types';
 import {
@@ -48,6 +48,8 @@ interface FileInspectorProps {
   onNewFolder?: () => void;
   canPaste?: boolean;
   width?: number;
+  /** Hide the panel (the close button in the header). */
+  onClose?: () => void;
   /** Grow to fill leftover horizontal space (e.g. Columns view). */
   expand?: boolean;
   photoNav?: PhotoNav | null;
@@ -76,6 +78,7 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
   width = 320,
   expand = false,
   photoNav,
+  onClose,
 }) => {
   const [isBodyCollapsed, setIsBodyCollapsed] = useState<boolean>(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -186,6 +189,15 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
             <FileInspectorIcon className="w-4 h-4 text-sky-400" title="File Inspector" />
             <span className="text-xs font-semibold text-neutral-200">File Inspector</span>
           </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close file inspector"
+            title="Close file inspector"
+            className="ml-auto p-1 rounded-md text-neutral-400 hover:text-neutral-100 hover:bg-white/10 transition-colors"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
         <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6 text-center">
           <div className="p-3 rounded-2xl bg-white/5 border border-white/10 text-neutral-400 inline-flex items-center justify-center">
@@ -223,6 +235,15 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
           <FileInspectorIcon className="w-4 h-4 text-sky-400" title="File Inspector" />
           <span className="text-xs font-semibold text-neutral-200">File Inspector</span>
         </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close file inspector"
+          title="Close file inspector"
+          className="ml-auto p-1 rounded-md text-neutral-400 hover:text-neutral-100 hover:bg-white/10 transition-colors"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
       </div>
 
       {/* Inspector Body (Collapsible) */}

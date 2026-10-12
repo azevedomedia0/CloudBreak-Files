@@ -54,6 +54,8 @@ interface SystemTerminalProps {
   context: TerminalContext;
   /** The panel stays mounted while hidden so shells keep running; false hides it. */
   visible?: boolean;
+  /** Hide the panel (the close button at the header's left edge). */
+  onClose?: () => void;
 }
 
 let tabSeq = 1;
@@ -596,7 +598,7 @@ const PtyPane: React.FC<{
   );
 };
 
-export const SystemTerminal: React.FC<SystemTerminalProps> = ({ width = 320, context, visible = true }) => {
+export const SystemTerminal: React.FC<SystemTerminalProps> = ({ width = 320, context, visible = true, onClose }) => {
   const [tabs, setTabs] = useState<TerminalTab[]>(() => {
     tabSeq = 1;
     return [createTab()];
@@ -763,6 +765,15 @@ export const SystemTerminal: React.FC<SystemTerminalProps> = ({ width = 320, con
       onDrop={onDrop}
     >
       <div className="terminal-panel-header h-7 px-1.5 flex items-center gap-1 border-b border-white/8 macos-toolbar-glass shrink-0 select-none">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close terminal"
+          title="Close terminal"
+          className="shrink-0 p-1 rounded-md text-neutral-400 hover:text-neutral-100 hover:bg-white/10 transition-colors"
+        >
+          <X className="w-3 h-3" />
+        </button>
         <TerminalIcon className="w-3 h-3 text-[#a3e635] shrink-0 ml-0.5" />
         <span className="text-[10px] font-semibold text-[#ececef] tracking-tight shrink-0">
           Terminal

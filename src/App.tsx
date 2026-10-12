@@ -1218,6 +1218,7 @@ export default function App() {
                   fileNames: filteredFiles.map(f => sanitizeContextLabel(f.name)),
                   libraryNames: sharedLibraries.map(l => sanitizeContextLabel(l.name)),
                 }}
+                onClose={() => setIsInspectorOpen(false)}
               />
             )}
 
@@ -1230,6 +1231,7 @@ export default function App() {
                 queuedIds={playNextIds}
                 onQueueDrop={queueFilesToPlayNext}
                 onRemoveQueued={file => setPlayNextIds(prev => prev.filter(id => id !== file.id))}
+                onClose={() => setIsInspectorOpen(false)}
               />
             )}
 
@@ -1252,6 +1254,7 @@ export default function App() {
                   setPlayingAudioFile(file);
                 }}
                 onShare={file => openLibraryShare({ files: [file], folders: [] })}
+                onClose={() => setIsInspectorOpen(false)}
                 onToggleEncrypt={handleToggleEncrypt}
                 onDeleteFile={handleDeleteFile}
                 onUnzipFile={file => { void handleUnzipFile(file); }}

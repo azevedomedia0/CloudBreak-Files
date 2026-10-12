@@ -136,11 +136,13 @@ interface PlayingNextPanelProps {
   /** Files dragged onto the panel (ids from the browser). */
   onQueueDrop?: (ids: string[]) => void;
   onRemoveQueued?: (file: FileItem) => void;
+  /** Hide the panel (the close button in the header). */
+  onClose?: () => void;
 }
 
 /** Right side panel listing what is playing and what comes next. Thumbnails dragged here play next. */
 export const PlayingNextPanel: React.FC<PlayingNextPanelProps> = ({
-  width = 320, nowPlaying, upcoming, onPlay, queuedIds = [], onQueueDrop, onRemoveQueued,
+  width = 320, nowPlaying, upcoming, onPlay, queuedIds = [], onQueueDrop, onRemoveQueued, onClose,
 }) => {
   const { dragOver, zoneProps } = useQueueDropZone(onQueueDrop);
   return (
@@ -156,9 +158,20 @@ export const PlayingNextPanel: React.FC<PlayingNextPanelProps> = ({
           <ListMusic className="w-4 h-4 text-sky-400" />
           <span className="text-xs font-semibold text-neutral-200">Playing Next</span>
         </div>
-        {nowPlaying && (
-          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/8 text-neutral-300">{upcoming.length}</span>
-        )}
+        <div className="flex items-center gap-2">
+          {nowPlaying && (
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/8 text-neutral-300">{upcoming.length}</span>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close playing next"
+            title="Close playing next"
+            className="p-1 rounded-md text-neutral-400 hover:text-neutral-100 hover:bg-white/10 transition-colors"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
 
       {!nowPlaying ? (
