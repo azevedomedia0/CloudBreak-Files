@@ -111,6 +111,16 @@ const XTERM_THEME_DARK = {
   brightWhite: '#fafafa',
 };
 
+const XTERM_THEME_GLACIAL = {
+  ...XTERM_THEME_DARK,
+  background: '#2b4c59',
+  foreground: '#beceda',
+  cursor: '#beceda',
+  cursorAccent: '#2b4c59',
+  selectionBackground: '#95bccc66',
+  black: '#2b4c59',
+};
+
 const XTERM_THEME_LIGHT = {
   ...XTERM_THEME_DARK,
   background: '#001d3d',
@@ -120,9 +130,9 @@ const XTERM_THEME_LIGHT = {
 };
 
 function currentXtermTheme() {
-  if (typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'light') {
-    return XTERM_THEME_LIGHT;
-  }
+  const theme = typeof document !== 'undefined' ? document.documentElement.getAttribute('data-theme') : null;
+  if (theme === 'light') return XTERM_THEME_LIGHT;
+  if (theme === 'glacial') return XTERM_THEME_GLACIAL;
   return XTERM_THEME_DARK;
 }
 

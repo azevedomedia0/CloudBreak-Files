@@ -1112,3 +1112,436 @@ html[data-theme="light"] [class*="bg-lime-500/"],
 html[data-theme="light"] [class*="bg-cyan-500/"] {
   --tw-bg-opacity: 0.22;
 }
+
+/* —— Glacial Tint appearance: a light theme in four colors —— */
+html[data-theme="glacial"] {
+  /* Glacial Tint: four colors only — #BECEDA, #95BCCC, #988080 and #2B4C59.
+     Blends and alpha washes of these are used for depth and secondary text. */
+  --color-neutral-700: #988080;
+  --color-neutral-750: #95bccc;
+  --color-neutral-800: #95bccc;
+  --color-neutral-850: #95bccc;
+  --color-neutral-900: #beceda;
+  --color-neutral-950: #beceda;
+  --color-neutral-600: color-mix(in srgb, #2b4c59 68%, #beceda);
+  --color-neutral-500: color-mix(in srgb, #2b4c59 78%, #beceda);
+  --color-neutral-400: color-mix(in srgb, #2b4c59 90%, #beceda);
+  --color-neutral-300: #2b4c59;
+  --color-neutral-200: #2b4c59;
+  --color-neutral-100: #2b4c59;
+  --color-neutral-50: #2b4c59;
+  --color-sky-200: #2b4c59;
+  --color-sky-300: #2b4c59;
+  --color-sky-400: #2b4c59;
+  --color-sky-500: #2b4c59;
+  --color-sky-600: #2b4c59;
+  --color-cyan-200: #2b4c59;
+  --color-cyan-300: #2b4c59;
+  --color-cyan-400: #2b4c59;
+  --color-cyan-500: #2b4c59;
+  --color-emerald-200: #2b4c59;
+  --color-emerald-300: #2b4c59;
+  --color-emerald-400: #2b4c59;
+  --color-emerald-500: #2b4c59;
+  --color-emerald-600: #2b4c59;
+  --color-green-200: #2b4c59;
+  --color-green-300: #2b4c59;
+  --color-green-400: #2b4c59;
+  --color-green-500: #2b4c59;
+  --color-purple-200: #2b4c59;
+  --color-purple-300: #988080;
+  --color-purple-400: #2b4c59;
+  --color-purple-500: #988080;
+  --color-violet-200: #2b4c59;
+  --color-violet-300: #988080;
+  --color-violet-400: #2b4c59;
+  --color-violet-500: #988080;
+  --color-indigo-200: #2b4c59;
+  --color-indigo-300: #988080;
+  --color-indigo-400: #2b4c59;
+  --color-indigo-500: #988080;
+  --color-pink-200: #2b4c59;
+  --color-pink-300: #988080;
+  --color-pink-400: #2b4c59;
+  --color-pink-500: #988080;
+  --color-rose-200: #2b4c59;
+  --color-rose-300: #988080;
+  --color-rose-400: #2b4c59;
+  --color-lime-200: #2b4c59;
+  --color-lime-300: #2b4c59;
+  --color-lime-400: #2b4c59;
+  --color-lime-500: #2b4c59;
+  --color-lime-600: #2b4c59;
+  --color-orange-200: #2b4c59;
+  --color-orange-300: #2b4c59;
+  --color-orange-400: #2b4c59;
+  --color-orange-500: #2b4c59;
+  --color-amber-200: #2b4c59;
+  --color-amber-300: #2b4c59;
+  --color-amber-400: #2b4c59;
+  --color-amber-500: #2b4c59;
+  --color-amber-600: #2b4c59;
+  --color-amber-700: #2b4c59;
+  --color-amber-800: #2b4c59;
+  --color-red-200: #2b4c59;
+  --color-red-300: #2b4c59;
+  --color-red-400: #2b4c59;
+  --color-red-500: #2b4c59;
+}
+
+html[data-theme="glacial"] body {
+  color: #2b4c59;
+  background-color: #beceda;
+}
+
+html[data-theme="glacial"] ::-webkit-scrollbar-thumb {
+  background: rgba(43, 76, 89, 0.22);
+}
+html[data-theme="glacial"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(43, 76, 89, 0.34);
+}
+
+html[data-theme="glacial"] .macos-window {
+  background: rgba(190, 206, 218, 0.94);
+  border-color: rgba(43, 76, 89, 0.1);
+  box-shadow:
+    0 25px 70px -15px rgba(43, 76, 89, 0.22),
+    0 0 0 1px rgba(43, 76, 89, 0.06),
+    inset 0 1px 0 0 rgba(190, 206, 218, 0.55);
+}
+
+html[data-theme="glacial"] .macos-sidebar-glass {
+  background: rgba(149, 188, 204, 0.42);
+  border-right-color: rgba(43, 76, 89, 0.1);
+  box-shadow: inset -1px 0 0 0 rgba(190, 206, 218, 0.35);
+}
+
+html[data-theme="glacial"] .macos-toolbar-glass {
+  background: rgba(190, 206, 218, 0.94);
+  border-bottom-color: rgba(43, 76, 89, 0.1);
+  box-shadow: inset 0 1px 0 0 rgba(190, 206, 218, 0.5);
+}
+
+/* Audio player — match light toolbar chrome, edge-to-edge */
+html[data-theme="glacial"] .audio-player-bar {
+  background: rgba(190, 206, 218, 0.97);
+  border-top-color: rgba(43, 76, 89, 0.12);
+  box-shadow:
+    inset 0 1px 0 0 rgba(190, 206, 218, 0.55),
+    0 -6px 18px -12px rgba(43, 76, 89, 0.18);
+  color: #2b4c59;
+}
+html[data-theme="glacial"] .audio-player-title {
+  color: #2b4c59;
+}
+html[data-theme="glacial"] .audio-player-time {
+  color: rgba(43, 76, 89, 0.55);
+}
+html[data-theme="glacial"] .audio-player-divider {
+  background: rgba(43, 76, 89, 0.14);
+}
+html[data-theme="glacial"] .audio-player-art {
+  background: rgba(43, 76, 89, 0.06);
+  border-color: rgba(43, 76, 89, 0.14);
+  box-shadow: inset 0 1px 2px rgba(43, 76, 89, 0.08);
+}
+html[data-theme="glacial"] .audio-player-btn {
+  color: #2b4c59;
+}
+html[data-theme="glacial"] .audio-player-btn:hover {
+  background: rgba(43, 76, 89, 0.08);
+}
+html[data-theme="glacial"] .audio-player-play {
+  border-color: rgba(43, 76, 89, 0.28);
+}
+html[data-theme="glacial"] .audio-player-btn-active {
+  color: #2b4c59;
+  background: rgba(43, 76, 89, 0.12);
+}
+html[data-theme="glacial"] .audio-player-btn-muted {
+  color: rgba(43, 76, 89, 0.4);
+}
+html[data-theme="glacial"] .audio-player-menu {
+  background: rgba(190, 206, 218, 0.98);
+  border-color: rgba(43, 76, 89, 0.12);
+  box-shadow: 0 10px 28px -8px rgba(43, 76, 89, 0.22);
+}
+html[data-theme="glacial"] .audio-player-menu-item {
+  color: #2b4c59;
+}
+html[data-theme="glacial"] .audio-player-menu-item:hover {
+  background: rgba(43, 76, 89, 0.06);
+}
+html[data-theme="glacial"] .audio-scrubber {
+  background: linear-gradient(
+    to right,
+    #2b4c59 0%,
+    #2b4c59 var(--audio-progress, 0%),
+    rgba(43, 76, 89, 0.16) var(--audio-progress, 0%),
+    rgba(43, 76, 89, 0.16) 100%
+  );
+}
+html[data-theme="glacial"] .audio-volume-scrubber {
+  background: linear-gradient(
+    to right,
+    #2b4c59 0%,
+    #2b4c59 var(--audio-volume, 0%),
+    rgba(43, 76, 89, 0.16) var(--audio-volume, 0%),
+    rgba(43, 76, 89, 0.16) 100%
+  );
+}
+html[data-theme="glacial"] .audio-scrubber::-webkit-slider-thumb,
+html[data-theme="glacial"] .audio-volume-scrubber::-webkit-slider-thumb {
+  background: #2b4c59;
+  box-shadow: 0 0 0 2px rgba(43, 76, 89, 0.28);
+}
+html[data-theme="glacial"] .audio-scrubber::-moz-range-thumb,
+html[data-theme="glacial"] .audio-volume-scrubber::-moz-range-thumb {
+  background: #2b4c59;
+}
+
+html[data-theme="glacial"] .audio-player-queue {
+  background: rgba(190, 206, 218, 0.98);
+  border-color: rgba(43, 76, 89, 0.12);
+  color: #2b4c59;
+  box-shadow: 0 14px 36px -10px rgba(43, 76, 89, 0.28);
+}
+html[data-theme="glacial"] .audio-player-queue-header {
+  border-bottom-color: rgba(43, 76, 89, 0.1);
+}
+html[data-theme="glacial"] .audio-player-queue-count {
+  background: rgba(43, 76, 89, 0.08);
+  color: rgba(43, 76, 89, 0.65);
+}
+html[data-theme="glacial"] .audio-player-queue-now {
+  border-bottom-color: rgba(43, 76, 89, 0.08);
+}
+html[data-theme="glacial"] .audio-player-queue-label {
+  color: rgba(43, 76, 89, 0.45);
+}
+html[data-theme="glacial"] .audio-player-queue-row:hover {
+  background: rgba(43, 76, 89, 0.06);
+}
+html[data-theme="glacial"] .audio-player-queue-row-current {
+  background: rgba(43, 76, 89, 0.14);
+}
+html[data-theme="glacial"] .audio-player-queue-live {
+  color: #2b4c59;
+}
+
+/* Glacial Tint terminal — Carbon Fiber console */
+html[data-theme="glacial"] .system-terminal-panel {
+  background-color: #2b4c59 !important;
+  border-left-color: rgba(190, 206, 218, 0.12);
+}
+html[data-theme="glacial"] .system-terminal-panel .terminal-panel-header {
+  background-color: #2b4c59;
+  border-bottom-color: rgba(190, 206, 218, 0.1);
+}
+html[data-theme="glacial"] .system-terminal-panel .xterm,
+html[data-theme="glacial"] .system-terminal-panel .xterm-viewport,
+html[data-theme="glacial"] .system-terminal-panel .xterm-screen {
+  background-color: #2b4c59 !important;
+}
+html[data-theme="glacial"] .system-terminal-panel .bg-white\/5,
+html[data-theme="glacial"] .system-terminal-panel .hover\:bg-white\/5:hover,
+html[data-theme="glacial"] .system-terminal-panel .hover\:bg-white\/10:hover {
+  background-color: rgba(190, 206, 218, 0.06);
+}
+html[data-theme="glacial"] .system-terminal-panel .border-white\/10 {
+  border-color: rgba(190, 206, 218, 0.1);
+}
+/* Undo global light-mode lime darkening inside the terminal */
+html[data-theme="glacial"] .system-terminal-panel [class*="text-lime-"],
+html[data-theme="glacial"] .system-terminal-panel [class*="ring-lime-"] {
+  color: #beceda;
+}
+html[data-theme="glacial"] .system-terminal-panel [class*="border-lime-"] {
+  border-color: rgb(190 206 218 / 0.4);
+}
+html[data-theme="glacial"] .system-terminal-panel [class*="bg-lime-"] {
+  background-color: rgb(190 206 218 / 0.12);
+}
+html[data-theme="glacial"] .system-terminal-panel .xterm {
+  color: #beceda;
+}
+
+html[data-theme="glacial"] .notification-panel,
+html[data-theme="glacial"] .app-modal-panel {
+  box-shadow:
+    0 20px 48px -14px rgba(43, 76, 89, 0.2),
+    0 0 0 1px rgba(43, 76, 89, 0.08);
+}
+
+/* Soften dark P2P banner washes so remapped dark text stays readable */
+html[data-theme="glacial"] .bg-purple-950\/40 {
+  background-color: rgba(43, 76, 89, 0.16);
+}
+html[data-theme="glacial"] .bg-emerald-950\/40 {
+  background-color: rgba(43, 76, 89, 0.16);
+}
+html[data-theme="glacial"] .border-purple-500\/25 {
+  border-color: rgba(43, 76, 89, 0.4);
+}
+html[data-theme="glacial"] .border-emerald-500\/25 {
+  border-color: rgba(43, 76, 89, 0.4);
+}
+
+/* P2P recipients row — deep ink on the tinted banner */
+html[data-theme="glacial"] .p2p-recipients-row .text-neutral-400,
+html[data-theme="glacial"] .p2p-recipients-row .text-white,
+html[data-theme="glacial"] .p2p-recipients-row .text-neutral-200 {
+  color: #2b4c59;
+}
+
+html[data-theme="glacial"] .macos-glass-card {
+  background: rgba(149, 188, 204, 0.2);
+  border-color: rgba(43, 76, 89, 0.1);
+  box-shadow:
+    0 8px 24px -6px rgba(43, 76, 89, 0.16),
+    inset 0 1px 0 0 rgba(190, 206, 218, 0.55);
+}
+
+html[data-theme="glacial"] .macos-glass-card:hover {
+  background: rgba(149, 188, 204, 0.3);
+  border-color: rgba(43, 76, 89, 0.14);
+}
+
+html[data-theme="glacial"] .macos-segmented-pill {
+  background: rgba(43, 76, 89, 0.08);
+  border-color: rgba(43, 76, 89, 0.1);
+  box-shadow: inset 0 1px 2px rgba(43, 76, 89, 0.08);
+}
+
+html[data-theme="glacial"] .gallery-scrubber {
+  scrollbar-color: rgba(43, 76, 89, 0.32) rgba(43, 76, 89, 0.08);
+}
+html[data-theme="glacial"] .gallery-scrubber::-webkit-scrollbar-track {
+  background: rgba(43, 76, 89, 0.08);
+}
+html[data-theme="glacial"] .gallery-scrubber::-webkit-scrollbar-thumb {
+  background: rgba(43, 76, 89, 0.3);
+}
+
+/* Remap common dark-only utilities used across the UI */
+html[data-theme="glacial"] .text-white {
+  color: #2b4c59;
+}
+/* Solid / gradient accent chips keep white glyph ink */
+html[data-theme="glacial"] [class*="bg-sky-"].text-white,
+html[data-theme="glacial"] [class*="bg-purple-"].text-white,
+html[data-theme="glacial"] [class*="bg-cyan-"].text-white,
+html[data-theme="glacial"] [class*="bg-emerald-"].text-white,
+html[data-theme="glacial"] [class*="bg-green-"].text-white,
+html[data-theme="glacial"] [class*="bg-amber-"].text-white,
+html[data-theme="glacial"] [class*="bg-red-"].text-white,
+html[data-theme="glacial"] [class*="bg-rose-"].text-white,
+html[data-theme="glacial"] [class*="bg-violet-"].text-white,
+html[data-theme="glacial"] [class*="bg-indigo-"].text-white,
+html[data-theme="glacial"] [class*="bg-orange-"].text-white,
+html[data-theme="glacial"] [class*="bg-pink-"].text-white,
+html[data-theme="glacial"] [class*="bg-lime-"].text-white,
+html[data-theme="glacial"] [class*="from-sky-"].text-white,
+html[data-theme="glacial"] [class*="from-indigo-"].text-white,
+html[data-theme="glacial"] [class*="bg-\[#0060df\]"].text-white,
+html[data-theme="glacial"] [class*="bg-\[#0250bb\]"].text-white {
+  color: #beceda;
+}
+/* Video / media overlays stay dark — force light ink */
+html[data-theme="glacial"] .bg-black .text-white,
+html[data-theme="glacial"] .bg-black\/50 .text-white,
+html[data-theme="glacial"] .group\/player .text-white,
+html[data-theme="glacial"] .from-black\/90 .text-white {
+  color: #beceda;
+}
+
+html[data-theme="glacial"] .bg-black\/80,
+html[data-theme="glacial"] .bg-black\/60,
+html[data-theme="glacial"] .bg-black\/40,
+html[data-theme="glacial"] .bg-black\/30,
+html[data-theme="glacial"] .bg-black\/25,
+html[data-theme="glacial"] .bg-black\/20 {
+  background-color: rgba(149, 188, 204, 0.35);
+}
+html[data-theme="glacial"] .border-white\/5,
+html[data-theme="glacial"] .border-white\/8,
+html[data-theme="glacial"] .border-white\/10,
+html[data-theme="glacial"] .border-white\/12,
+html[data-theme="glacial"] .border-white\/15 {
+  border-color: rgba(43, 76, 89, 0.14);
+}
+html[data-theme="glacial"] .hover\:bg-white\/5:hover,
+html[data-theme="glacial"] .hover\:bg-white\/6:hover,
+html[data-theme="glacial"] .hover\:bg-white\/10:hover,
+html[data-theme="glacial"] .hover\:bg-white\/12:hover,
+html[data-theme="glacial"] .hover\:bg-white\/15:hover {
+  background-color: rgba(43, 76, 89, 0.07);
+}
+html[data-theme="glacial"] .bg-white\/5,
+html[data-theme="glacial"] .bg-white\/\[0\.04\],
+html[data-theme="glacial"] .bg-white\/10,
+html[data-theme="glacial"] .bg-white\/12,
+html[data-theme="glacial"] .bg-white\/15 {
+  background-color: rgba(43, 76, 89, 0.06);
+}
+html[data-theme="glacial"] .placeholder-neutral-500::placeholder,
+html[data-theme="glacial"] .placeholder-neutral-400::placeholder,
+html[data-theme="glacial"] .placeholder-neutral-600::placeholder {
+  color: #2b4c59;
+}
+
+/* Disabled / idle tab labels stay readable */
+html[data-theme="glacial"] .text-neutral-400\/80,
+html[data-theme="glacial"] .text-neutral-500\/80 {
+  color: rgb(43 76 89 / 0.85);
+}
+
+/* Stronger tinted surfaces so selection / badges stay visible */
+html[data-theme="glacial"] [class*="ring-sky-"],
+html[data-theme="glacial"] [class*="ring-purple-"],
+html[data-theme="glacial"] [class*="ring-emerald-"],
+html[data-theme="glacial"] [class*="ring-orange-"],
+html[data-theme="glacial"] [class*="ring-pink-"],
+html[data-theme="glacial"] [class*="ring-lime-"],
+html[data-theme="glacial"] [class*="ring-cyan-"] {
+  --tw-ring-opacity: 0.55;
+}
+
+html[data-theme="glacial"] [class*="border-sky-"],
+html[data-theme="glacial"] [class*="border-purple-"],
+html[data-theme="glacial"] [class*="border-emerald-"],
+html[data-theme="glacial"] [class*="border-orange-"],
+html[data-theme="glacial"] [class*="border-pink-"],
+html[data-theme="glacial"] [class*="border-lime-"],
+html[data-theme="glacial"] [class*="border-cyan-"] {
+  --tw-border-opacity: 0.45;
+}
+
+html[data-theme="glacial"] [class*="bg-sky-500/"],
+html[data-theme="glacial"] [class*="bg-purple-500/"],
+html[data-theme="glacial"] [class*="bg-emerald-500/"],
+html[data-theme="glacial"] [class*="bg-orange-500/"],
+html[data-theme="glacial"] [class*="bg-pink-500/"],
+html[data-theme="glacial"] [class*="bg-lime-500/"],
+html[data-theme="glacial"] [class*="bg-cyan-500/"] {
+  --tw-bg-opacity: 0.22;
+}
+
+html[data-theme="glacial"] .finder-folder-icon .finder-folder-back {
+  fill: #988080;
+}
+html[data-theme="glacial"] .finder-folder-icon .finder-folder-front {
+  fill: #95bccc;
+}
+html[data-theme="glacial"] .finder-folder-icon .finder-folder-highlight {
+  fill: #beceda;
+}
+html[data-theme="glacial"] .custom-range::-webkit-slider-runnable-track,
+html[data-theme="glacial"] .custom-range::-moz-range-track {
+  background: rgba(43, 76, 89, 0.25);
+}
+html[data-theme="glacial"] .custom-range::-webkit-slider-thumb,
+html[data-theme="glacial"] .custom-range::-moz-range-thumb {
+  background: #2b4c59;
+  box-shadow: 0 0 0 2px rgba(43, 76, 89, 0.3);
+}
