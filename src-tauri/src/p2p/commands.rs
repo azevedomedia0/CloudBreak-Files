@@ -424,21 +424,34 @@ pub async fn p2p_accept_invite(
     })
 }
 
+/// The library's invite with this Mac's addresses as of now. The saved copy carries the addresses
+/// from when it was made, which are stale if Wi-Fi was not up yet or the network changed since.
 #[tauri::command]
-pub fn p2p_export_invite(
+pub async fn p2p_export_invite(
     app: AppHandle,
     state: State<'_, P2pState>,
     library_id: String,
 ) -> Result<String, String> {
     let data = app_data_dir(&app)?;
-    let _ = ensure_identity(&app, &state, "Cloudbreak User")?;
+    let identity = ensure_identity(&app, &state, "Cloudbreak User")?;
     let index = LibraryIndex::load(&data).map_err(|e| e.to_string())?;
     let rec = index
         .get(&library_id)
         .ok_or_else(|| "library not found".to_string())?;
-    rec.last_invite
+    let saved = rec
+        .last_invite
         .clone()
-        .ok_or_else(|| "no invite for this library".to_string())
+        .ok_or_else(|| "no invite for this library".to_string())?;
+    // Only this Mac's own invites can be refreshed: the addresses are signed, and a library received
+    // from someone else carries its sender's signature and addresses.
+    let own = LibraryInvite::decode_unverified(&saved).map_err(|e| e.to_string())?;
+    if own.seeder_peer_id != identity.peer_id {
+        return Ok(saved);
+    }
+    let swarm = ensure_swarm(&app, &state).await?;
+    own.with_seeder_addrs(swarm.listen_addrs(), &identity)
+        .encode()
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

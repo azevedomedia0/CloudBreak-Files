@@ -45,7 +45,9 @@ pub struct SwarmStatus {
 struct SwarmInner {
     identity: PeerIdentity,
     app_data: PathBuf,
-    listen_addrs: Vec<String>,
+    /// The bound port. Advertised addresses are worked out from it when asked for, not stored:
+    /// the Mac's network address can appear (Wi-Fi joins after launch) or change while the app runs.
+    port: u16,
     listening: bool,
     /// root_cid -> set of CIDs we seed
     seeding: HashMap<String, HashSet<String>>,
@@ -86,12 +88,11 @@ impl SwarmHandle {
         let local = listener.local_addr().map_err(|e| e.to_string())?;
         // Bind all interfaces for inbound invite-dials. The invite carries the LAN address
         // (so another Mac can dial it) and loopback (so a second copy on this Mac can too).
-        let listen_addrs = advertised_addrs(lan_ipv4(), local.port());
 
         let inner = Arc::new(RwLock::new(SwarmInner {
             identity: identity.clone(),
             app_data: app_data.clone(),
-            listen_addrs: listen_addrs.clone(),
+            port: local.port(),
             listening: true,
             seeding: HashMap::new(),
             peers: HashMap::new(),
@@ -182,10 +183,11 @@ impl SwarmHandle {
     }
 
     pub fn status(&self) -> SwarmStatus {
+        let listen_addrs = self.listen_addrs();
         let r = self.inner.read();
         SwarmStatus {
             listening: r.listening,
-            listen_addrs: r.listen_addrs.clone(),
+            listen_addrs,
             peer_id: r.identity.peer_id.clone(),
             peers: r.peers.values().cloned().collect(),
             seeding_root_cids: r.seeding.keys().cloned().collect(),
@@ -195,8 +197,10 @@ impl SwarmHandle {
         }
     }
 
+    /// Where other devices can reach this listener right now, most reachable first.
     pub fn listen_addrs(&self) -> Vec<String> {
-        self.inner.read().listen_addrs.clone()
+        let port = self.inner.read().port;
+        advertised_addrs(lan_ipv4(), port)
     }
 
     /// Private mode: register invite multiaddrs and dial only those.
@@ -551,5 +555,18 @@ mod tests {
         if let Some(ip) = lan_ipv4() {
             assert!(!ip.is_loopback() && !ip.is_unspecified());
         }
+    }
+
+    #[tokio::test]
+    async fn a_running_listener_advertises_its_port_as_of_now() {
+        let identity = PeerIdentity::generate("advertise-test");
+        let data = std::env::temp_dir().join(format!("cb-swarm-{}", uuid::Uuid::new_v4()));
+        let swarm = SwarmHandle::start(identity, data.clone(), Some(0)).await.unwrap();
+        let addrs = swarm.listen_addrs();
+        let port = parse_tcp_multiaddr(addrs.last().unwrap()).unwrap().1;
+        assert_ne!(port, 0);
+        assert_eq!(addrs, advertised_addrs(lan_ipv4(), port));
+        assert_eq!(swarm.status().listen_addrs, addrs);
+        let _ = std::fs::remove_dir_all(&data);
     }
 }
