@@ -31,6 +31,12 @@ const MAX_ENTRIES: usize = 400;
 /// A file is fetched whole into the temp folder, so there is a ceiling on what the app will pull down.
 const MAX_FETCH_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 const FETCH_TIMEOUT: Duration = Duration::from_secs(1200);
+/// Every copy `rclone_drive_fetch` writes starts with this, so a sweep never touches the other
+/// files in the media temp folder (ffmpeg output, decrypted P2P files).
+const STAGED_PREFIX: &str = "rclone_";
+/// How long a downloaded copy is kept, and how much of them in total, while the app runs.
+const STAGED_MAX_AGE: Duration = Duration::from_secs(24 * 60 * 60);
+const STAGED_MAX_TOTAL: u64 = 4 * 1024 * 1024 * 1024;
 const INSTALL_HINT: &str =
     "Install rclone with Homebrew: brew install rclone. Release builds of Cloudbreak Files ship a bundled copy.";
 
@@ -394,6 +400,61 @@ fn human_size(bytes: u64) -> String {
     }
 }
 
+/// Delete downloaded Drive copies from `dir`: ones older than `max_age`, then the oldest until what is
+/// left fits in `max_total` bytes. `keep` is never deleted. Half-written `.part` files are only touched
+/// when `include_partial` is set, which is for launch and exit, when no download can be running.
+/// Returns how many files were removed.
+fn sweep_staged(dir: &Path, max_age: Duration, max_total: u64, keep: Option<&Path>, include_partial: bool) -> usize {
+    let Ok(read) = fs::read_dir(dir) else { return 0 };
+    let now = std::time::SystemTime::now();
+    let mut copies: Vec<(PathBuf, u64, std::time::SystemTime)> = read
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let partial = name.ends_with(".part");
+            if !name.starts_with(STAGED_PREFIX) || (partial && !include_partial) {
+                return None;
+            }
+            let meta = entry.metadata().ok().filter(|m| m.is_file())?;
+            Some((entry.path(), meta.len(), meta.modified().unwrap_or(now)))
+        })
+        .filter(|(path, _, _)| Some(path.as_path()) != keep)
+        .collect();
+
+    let mut removed = 0;
+    copies.retain(|(path, _, modified)| {
+        let age = now.duration_since(*modified).unwrap_or_default();
+        if age >= max_age {
+            removed += usize::from(fs::remove_file(path).is_ok());
+            false
+        } else {
+            true
+        }
+    });
+
+    // Still too much: drop the oldest first. The kept file counts toward the total but is not a candidate.
+    let kept_len = keep.and_then(|k| fs::metadata(k).ok()).map_or(0, |m| m.len());
+    let mut total = copies.iter().map(|(_, len, _)| len).sum::<u64>() + kept_len;
+    copies.sort_by_key(|(_, _, modified)| *modified);
+    for (path, len, _) in copies {
+        if total <= max_total {
+            break;
+        }
+        if fs::remove_file(&path).is_ok() {
+            total = total.saturating_sub(len);
+            removed += 1;
+        }
+    }
+    removed
+}
+
+/// Remove every downloaded Drive copy, for launch and exit: nothing from an earlier session is still open.
+pub fn sweep_staged_downloads(app: &AppHandle) {
+    if let Ok(dir) = crate::commands::media_temp_dir(app) {
+        sweep_staged(&dir, Duration::ZERO, 0, None, true);
+    }
+}
+
 /// Download one Drive file into `dir`. The copy is written to a `.part` file and renamed when
 /// rclone finishes, so a cancelled or failed run never leaves a half-file that looks complete.
 /// A copy already there with the size the listing reported is reused.
@@ -438,6 +499,8 @@ async fn fetch_into(dir: &Path, token: &str, path: &str, expected_bytes: u64) ->
         let _ = fs::remove_file(&part);
         format!("Could not save the downloaded file: {e}")
     })?;
+    // Old copies go now, so a long session does not pile them up.
+    sweep_staged(dir, STAGED_MAX_AGE, STAGED_MAX_TOTAL, Some(&dest), false);
     Ok(FetchedFile { path: dest.to_string_lossy().into_owned(), size_bytes: size })
 }
 
@@ -517,6 +580,61 @@ mod tests {
         assert!(validate_token(TOKEN).is_ok());
         assert!(validate_token(r#"{"access_token":"x"}"#).is_err());
         assert!(validate_token("not json").is_err());
+    }
+
+    fn staged_file(dir: &Path, name: &str, bytes: usize, age_secs: u64) -> PathBuf {
+        let path = dir.join(name);
+        fs::write(&path, vec![0u8; bytes]).unwrap();
+        let when = std::time::SystemTime::now() - Duration::from_secs(age_secs);
+        fs::File::options().write(true).open(&path).unwrap().set_modified(when).unwrap();
+        path
+    }
+
+    fn sweep_dir() -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("cb-sweep-{}", random_urlsafe(6)));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn sweep_removes_old_copies_and_leaves_other_files_alone() {
+        let dir = sweep_dir();
+        let old = staged_file(&dir, "rclone_aa_old.jpg", 10, 3 * 86_400);
+        let fresh = staged_file(&dir, "rclone_bb_new.jpg", 10, 60);
+        let other = staged_file(&dir, "ffmpeg-output.mp4", 10, 9 * 86_400);
+        let p2p = staged_file(&dir, "file-1_photo.png", 10, 9 * 86_400);
+        assert_eq!(sweep_staged(&dir, STAGED_MAX_AGE, STAGED_MAX_TOTAL, None, false), 1);
+        assert!(!old.exists() && fresh.exists() && other.exists() && p2p.exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sweep_never_removes_the_kept_file_or_a_download_in_progress() {
+        let dir = sweep_dir();
+        let kept = staged_file(&dir, "rclone_aa_kept.mov", 10, 5 * 86_400);
+        let partial = staged_file(&dir, "rclone_bb_big.mov.part", 10, 5 * 86_400);
+        assert_eq!(sweep_staged(&dir, Duration::ZERO, 0, Some(&kept), false), 0);
+        assert!(kept.exists() && partial.exists());
+        // At launch or exit nothing can be downloading, so the half-file goes too.
+        assert_eq!(sweep_staged(&dir, Duration::ZERO, 0, None, true), 2);
+        assert!(!kept.exists() && !partial.exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sweep_trims_the_oldest_when_over_the_cap() {
+        let dir = sweep_dir();
+        let oldest = staged_file(&dir, "rclone_01_a", 40, 300);
+        let middle = staged_file(&dir, "rclone_02_b", 40, 200);
+        let newest = staged_file(&dir, "rclone_03_c", 40, 100);
+        // 120 bytes against a 90 byte cap: the oldest goes, then 80 fits.
+        assert_eq!(sweep_staged(&dir, STAGED_MAX_AGE, 90, None, false), 1);
+        assert!(!oldest.exists() && middle.exists() && newest.exists());
+        // The kept file counts toward the total but survives, so the older neighbour is evicted instead.
+        let kept = staged_file(&dir, "rclone_04_k", 70, 1);
+        assert_eq!(sweep_staged(&dir, STAGED_MAX_AGE, 90, Some(&kept), false), 2);
+        assert!(kept.exists() && !middle.exists() && !newest.exists());
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

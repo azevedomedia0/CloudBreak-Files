@@ -44,6 +44,8 @@ pub fn run() {
         .manage(LocalRoots::default())
         .setup(|app| {
             local_fs::restore_roots(app.handle(), &app.state::<LocalRoots>());
+            // Copies of Google Drive files left by a session that did not exit cleanly.
+            rclone::sweep_staged_downloads(app.handle());
             // Build the tray after the event loop starts so the main window can appear first.
             #[cfg(desktop)]
             {
@@ -189,6 +191,12 @@ pub fn run() {
             terminal::terminal_resize,
             terminal::terminal_kill,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Cloudbreak Files");
+        .build(tauri::generate_context!())
+        .expect("error while building Cloudbreak Files")
+        .run(|app, event| {
+            // Downloaded Google Drive copies are only for this session; leave none behind.
+            if let tauri::RunEvent::Exit = event {
+                rclone::sweep_staged_downloads(app);
+            }
+        });
 }
