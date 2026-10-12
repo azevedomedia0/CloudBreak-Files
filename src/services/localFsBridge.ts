@@ -94,6 +94,11 @@ export const localFs = {
     return invoke<LocalFolder>('local_remember_folder', { path });
   },
 
+  /** Allow a removable drive for this session only. It is not saved and never joins Local Files. */
+  allowSessionFolder(path: string): Promise<LocalFolder> {
+    return invoke<LocalFolder>('local_allow_session_folder', { path });
+  },
+
   /** Stop tracking a folder. Nothing on disk is changed. */
   forgetFolder(path: string): Promise<void> {
     return invoke<void>('local_forget_folder', { path });

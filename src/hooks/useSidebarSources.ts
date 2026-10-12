@@ -488,15 +488,16 @@ export function useSidebarSources({
     if (!localFs.available() || !device.mountPoint) return;
     void (async () => {
       try {
-        await localFs.rememberFolder(device.mountPoint);
+        // Browse the drive for this session only: it is not saved and does not join Local Files.
+        await localFs.allowSessionFolder(device.mountPoint);
         const folder = { path: device.mountPoint, name: device.name };
-        const imported = await importLocalFolderAtPath(folder, {
-          rootId: defaultLocalFolderIdForName(device.name),
-          displayName: device.name,
-        }).catch(() => null);
+        const rootId = `folder-device-${device.id}`;
+        const imported = await importLocalFolderAtPath(folder, { rootId, displayName: device.name }).catch(() => null);
         if (!imported) return;
-        const root = applyImportedFolder(imported);
-        setSelectedFolderId(root.id);
+        const driveFolders = imported.folders.map(f => ({ ...f, sourceId: device.id }));
+        const driveFolderIds = new Set(driveFolders.map(f => f.id));
+        setFolders(prev => [...prev.filter(f => !driveFolderIds.has(f.id)), ...driveFolders]);
+        setSelectedFolderId(rootId);
         const tagged = imported.files.map(f => ({ ...f, sourceId: device.id }));
         setFiles(prev => mergeById(prev, tagged));
         if (tagged[0]) setSelectedFileId(tagged[0].id);
@@ -582,7 +583,18 @@ export function useSidebarSources({
       void (async () => {
         try {
           const standards = await localFs.ensureStandardFolders().catch(() => [] as LocalFolder[]);
-          const saved = await localFs.listFolders().catch(() => [] as LocalFolder[]);
+          const savedAll = await localFs.listFolders().catch(() => [] as LocalFolder[]);
+          // Removable drives are browsed from the sidebar's devices list, never saved into Local Files.
+          // Older versions saved a drive when it was opened, so drop those on the way in.
+          const driveMounts = new Set(
+            (await listSidebarVolumes().catch(() => []))
+              .filter(v => !v.isNetwork && v.mountPoint && v.mountPoint !== '/')
+              .map(v => v.mountPoint),
+          );
+          const saved = savedAll.filter(f => !driveMounts.has(f.path));
+          for (const drive of savedAll.filter(f => driveMounts.has(f.path))) {
+            void localFs.forgetFolder(drive.path).catch(() => {});
+          }
           if (cancelled) return;
           const standardPaths = new Set(standards.flatMap(f => diskPathsFor(f)));
 

@@ -124,7 +124,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const onlineServerCount = networkServers.filter(s => s.online).length;
   const totalServerCount = networkServers.length;
   const visibleFolders = sortLocalRootFolders(
-    folders.filter(f => f.accountId === 'all' && !f.parentId),
+    folders.filter(f => f.accountId === 'all' && !f.parentId && !f.sourceId),
   );
 
   // Map section keys to their component rendering

@@ -612,6 +612,24 @@ pub fn local_remember_folder(path: String, app: AppHandle, state: State<'_, Loca
     add_root(&app, &state, PathBuf::from(path), true)
 }
 
+/// Allow a mounted removable drive for browsing until the app quits. It is not saved, so the drive
+/// never comes back in Local Files at the next launch.
+#[tauri::command]
+pub fn local_allow_session_folder(path: String, app: AppHandle, state: State<'_, LocalRoots>) -> Result<LocalFolder, String> {
+    let root = fs::canonicalize(&path).map_err(|e| format!("Could not open that folder: {e}"))?;
+    if !root.is_dir() {
+        return Err("That is not a folder".into());
+    }
+    app.asset_protocol_scope()
+        .allow_directory(&root, true)
+        .map_err(|e| format!("Could not allow that folder: {e}"))?;
+    let mut guard = state.session_only.lock().map_err(|_| "Local folder list is unavailable".to_string())?;
+    if !guard.contains(&root) {
+        guard.push(root.clone());
+    }
+    Ok(folder_of(&root))
+}
+
 /// Folders picked in earlier sessions that still exist.
 #[tauri::command]
 pub fn local_list_folders(state: State<'_, LocalRoots>) -> Vec<LocalFolder> {

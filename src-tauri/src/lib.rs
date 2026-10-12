@@ -148,6 +148,7 @@ pub fn run() {
             local_fs::local_save_from_temp,
             local_fs::local_list_folders,
             local_fs::local_remember_folder,
+            local_fs::local_allow_session_folder,
             local_fs::local_ensure_standard_folders,
             local_fs::local_forget_folder,
             local_fs::local_scan_folder,

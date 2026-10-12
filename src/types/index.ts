@@ -117,6 +117,8 @@ export interface FolderItem {
   itemCount: number;
   /** Finder-style tags (same palette as files). */
   tags?: string[];
+  /** Set for folders that belong to a removable drive or share. They are browsed from that source and never listed under Local Files. */
+  sourceId?: string;
 }
 
 export interface P2PPeer {

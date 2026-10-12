@@ -151,7 +151,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     (selectedCategory === 'files' || selectedCategory === 'photo' || selectedCategory === 'video')
     && (viewMode === 'icons' || viewMode === 'list');
   const localFolders = useMemo(
-    () => sortLocalRootFolders(folders.filter(folder => folder.accountId === 'all' && !folder.parentId)),
+    () => sortLocalRootFolders(folders.filter(folder => folder.accountId === 'all' && !folder.parentId && !folder.sourceId)),
     [folders],
   );
   const locationSections = useMemo(
