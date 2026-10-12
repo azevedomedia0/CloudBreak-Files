@@ -726,7 +726,7 @@ export default function App() {
    * Start a video. It plays in the right-hand panel; trim and convert open the full player window.
    * A video that follows another one stays wherever the first was playing.
    */
-  const startVideo = (file: FileItem, tab?: 'player' | 'trim' | 'convert', opts?: { queueFolder?: boolean }) => {
+  const startVideo = (file: FileItem, tab?: 'player' | 'trim' | 'convert', opts?: { queueFolder?: boolean; placement?: 'panel' | 'window' }) => {
     if (needsDownload(file)) {
       whenDownloaded(file, downloaded => startVideo(downloaded, tab, opts));
       return;
@@ -735,8 +735,31 @@ export default function App() {
     setPlayingAudioFile(null);
     setVideoStartAt(0);
     setVideoPlayerInitialTab(tab ?? 'player');
-    setVideoPlacement(prev => (tab && tab !== 'player' ? 'window' : playingVideoFile ? prev : 'panel'));
+    setVideoPlacement(prev => opts?.placement ?? (tab && tab !== 'player' ? 'window' : playingVideoFile ? prev : 'panel'));
     setPlayingVideoFile(file);
+  };
+
+  /**
+   * A video chosen in the file browser. A double-click plays it in the side panel; a single click
+   * opens the full player in the browser's center area. P2P videos are decrypted first.
+   */
+  const openVideoFromBrowser = async (file: FileItem, placement: 'panel' | 'window') => {
+    openFileSelection(file);
+    if (file.tags.includes('P2P') && file.encryption?.algorithm === 'AES-256-GCM') {
+      const lib = sharedLibraries.find(l => l.fileIds.includes(file.id));
+      if (lib) {
+        try {
+          showToast('Decrypting P2P stream…');
+          const blob = await p2pBridge.assembleFileBlob(lib.id, file.id, file.mimeType);
+          const url = URL.createObjectURL(blob);
+          startVideo({ ...file, url }, undefined, { queueFolder: true, placement });
+          return;
+        } catch (err) {
+          showToast(err instanceof Error ? err.message : String(err));
+        }
+      }
+    }
+    startVideo(file, undefined, { queueFolder: true, placement });
   };
 
   /** Start a song or video, closing the other player. */
@@ -1221,24 +1244,8 @@ export default function App() {
                 onSelectFile={file => openFileSelection(file)}
                 onEditPhoto={file => { void openPhotoFile(file); }}
                 onOpenDocument={file => { void openDocumentFile(file); }}
-                onOpenVideo={async file => {
-                  openFileSelection(file);
-                  if (file.tags.includes('P2P') && file.encryption?.algorithm === 'AES-256-GCM') {
-                    const lib = sharedLibraries.find(l => l.fileIds.includes(file.id));
-                    if (lib) {
-                      try {
-                        showToast('Decrypting P2P stream…');
-                        const blob = await p2pBridge.assembleFileBlob(lib.id, file.id, file.mimeType);
-                        const url = URL.createObjectURL(blob);
-                        startVideo({ ...file, url }, undefined, { queueFolder: true });
-                        return;
-                      } catch (err) {
-                        showToast(err instanceof Error ? err.message : String(err));
-                      }
-                    }
-                  }
-                  startVideo(file, undefined, { queueFolder: true });
-                }}
+                onOpenVideo={file => { void openVideoFromBrowser(file, 'panel'); }}
+                onOpenVideoWindow={file => { void openVideoFromBrowser(file, 'window'); }}
                 onOpenAudio={file => {
                   queueFolderMedia(file);
                   playQueueItem(file);

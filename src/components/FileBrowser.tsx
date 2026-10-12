@@ -41,6 +41,8 @@ interface FileBrowserProps {
   onEditPhoto: (file: FileItem) => void;
   onOpenDocument: (file: FileItem) => void;
   onOpenVideo: (file: FileItem) => void;
+  /** Single click on a video: opens the full player in the center area. */
+  onOpenVideoWindow?: (file: FileItem) => void;
   onOpenAudio: (file: FileItem) => void;
   /** The audio bar moved to another track on its own (next, previous or end of song); not a fresh open. */
   onAudioTrackChange?: (file: FileItem) => void;
@@ -99,6 +101,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   onEditPhoto,
   onOpenDocument,
   onOpenVideo,
+  onOpenVideoWindow,
   onOpenAudio,
   onAudioTrackChange,
   onCloseAudio,
@@ -553,13 +556,13 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         ) : (
           <>
             {viewMode === 'icons' && (files.length > 0 || browseSubfolders.length > 0) && (
-              <IconsView accent={accent} files={files} folders={browseSubfolders} selectedFileId={selectedFileId} selectedIds={selectedIds} iconScale={iconScale} onSelectFile={selectFile} onOpenFolder={onSelectFolder} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenAudio={onOpenAudio} onOpenOther={onOpenOther} onFileContextMenu={openContextMenu} onFolderContextMenu={openFolderContextMenu} toggleSelectOne={toggleSelectOne} />
+              <IconsView onOpenVideoWindow={onOpenVideoWindow} accent={accent} files={files} folders={browseSubfolders} selectedFileId={selectedFileId} selectedIds={selectedIds} iconScale={iconScale} onSelectFile={selectFile} onOpenFolder={onSelectFolder} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenAudio={onOpenAudio} onOpenOther={onOpenOther} onFileContextMenu={openContextMenu} onFolderContextMenu={openFolderContextMenu} toggleSelectOne={toggleSelectOne} />
             )}
             {viewMode === 'list' && (files.length > 0 || browseSubfolders.length > 0) && (
-              <ListView accent={accent} files={files} folders={browseSubfolders} selectedFileId={selectedFileId} selectedIds={selectedIds} scrollParentRef={browseScrollRef} onSelectFile={selectFile} onOpenFolder={onSelectFolder} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenAudio={onOpenAudio} onShareFile={onShareFile} onOpenOther={onOpenOther} onFileContextMenu={openContextMenu} onFolderContextMenu={openFolderContextMenu} toggleSelectOne={toggleSelectOne} toggleSelectAll={toggleSelectAll} getAccount={getAccount} />
+              <ListView onOpenVideoWindow={onOpenVideoWindow} accent={accent} files={files} folders={browseSubfolders} selectedFileId={selectedFileId} selectedIds={selectedIds} scrollParentRef={browseScrollRef} onSelectFile={selectFile} onOpenFolder={onSelectFolder} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenAudio={onOpenAudio} onShareFile={onShareFile} onOpenOther={onOpenOther} onFileContextMenu={openContextMenu} onFolderContextMenu={openFolderContextMenu} toggleSelectOne={toggleSelectOne} toggleSelectAll={toggleSelectAll} getAccount={getAccount} />
             )}
             {viewMode === 'columns' && (
-              <ColumnsView accent={accent} files={files} selectedFolder={selectedFolder} selectedFileId={selectedFileId} selectedIds={selectedIds} folders={folders.filter(f => f.accountId === 'all' ? !f.parentId : true)} totalSize={totalSize} onSelectFile={selectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenAudio={onOpenAudio} onOpenOther={onOpenOther} onFileContextMenu={openContextMenu} onFolderContextMenu={openFolderContextMenu} onSelectFolder={onSelectFolder} toggleSelectOne={toggleSelectOne} />
+              <ColumnsView onOpenVideoWindow={onOpenVideoWindow} accent={accent} files={files} selectedFolder={selectedFolder} selectedFileId={selectedFileId} selectedIds={selectedIds} folders={folders.filter(f => f.accountId === 'all' ? !f.parentId : true)} totalSize={totalSize} onSelectFile={selectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenAudio={onOpenAudio} onOpenOther={onOpenOther} onFileContextMenu={openContextMenu} onFolderContextMenu={openFolderContextMenu} onSelectFolder={onSelectFolder} toggleSelectOne={toggleSelectOne} />
             )}
               {viewMode === 'gallery' && selectedFile && (
               <GalleryView accent={accent} files={files} selectedFile={selectedFile} selectedIds={selectedIds} onSelectFile={selectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onFileContextMenu={openContextMenu} toggleSelectOne={toggleSelectOne} />

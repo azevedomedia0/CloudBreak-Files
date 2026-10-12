@@ -25,6 +25,8 @@ export interface ColumnsViewProps {
   onEditPhoto: (file: FileItem) => void;
   onOpenDocument: (file: FileItem) => void;
   onOpenVideo: (file: FileItem) => void;
+  /** Double-click on a video: opens the full player in the center area. */
+  onOpenVideoWindow?: (file: FileItem) => void;
   onOpenAudio: (file: FileItem) => void;
   onOpenOther: (file: FileItem) => void;
   onFileContextMenu: (file: FileItem, event: React.MouseEvent) => void;
@@ -38,7 +40,7 @@ const COLUMN_WIDTH_CLASS = 'flex-1 min-w-[16rem]';
 
 export const ColumnsView: React.FC<ColumnsViewProps> = ({
   accent, files, selectedFolder, selectedFileId, selectedIds, folders, totalSize,
-  onSelectFile, onEditPhoto, onOpenDocument, onOpenVideo, onOpenAudio, onOpenOther, onFileContextMenu, onFolderContextMenu, onSelectFolder, toggleSelectOne,
+  onSelectFile, onEditPhoto, onOpenDocument, onOpenVideo, onOpenVideoWindow, onOpenAudio, onOpenOther, onFileContextMenu, onFolderContextMenu, onSelectFolder, toggleSelectOne,
 }) => (
     <div className="h-full flex gap-3 overflow-x-auto min-h-[480px] w-full">
       {/* Col 1: Local Files & Folders */}
@@ -120,7 +122,7 @@ export const ColumnsView: React.FC<ColumnsViewProps> = ({
                 tabIndex={0}
                 draggable
                 onDragStart={e => setFileDragData(e.dataTransfer, file, selectedIds)}
-                onClick={() => onSelectFile(file)}
+                onClick={e => { onSelectFile(file); if (file.category === 'video' && !e.metaKey && !e.ctrlKey && !e.shiftKey) onOpenVideo(file); }}
                 onContextMenu={event => onFileContextMenu(file, event)}
                 onKeyDown={e => {
                   if (e.key === 'Enter' || e.key === ' ') {
@@ -132,7 +134,7 @@ export const ColumnsView: React.FC<ColumnsViewProps> = ({
                   if (isMacAppBundle(file) && file.localPath && previewBridge.available()) {
                     void previewBridge.openWithDefault(file.localPath).catch(() => {});
                   } else if (file.category === 'photo') onEditPhoto(file);
-                  else if (file.category === 'video') onOpenVideo(file);
+                  else if (file.category === 'video') (onOpenVideoWindow ?? onOpenVideo)(file);
                   else if (file.category === 'audio') onOpenAudio(file);
                   else if (isEditableDocument(file)) onOpenDocument(file);
                   else onOpenOther(file);

@@ -41,6 +41,8 @@ export interface ListViewProps {
   onEditPhoto: (file: FileItem) => void;
   onOpenDocument: (file: FileItem) => void;
   onOpenVideo: (file: FileItem) => void;
+  /** Double-click on a video: opens the full player in the center area. */
+  onOpenVideoWindow?: (file: FileItem) => void;
   onOpenAudio: (file: FileItem) => void;
   onShareFile: (file: FileItem) => void;
   onOpenOther: (file: FileItem) => void;
@@ -53,7 +55,7 @@ export interface ListViewProps {
 
 export const ListView: React.FC<ListViewProps> = ({
   accent, files, folders = [], selectedFileId, selectedIds, scrollParentRef,
-  onSelectFile, onOpenFolder, onEditPhoto, onOpenDocument, onOpenVideo, onOpenAudio, onShareFile, onOpenOther, onFileContextMenu, onFolderContextMenu, toggleSelectOne, toggleSelectAll, getAccount,
+  onSelectFile, onOpenFolder, onEditPhoto, onOpenDocument, onOpenVideo, onOpenVideoWindow, onOpenAudio, onShareFile, onOpenOther, onFileContextMenu, onFolderContextMenu, toggleSelectOne, toggleSelectAll, getAccount,
 }) => {
   const localScrollRef = useRef<HTMLDivElement>(null);
   const rows = useMemo<Row[]>(() => {
@@ -176,13 +178,13 @@ export const ListView: React.FC<ListViewProps> = ({
               key={file.id}
               draggable
               onDragStart={e => setFileDragData(e.dataTransfer, file, selectedIds)}
-              onClick={() => onSelectFile(file)}
+              onClick={e => { onSelectFile(file); if (file.category === 'video' && !e.metaKey && !e.ctrlKey && !e.shiftKey) onOpenVideo(file); }}
               onContextMenu={event => onFileContextMenu(file, event)}
               onDoubleClick={() => {
                 if (isMacAppBundle(file) && file.localPath && previewBridge.available()) {
                   void previewBridge.openWithDefault(file.localPath).catch(() => {});
                 } else if (file.category === 'photo') onEditPhoto(file);
-                else if (file.category === 'video') onOpenVideo(file);
+                else if (file.category === 'video') (onOpenVideoWindow ?? onOpenVideo)(file);
                 else if (file.category === 'audio') onOpenAudio(file);
                 else if (isEditableDocument(file)) onOpenDocument(file);
                 else onOpenOther(file);
