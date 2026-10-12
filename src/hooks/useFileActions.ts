@@ -506,7 +506,9 @@ export function useFileActions({
 
   // Upload Files — encrypt with the vault session key when the vault is unlocked.
   const handleUploadFiles = async (fileList: ArrayLike<File>) => {
-    const targetAccountId: CloudProviderId = selectedAccountId === 'all' ? 's3' : selectedAccountId;
+    // A drop is a local preview, not an upload. Under "All" (Local Files) it stays local; in a cloud
+    // account's view it appears there, where it was dropped.
+    const targetAccountId: CloudProviderId = selectedAccountId;
     const newItems: FileItem[] = [];
     const unlocked = isVaultUnlocked || (await rustBridge.isVaultUnlocked());
     let encryptedCount = 0;
@@ -579,6 +581,8 @@ export function useFileActions({
         id: `file-upl-${Date.now()}-${i}`,
         name: file.name,
         accountId: targetAccountId,
+        // In the folder it was dropped on, so it shows up there and not only in search.
+        folderId: selectedFolder?.id,
         folderPath: selectedFolder ? `/${selectedFolder.name}` : '/Uploads',
         sizeBytes,
         category,
