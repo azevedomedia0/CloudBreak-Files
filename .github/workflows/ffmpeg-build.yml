@@ -1,0 +1,61 @@
+name: ffmpeg LGPL build
+
+# Builds the LGPL-only ffmpeg sidecars and fills the cache that release.yml restores, without building,
+# signing or notarizing the app. Run it by hand (Actions → "ffmpeg LGPL build" → Run workflow), or it runs
+# when the build scripts change on a pull request branch.
+#
+# The cache key is the same as release.yml's. A release run from a tag can only read caches made on the
+# default branch, so run this from main to make a release start with a warm cache.
+
+on:
+  workflow_dispatch:
+  push:
+    branches-ignore: [main]
+    paths:
+      - scripts/build-ffmpeg-lgpl.sh
+      - scripts/fetch-ffmpeg.sh
+      - .github/workflows/ffmpeg-build.yml
+
+permissions:
+  contents: read
+
+jobs:
+  ffmpeg:
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache the LGPL ffmpeg build
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            src-tauri/binaries/ffmpeg-aarch64-apple-darwin
+            src-tauri/binaries/ffmpeg-x86_64-apple-darwin
+          key: ffmpeg-lgpl-${{ hashFiles('scripts/build-ffmpeg-lgpl.sh') }}
+
+      - name: Build ffmpeg sidecars
+        env:
+          FFMPEG_BUILD_DIR: ${{ runner.temp }}/cloudbreak-ffmpeg-build
+          MACOSX_DEPLOYMENT_TARGET: '11.0'
+        run: bash scripts/fetch-ffmpeg.sh
+
+      - name: Check the result
+        run: |
+          set -euo pipefail
+          for f in src-tauri/binaries/ffmpeg-aarch64-apple-darwin src-tauri/binaries/ffmpeg-x86_64-apple-darwin; do
+            echo "== $f"
+            lipo -archs "$f"
+            ls -lh "$f" | awk '{print $5}'
+            # Neither option may appear in the embedded configure line (read into a variable: grep -q under
+            # pipefail would hide a match behind SIGPIPE).
+            conf="$(strings -a "$f" | grep -- '--enable-' || true)"
+            if grep -Eq -- '--enable-(gpl|nonfree)' <<<"$conf"; then
+              echo "::error::$f was built with GPL or nonfree options"
+              exit 1
+            fi
+          done
+          src-tauri/binaries/ffmpeg-aarch64-apple-darwin -hide_banner -encoders | grep -E 'h264_videotoolbox|libvpx|libopus|libmp3lame'
+          src-tauri/binaries/ffmpeg-aarch64-apple-darwin -hide_banner -version | head -2
+          echo "cache hit: ${{ steps.cache.outputs.cache-hit }}" >> "$GITHUB_STEP_SUMMARY"
