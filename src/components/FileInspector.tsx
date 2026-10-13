@@ -23,6 +23,7 @@ import { previewBridge } from '../services/previewBridge';
 import { FileThumbnail } from './file-browser/FileThumbnail';
 import { FileInspectorIcon } from './file-browser/FileInspectorIcon';
 import { EditPhotoIcon } from './file-browser/EditPhotoIcon';
+import { OpenDocumentIcon } from './file-browser/OpenDocumentIcon';
 import { VideoTrimIcon } from './video-player/VideoTrimIcon';
 
 import { PhotoNav, PhotoNavArrows } from './PhotoNavArrows';
@@ -635,19 +636,19 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                   }}
                   className="col-span-2 h-9 rounded-lg bg-[#c45c26]/18 hover:bg-[#c45c26]/28 border border-[#e07a45]/40 text-[#e8a070] flex items-center justify-center gap-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer"
                   title={
-                    isPdfDocument(file) ? 'Open document'
-                      : isEditableDocument(file) ? 'Edit document'
+                    isPdfDocument(file) ? 'Edit Document'
+                      : isEditableDocument(file) ? 'Edit Document'
                         : 'Open'
                   }
                   aria-label={
-                    isPdfDocument(file) ? 'Open document'
-                      : isEditableDocument(file) ? 'Edit document'
+                    isPdfDocument(file) ? 'Edit Document'
+                      : isEditableDocument(file) ? 'Edit Document'
                         : 'Open'
                   }
                 >
-                  <Edit3 className="w-3.5 h-3.5" />
+                  {isPdfDocument(file) ? <OpenDocumentIcon className="w-3.5 h-3.5" /> : <Edit3 className="w-3.5 h-3.5" />}
                   <span>
-                    {isPdfDocument(file) ? 'Open Document'
+                    {isPdfDocument(file) ? 'Edit Document'
                       : isEditableDocument(file) ? 'Edit Document'
                         : 'Open'}
                   </span>
