@@ -57,6 +57,19 @@ export async function terminalKill(id: string): Promise<void> {
   await invoke('terminal_kill', { id });
 }
 
+/** The saved terminal session (JSON), or null when there is none. */
+export async function terminalSessionLoad(): Promise<string | null> {
+  return invoke<string | null>('terminal_session_load');
+}
+
+export async function terminalSessionSave(data: string): Promise<void> {
+  await invoke('terminal_session_save', { data });
+}
+
+export async function terminalSessionClear(): Promise<void> {
+  await invoke('terminal_session_clear');
+}
+
 export async function onTerminalData(handler: (ev: TerminalDataEvent) => void): Promise<UnlistenFn> {
   return listen<TerminalDataEvent>('terminal-data', event => handler(event.payload));
 }

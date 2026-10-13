@@ -21,6 +21,7 @@ Cloudbreak Files is a desktop app that runs on your computer. We do not run a se
 | Folders you added | `local_roots.json` in the app data folder | Paths only. The app can read only folders you added. |
 | Preferences, profile name, theme, saved network servers, volume | App local storage | Never sent to us. |
 | Private library data and your P2P identity keys | App data folder | Library contents are encrypted. |
+| Terminal tabs, folders and the last 500 lines of each pane's output | `terminal_session.json` in the app data folder | Readable by your user account only, not encrypted. Turn off Preferences → "Restore terminal sessions" to delete it and stop saving. |
 
 On macOS the app data folder is `~/Library/Application Support/com.cloudbreak.files`.
 

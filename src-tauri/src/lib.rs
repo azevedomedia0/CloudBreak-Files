@@ -194,6 +194,9 @@ pub fn run() {
             terminal::terminal_open_url,
             terminal::terminal_resize,
             terminal::terminal_kill,
+            terminal::terminal_session_save,
+            terminal::terminal_session_load,
+            terminal::terminal_session_clear,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Cloudbreak Files")

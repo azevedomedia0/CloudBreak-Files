@@ -29,6 +29,8 @@ export interface AppPreferences {
   rustEngineEnabled: boolean;
   /** Show the system terminal in the right-hand panel when the app starts. */
   openTerminalAtLaunch: boolean;
+  /** Reopen terminal tabs, splits, folders and recent output from the last session. */
+  restoreTerminalSessions: boolean;
   compactSidebar: boolean;
   showTransferSpeeds: boolean;
   transferNotifications: boolean;
@@ -45,6 +47,7 @@ export const DEFAULT_PREFERENCES: AppPreferences = {
   autoLockMinutes: 15,
   rustEngineEnabled: true,
   openTerminalAtLaunch: false,
+  restoreTerminalSessions: true,
   compactSidebar: false,
   showTransferSpeeds: true,
   transferNotifications: true,

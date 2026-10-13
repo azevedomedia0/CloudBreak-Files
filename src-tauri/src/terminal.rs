@@ -7,7 +7,8 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, Emitter, State};
+use std::path::{Path, PathBuf};
+use tauri::{AppHandle, Emitter, Manager, State};
 use uuid::Uuid;
 
 const EVENT_DATA: &str = "terminal-data";
@@ -301,9 +302,103 @@ pub fn terminal_kill(state: State<'_, TerminalState>, id: String) -> Result<(), 
     Ok(())
 }
 
+/// Tabs, splits, folders and recent output, for reopening the terminal as it was (Terminal.app's
+/// "resume"). The page decides what goes in; this only stores it, owner-readable, in the app data folder.
+const SESSION_FILE: &str = "terminal_session.json";
+const MAX_SAVED_SESSION_BYTES: usize = 8 * 1024 * 1024;
+
+fn session_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = app.path().app_data_dir().map_err(|e| format!("app data dir: {e}"))?;
+    Ok(dir.join(SESSION_FILE))
+}
+
+/// Write via a temporary file and rename, so a crash mid-save leaves the previous session intact.
+/// Readable by the owner only: recent output can include anything a command printed.
+fn write_private_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let tmp = path.with_extension("json.tmp");
+    {
+        let mut opts = std::fs::OpenOptions::new();
+        opts.write(true).create(true).truncate(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            opts.mode(0o600);
+        }
+        let mut file = opts.open(&tmp)?;
+        file.write_all(bytes)?;
+        file.sync_all()?;
+    }
+    std::fs::rename(&tmp, path)
+}
+
+fn check_session_json(data: &str) -> Result<(), String> {
+    if data.len() > MAX_SAVED_SESSION_BYTES {
+        return Err("terminal session is too large to save".into());
+    }
+    match serde_json::from_str::<serde_json::Value>(data) {
+        Ok(serde_json::Value::Object(_)) => Ok(()),
+        _ => Err("terminal session is not a JSON object".into()),
+    }
+}
+
+#[tauri::command]
+pub fn terminal_session_save(app: AppHandle, data: String) -> Result<(), String> {
+    check_session_json(&data)?;
+    write_private_atomic(&session_path(&app)?, data.as_bytes()).map_err(|e| format!("save terminal session: {e}"))
+}
+
+#[tauri::command]
+pub fn terminal_session_load(app: AppHandle) -> Result<Option<String>, String> {
+    let path = session_path(&app)?;
+    match std::fs::read_to_string(&path) {
+        Ok(data) if check_session_json(&data).is_ok() => Ok(Some(data)),
+        // A damaged file is ignored rather than failing the terminal; the next save replaces it.
+        Ok(_) => Ok(None),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(format!("read terminal session: {e}")),
+    }
+}
+
+/// Forget the saved session (the restore preference was turned off).
+#[tauri::command]
+pub fn terminal_session_clear(app: AppHandle) -> Result<(), String> {
+    match std::fs::remove_file(session_path(&app)?) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(format!("remove terminal session: {e}")),
+        _ => Ok(()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn saved_sessions_are_private_and_replace_atomically() {
+        let dir = std::env::temp_dir().join(format!("cb-term-{}", Uuid::new_v4()));
+        let path = dir.join(SESSION_FILE);
+        write_private_atomic(&path, br#"{"v":1}"#).unwrap();
+        write_private_atomic(&path, br#"{"v":2}"#).unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), r#"{"v":2}"#);
+        assert!(!path.with_extension("json.tmp").exists());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn only_json_objects_within_the_cap_are_kept() {
+        assert!(check_session_json(r#"{"tabs":[]}"#).is_ok());
+        assert!(check_session_json("[1,2]").is_err());
+        assert!(check_session_json("not json").is_err());
+        let huge = format!(r#"{{"x":"{}"}}"#, "a".repeat(MAX_SAVED_SESSION_BYTES));
+        assert!(check_session_json(&huge).is_err());
+    }
 
     #[test]
     fn lsof_output_gives_the_working_directory() {

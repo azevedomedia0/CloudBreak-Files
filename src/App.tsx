@@ -1340,6 +1340,7 @@ export default function App() {
             {terminalMounted && (
               <SystemTerminal
                 visible={showTerminal}
+                restoreSessions={appPreferences.restoreTerminalSessions}
                 width={inspectorWidth}
                 context={{
                   cwdLabel: activePathTitle || 'All Files',

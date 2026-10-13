@@ -5,12 +5,16 @@
 
 export type TerminalAction =
   | 'copy' | 'paste' | 'selectAll' | 'clear' | 'find' | 'findNext' | 'findPrevious'
-  | 'newTab' | 'closeTab' | 'nextTab' | 'previousTab' | 'selectTab'
+  | 'newTab' | 'close' | 'nextTab' | 'previousTab' | 'selectTab'
+  | 'splitDown' | 'splitRight' | 'nextPane' | 'previousPane' | 'focusPane'
+  | 'previousMark' | 'nextMark'
   | 'zoomIn' | 'zoomOut' | 'zoomReset';
+
+export type PaneDirection = 'left' | 'right' | 'up' | 'down';
 
 export type KeyResult =
   | { type: 'send'; data: string }
-  | { type: 'action'; action: TerminalAction; index?: number };
+  | { type: 'action'; action: TerminalAction; index?: number; direction?: PaneDirection };
 
 export interface KeyLike {
   key: string;
@@ -22,6 +26,9 @@ export interface KeyLike {
 
 const send = (data: string): KeyResult => ({ type: 'send', data });
 const act = (action: TerminalAction, index?: number): KeyResult => ({ type: 'action', action, index });
+const ARROWS: Record<string, PaneDirection> = {
+  arrowleft: 'left', arrowright: 'right', arrowup: 'up', arrowdown: 'down',
+};
 
 /** What a key press means for the terminal, or null to let xterm handle it as usual. */
 export function translateKey(e: KeyLike): KeyResult | null {
@@ -37,9 +44,15 @@ export function translateKey(e: KeyLike): KeyResult | null {
         case 'f': return e.shiftKey ? null : act('find');
         case 'g': return act(e.shiftKey ? 'findPrevious' : 'findNext');
         case 't': return e.shiftKey ? null : act('newTab');
-        case 'w': return e.shiftKey ? null : act('closeTab');
-        case ']': case '}': return e.shiftKey ? act('nextTab') : null;
-        case '[': case '{': return e.shiftKey ? act('previousTab') : null;
+        // ⌘W closes the pane with focus, and the tab with its last pane.
+        case 'w': return e.shiftKey ? null : act('close');
+        // ⌘D splits top and bottom (as in Terminal.app); ⌘⇧D side by side.
+        case 'd': return act(e.shiftKey ? 'splitRight' : 'splitDown');
+        case ']': case '}': return act(e.shiftKey ? 'nextTab' : 'nextPane');
+        case '[': case '{': return act(e.shiftKey ? 'previousTab' : 'previousPane');
+        // Jump between prompts (marks), as Terminal.app's ⌘↑ / ⌘↓.
+        case 'arrowup': return e.shiftKey ? null : act('previousMark');
+        case 'arrowdown': return e.shiftKey ? null : act('nextMark');
         case '=': case '+': return act('zoomIn');
         case '-': case '_': return act('zoomOut');
         case '0': return act('zoomReset');
@@ -51,6 +64,8 @@ export function translateKey(e: KeyLike): KeyResult | null {
           return null;
       }
     }
+    // ⌘⌥ arrows move focus to the neighbouring split pane.
+    if (!e.shiftKey && ARROWS[key]) return { type: 'action', action: 'focusPane', direction: ARROWS[key] };
     return null;
   }
 

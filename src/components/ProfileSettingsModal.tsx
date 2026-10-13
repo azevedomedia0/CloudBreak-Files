@@ -443,6 +443,9 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
               <PrefRow title="Open terminal at launch" description="Show the system terminal in the side panel when the app starts">
                 <Toggle on={prefs.openTerminalAtLaunch} onChange={() => patchPrefs('openTerminalAtLaunch', !prefs.openTerminalAtLaunch)} />
               </PrefRow>
+              <PrefRow title="Restore terminal sessions" description="Reopen tabs, splits, folders and recent output (kept in the app data folder). Off deletes what was saved">
+                <Toggle on={prefs.restoreTerminalSessions} onChange={() => patchPrefs('restoreTerminalSessions', !prefs.restoreTerminalSessions)} />
+              </PrefRow>
 
               <PrefRow title="Native Rust crypto engine" description="Use Tauri AES-GCM when running as a desktop app">
                 <Toggle on={prefs.rustEngineEnabled} onChange={() => patchPrefs('rustEngineEnabled', !prefs.rustEngineEnabled)} />
