@@ -193,6 +193,27 @@ export default function App() {
     applyTheme(appPreferences.theme);
   }, [appPreferences.theme]);
 
+  // "Allow connections from other networks": open or close the router port when the setting
+  // changes, and at launch when it was left on. Off at launch does nothing (no swarm, no router).
+  const remoteAccessApplied = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (!isTauri()) return;
+    const want = appPreferences.p2pRemoteAccess;
+    const atLaunch = remoteAccessApplied.current === null;
+    if (remoteAccessApplied.current === want || (atLaunch && !want)) {
+      remoteAccessApplied.current = want;
+      return;
+    }
+    remoteAccessApplied.current = want;
+    p2pBridge
+      .setRemoteAccess(want)
+      .then(status => {
+        // At launch, only speak up when the router said no.
+        if (!atLaunch || (want && !status.publicAddress)) showToast(status.message);
+      })
+      .catch(err => showToast(`Could not change remote access: ${err instanceof Error ? err.message : String(err)}`));
+  }, [appPreferences.p2pRemoteAccess, showToast]);
+
 
   // One-time notice when the desktop app has no ffmpeg (dev builds / incomplete release).
   useEffect(() => {

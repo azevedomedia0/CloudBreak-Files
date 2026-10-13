@@ -184,6 +184,8 @@ pub fn run() {
             p2p::commands::p2p_stream_chunk,
             p2p::commands::p2p_materialize_file,
             p2p::commands::p2p_fetch_manifest,
+            p2p::commands::p2p_set_remote_access,
+            p2p::commands::p2p_remote_access_status,
             tray::tray_refresh_status,
             terminal::terminal_create,
             terminal::terminal_write,
@@ -199,6 +201,8 @@ pub fn run() {
             // Downloaded Google Drive copies are only for this session; leave none behind.
             if let tauri::RunEvent::Exit = event {
                 rclone::sweep_staged_downloads(app);
+                // An opened router port should not outlive the app.
+                p2p::commands::release_remote_access(app);
             }
         });
 }

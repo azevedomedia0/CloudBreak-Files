@@ -19,6 +19,7 @@ import {
   saveProfile,
 } from '../utils/appPreferences';
 import { fullDiskAccessGranted, requestFullDiskAccess } from '../services/permissionsBridge';
+import { p2pBridge, type RemoteAccessStatus } from '../services/p2pBridge';
 
 export interface UserProfile {
   name: string;
@@ -171,6 +172,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
   const [vaultBusy, setVaultBusy] = useState(false);
   const [fdaGranted, setFdaGranted] = useState<boolean | null>(null);
   const [fdaBusy, setFdaBusy] = useState(false);
+  const [remoteStatus, setRemoteStatus] = useState<RemoteAccessStatus | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -184,6 +186,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     setFdaBusy(false);
     if (isTauri()) {
       void fullDiskAccessGranted().then(setFdaGranted);
+      void p2pBridge.remoteAccessStatus().then(setRemoteStatus).catch(() => setRemoteStatus(null));
     } else {
       setFdaGranted(null);
     }
@@ -719,7 +722,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                   </span>
                 </div>
                 <p className="text-[11px] text-neutral-400">
-                  Invite-dial only — no DHT announce, STUN, or public peer discovery. {p2pLibraryCount}{' '}
+                  Invite-dial only — no DHT announce, STUN, relay, or public peer discovery. {p2pLibraryCount}{' '}
                   {p2pLibraryCount === 1 ? 'library' : 'libraries'} on this device.
                 </p>
                 <div>
@@ -739,6 +742,33 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                     </button>
                   </div>
                 </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-white/5 border border-white/5 space-y-2">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold text-white">Allow connections from other networks</div>
+                    <div className="text-[11px] text-neutral-400 mt-0.5">
+                      Asks your router (UPnP or NAT-PMP) to open a port, and puts your internet address in invites you copy.
+                      Only people holding a library&rsquo;s invite are served. Off: only your own network.
+                    </div>
+                  </div>
+                  <Toggle on={prefs.p2pRemoteAccess} onChange={() => patchPrefs('p2pRemoteAccess', !prefs.p2pRemoteAccess)} />
+                </div>
+                {prefs.p2pRemoteAccess && remoteStatus?.enabled && (
+                  <div
+                    className={`text-[11px] rounded-lg px-2.5 py-2 border ${
+                      remoteStatus.publicAddress
+                        ? 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20'
+                        : 'bg-amber-500/10 text-amber-200 border-amber-500/20'
+                    }`}
+                  >
+                    {remoteStatus.message}
+                  </div>
+                )}
+                {prefs.p2pRemoteAccess && !remoteStatus?.enabled && (
+                  <div className="text-[11px] text-neutral-500">Takes effect when you click Save &amp; Apply.</div>
+                )}
               </div>
 
               <PrefRow title="Show transfer speeds" description="Include bitrate on P2P library banners and share sheets">

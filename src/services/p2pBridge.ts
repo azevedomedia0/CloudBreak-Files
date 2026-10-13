@@ -36,6 +36,15 @@ export interface P2pLibraryRecord {
   allowDownloads?: boolean;
 }
 
+/** "Allow connections from other networks": router port mapping, desktop only. */
+export interface RemoteAccessStatus {
+  enabled: boolean;
+  /** `ip:port` peers on other networks can dial, when the router opened a port on a public address. */
+  publicAddress?: string | null;
+  method?: string | null;
+  message: string;
+}
+
 export interface CreateLibraryFileInput {
   name: string;
   mimeType: string;
@@ -308,6 +317,19 @@ export const p2pBridge = {
       bytesReceived: 0,
       privateMode: true,
     };
+  },
+
+  /** Open or close a router port for peers on other networks. Desktop only. */
+  async setRemoteAccess(enabled: boolean): Promise<RemoteAccessStatus> {
+    if (!isTauri()) {
+      return { enabled: false, message: 'Only the desktop app can accept connections from other networks.' };
+    }
+    return invoke<RemoteAccessStatus>('p2p_set_remote_access', { enabled });
+  },
+
+  async remoteAccessStatus(): Promise<RemoteAccessStatus | null> {
+    if (!isTauri()) return null;
+    return invoke<RemoteAccessStatus>('p2p_remote_access_status');
   },
 
   async swarmStatus(): Promise<SwarmStatus> {

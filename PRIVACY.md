@@ -46,6 +46,8 @@ These providers handle your data under their own privacy policies. File names, s
 
 **Private libraries (peer to peer).** When you create, join or share a private library, the app connects directly to the devices named in an invite. There is no central server, tracker or public peer discovery. While a library is shared, the app listens for connections on TCP port 7421. People you share with can see your IP address and your library peer ID. File contents and library manifests are encrypted.
 
+**Connections from other networks (off by default).** If you turn on Preferences → Network → "Allow connections from other networks", the app asks your own router (via UPnP or NAT-PMP) to forward that port to your computer, and it puts your internet IP address in the invites you copy afterwards. Nothing is sent to any server for this: only your router is asked. Anyone who has one of those invites can see your internet IP address, and the open port can be reached from the internet. The app serves a library only to devices that present that library's invite token. Turning the setting off, or quitting the app, asks the router to close the port again. Otherwise the router closes it within an hour.
+
 **Network shares.** If you save an SMB or NFS server, the app checks whether it is reachable by opening a connection to the address you saved.
 
 Everything else (browsing local folders, photo and video editing, the vault, search and the terminal panel, and the interface fonts) works on your device without a network connection.

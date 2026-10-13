@@ -10,6 +10,7 @@ use crate::p2p::keys::{
 };
 use crate::p2p::library_store::{LibraryIndex, LibraryRecord};
 use crate::p2p::manifest::{LibraryManifest, ManifestFileEntry};
+use crate::p2p::port_mapping::{self, Mapping, RemoteAccessStatus};
 use crate::p2p::swarm::{SwarmHandle, SwarmStatus};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
@@ -22,6 +23,17 @@ pub struct P2pState {
     pub identity: Mutex<Option<PeerIdentity>>,
     pub swarm: Mutex<Option<Arc<SwarmHandle>>>,
     pub app_data: Mutex<Option<PathBuf>>,
+    /// Router port mapping for "Allow connections from other networks" (off unless turned on).
+    pub remote: Mutex<RemoteAccess>,
+    /// Turning remote access on or off talks to the router; one change at a time.
+    remote_change: tokio::sync::Mutex<()>,
+}
+
+#[derive(Default)]
+pub struct RemoteAccess {
+    mapping: Option<Mapping>,
+    status: RemoteAccessStatus,
+    renewer: Option<tauri::async_runtime::JoinHandle<()>>,
 }
 
 impl Default for P2pState {
@@ -30,6 +42,8 @@ impl Default for P2pState {
             identity: Mutex::new(None),
             swarm: Mutex::new(None),
             app_data: Mutex::new(None),
+            remote: Mutex::new(RemoteAccess::default()),
+            remote_change: tokio::sync::Mutex::new(()),
         }
     }
 }
@@ -716,4 +730,101 @@ async fn ensure_swarm(app: &AppHandle, state: &P2pState) -> Result<Arc<SwarmHand
     let arc = Arc::new(handle);
     *state.swarm.lock() = Some(arc.clone());
     Ok(arc)
+}
+
+/// Turn "Allow connections from other networks" on or off. On asks the router to forward the
+/// listener's port and, when the router's address is public, puts that address into invites copied
+/// from then on. Off (and quitting) takes the mapping back down.
+#[tauri::command]
+pub async fn p2p_set_remote_access(
+    app: AppHandle,
+    state: State<'_, P2pState>,
+    enabled: bool,
+) -> Result<RemoteAccessStatus, String> {
+    let _one_at_a_time = state.remote_change.lock().await;
+    let swarm = ensure_swarm(&app, &state).await?;
+    let old = {
+        let mut remote = state.remote.lock();
+        if let Some(task) = remote.renewer.take() {
+            task.abort();
+        }
+        remote.mapping.take()
+    };
+    swarm.set_public_addr(None);
+    if let Some(mapping) = old {
+        port_mapping::unmap(&mapping).await;
+    }
+    if !enabled {
+        let status = RemoteAccessStatus {
+            enabled: false,
+            message: "Only devices on your own network can connect.".into(),
+            ..Default::default()
+        };
+        state.remote.lock().status = status.clone();
+        return Ok(status);
+    }
+
+    let result = port_mapping::map(swarm.port()).await;
+    let status = port_mapping::describe(&result);
+    let usable = match result {
+        Ok(m) if status.public_address.is_some() => Some(m),
+        // Forwarding a port nobody outside can reach only adds exposure: take it back down.
+        Ok(m) => {
+            port_mapping::unmap(&m).await;
+            None
+        }
+        Err(_) => None,
+    };
+    let mut remote = state.remote.lock();
+    remote.status = status.clone();
+    if let Some(mapping) = usable {
+        swarm.set_public_addr(Some((mapping.external_ip, mapping.external_port)));
+        remote.mapping = Some(mapping);
+        remote.renewer = Some(tauri::async_runtime::spawn(renew_mapping(app.clone(), swarm.clone())));
+    }
+    Ok(status)
+}
+
+#[tauri::command]
+pub fn p2p_remote_access_status(state: State<'_, P2pState>) -> RemoteAccessStatus {
+    state.remote.lock().status.clone()
+}
+
+/// Keep the mapping alive at half its lease. The router may hand out a new address (a new lease
+/// from the provider); invites copied afterwards carry the new one.
+async fn renew_mapping(app: AppHandle, swarm: Arc<SwarmHandle>) {
+    loop {
+        tokio::time::sleep(std::time::Duration::from_secs(u64::from(port_mapping::LEASE_SECS / 2))).await;
+        let state = app.state::<P2pState>();
+        let Some(current) = state.remote.lock().mapping else { return };
+        let result = port_mapping::renew(&current).await;
+        let status = port_mapping::describe(&result);
+        let mut remote = state.remote.lock();
+        match result {
+            Ok(m) if status.public_address.is_some() => {
+                swarm.set_public_addr(Some((m.external_ip, m.external_port)));
+                remote.mapping = Some(m);
+            }
+            // Keep trying: a router that restarted answers again a few minutes later.
+            _ => swarm.set_public_addr(None),
+        }
+        remote.status = status;
+    }
+}
+
+/// On quit: remove the router mapping so the port does not stay open while the app is closed.
+pub fn release_remote_access(app: &AppHandle) {
+    let state = app.state::<P2pState>();
+    let mapping = {
+        let mut remote = state.remote.lock();
+        if let Some(task) = remote.renewer.take() {
+            task.abort();
+        }
+        remote.mapping.take()
+    };
+    if let Some(mapping) = mapping {
+        tauri::async_runtime::block_on(async {
+            let _ = tokio::time::timeout(std::time::Duration::from_secs(2), port_mapping::unmap(&mapping)).await;
+        });
+    }
 }

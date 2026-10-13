@@ -35,6 +35,8 @@ export interface AppPreferences {
   securityAlerts: boolean;
   p2pPeerAlerts: boolean;
   startOnline: boolean;
+  /** Ask the router to forward the P2P port so invited peers on other networks can connect. */
+  p2pRemoteAccess: boolean;
 }
 
 export const DEFAULT_PREFERENCES: AppPreferences = {
@@ -49,6 +51,7 @@ export const DEFAULT_PREFERENCES: AppPreferences = {
   securityAlerts: true,
   p2pPeerAlerts: true,
   startOnline: true,
+  p2pRemoteAccess: false,
 };
 
 /** Apply theme to <html> for CSS `[data-theme]` rules. */
