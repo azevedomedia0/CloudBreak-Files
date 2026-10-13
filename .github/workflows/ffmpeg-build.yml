@@ -1,6 +1,6 @@
 name: ffmpeg LGPL build
 
-# Builds the LGPL-only ffmpeg sidecars and fills the cache that release.yml restores, without building,
+# Builds the LGPL-only ffmpeg sidecars and rclone sidecars (the release job's sidecar steps) and fills the ffmpeg cache that release.yml restores, without building,
 # signing or notarizing the app. Run it by hand (Actions → "ffmpeg LGPL build" → Run workflow), or it runs
 # when the build scripts change on a pull request branch.
 #
@@ -15,6 +15,7 @@ on:
       - scripts/build-ffmpeg-lgpl.sh
       - scripts/fetch-ffmpeg.sh
       - .github/workflows/ffmpeg-build.yml
+      - scripts/fetch-rclone.sh
 
 permissions:
   contents: read
@@ -41,9 +42,19 @@ jobs:
           MACOSX_DEPLOYMENT_TARGET: '11.0'
         run: bash scripts/fetch-ffmpeg.sh
 
+      # The release job also runs fetch-rclone.sh after the ffmpeg step; this checks it on its own.
+      - name: Fetch rclone sidecars
+        run: bash scripts/fetch-rclone.sh
+
       - name: Check the result
         run: |
           set -euo pipefail
+          for f in src-tauri/binaries/rclone-aarch64-apple-darwin src-tauri/binaries/rclone-x86_64-apple-darwin src-tauri/binaries/rclone-universal-apple-darwin; do
+            echo "== $f"
+            test -x "$f" || { echo "::error::$f is missing"; exit 1; }
+            lipo -archs "$f" 2>/dev/null || file "$f"
+          done
+          src-tauri/binaries/rclone-universal-apple-darwin version | head -1
           for f in src-tauri/binaries/ffmpeg-aarch64-apple-darwin src-tauri/binaries/ffmpeg-x86_64-apple-darwin; do
             echo "== $f"
             lipo -archs "$f"
