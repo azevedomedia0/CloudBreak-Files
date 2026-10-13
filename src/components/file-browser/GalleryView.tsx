@@ -14,6 +14,7 @@ export interface GalleryViewProps {
   selectedIds: Set<string>;
   onSelectFile: (file: FileItem) => void;
   onEditPhoto: (file: FileItem) => void;
+  onOpenVideo: (file: FileItem) => void;
   onOpenDocument: (file: FileItem) => void;
   onFileContextMenu: (file: FileItem, event: React.MouseEvent) => void;
   toggleSelectOne: (id: string, e: React.MouseEvent) => void;
@@ -22,9 +23,10 @@ export interface GalleryViewProps {
 const SCROLL_STEP = 280;
 
 export const GalleryView: React.FC<GalleryViewProps> = ({
-  accent, files, selectedFile, selectedIds, onSelectFile, onEditPhoto, onOpenDocument, onFileContextMenu, toggleSelectOne,
+  accent, files, selectedFile, selectedIds, onSelectFile, onEditPhoto, onOpenVideo, onOpenDocument, onFileContextMenu, toggleSelectOne,
 }) => {
   const reelRef = useRef<HTMLDivElement>(null);
+  const viewportVideoRef = useRef<HTMLVideoElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
 
@@ -85,6 +87,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
         )}
         {selectedFile.category === 'video' && (
           <video
+            ref={viewportVideoRef}
             src={selectedFile.url}
             controls
             className="max-h-full max-w-full rounded-xl shadow-2xl"
@@ -160,7 +163,14 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
                 data-file-id={file.id}
                 draggable
                 onDragStart={e => setFileDragData(e.dataTransfer, file, selectedIds)}
-                onClick={() => onSelectFile(file)}
+                onClick={e => {
+                  onSelectFile(file);
+                  // As in the other views, a plain click on a video opens the video player; ⌘/Ctrl/Shift only select.
+                  if (file.category === 'video' && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
+                    viewportVideoRef.current?.pause();
+                    onOpenVideo(file);
+                  }
+                }}
                 onContextMenu={event => onFileContextMenu(file, event)}
                 className={`group h-[calc(100%-6px)] aspect-video rounded-lg border shrink-0 cursor-pointer relative transition-all overflow-hidden ${
                   isActive
