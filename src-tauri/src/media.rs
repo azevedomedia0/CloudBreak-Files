@@ -601,14 +601,18 @@ fn detect_h264_encoder(ffmpeg: &Path) -> Result<H264Encoder, MediaError> {
 }
 
 /// VideoToolbox takes a constant quality (0-100) on Apple Silicon and only a bitrate on Intel.
+/// The Apple Silicon values were chosen by VMAF so each level scores about the same as the libx264 CRF
+/// it replaces (16, 20, 23, 28) on four 1080p clips (aerial, grainy aerial, gradients, UI): 80, 72, 66, 56.
+/// The old 90/75/60/45 made Lossless and High several times larger for no visible gain, and Compact worse.
+/// The Intel bitrates below have not been measured.
 fn videotoolbox_quality_args(quality: &str) -> [String; 2] {
     let level = quality.to_ascii_lowercase();
     if cfg!(target_arch = "aarch64") {
         let q = match level.as_str() {
-            "lossless" => "90",
-            "high" => "75",
-            "compact" => "45",
-            _ => "60",
+            "lossless" => "80",
+            "high" => "72",
+            "compact" => "56",
+            _ => "66",
         };
         ["-q:v".into(), q.into()]
     } else {
@@ -976,5 +980,15 @@ mod tests {
         assert!(vt.windows(2).any(|w| w == ["-allow_sw", "1"]));
         assert!(!vt.contains(&"-crf".to_string()), "VideoToolbox has no CRF");
         assert!(vt.iter().any(|a| a == "-q:v" || a == "-b:v"));
+    }
+
+    #[test]
+    #[cfg(target_arch = "aarch64")]
+    fn videotoolbox_quality_levels_rise_with_quality() {
+        let q = |level: &str| videotoolbox_quality_args(level)[1].parse::<u32>().unwrap();
+        assert_eq!(videotoolbox_quality_args("high")[0], "-q:v");
+        assert_eq!([q("lossless"), q("high"), q("balanced"), q("compact")], [80, 72, 66, 56]);
+        assert!(q("lossless") > q("high") && q("high") > q("balanced") && q("balanced") > q("compact"));
+        assert_eq!(q("anything else"), q("balanced"));
     }
 }
