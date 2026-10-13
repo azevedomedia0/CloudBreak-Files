@@ -1,7 +1,7 @@
 import type { UserProfile } from '../components/ProfileSettingsModal';
 
 export type AppViewMode = 'icons' | 'list' | 'columns' | 'gallery';
-export type AppTheme = 'dark' | 'midnight' | 'graphite' | 'light' | 'glacial';
+export type AppTheme = 'dark' | 'midnight' | 'graphite' | 'light' | 'glacial' | 'gnome';
 
 export const APP_THEMES: { id: AppTheme; label: string }[] = [
   { id: 'dark', label: 'Dark' },
@@ -9,6 +9,7 @@ export const APP_THEMES: { id: AppTheme; label: string }[] = [
   { id: 'graphite', label: 'Graphite' },
   { id: 'light', label: 'Light' },
   { id: 'glacial', label: 'Glacial Tint' },
+  { id: 'gnome', label: 'GNOME (Adwaita)' },
 ];
 
 const APP_THEME_IDS = new Set<string>(APP_THEMES.map(t => t.id));
@@ -19,7 +20,7 @@ export function isAppTheme(value: unknown): value is AppTheme {
 
 /** Native form controls / scrollbars: light only for the light appearance. */
 export function themeColorScheme(theme: AppTheme): 'dark' | 'light' {
-  return theme === 'light' || theme === 'glacial' ? 'light' : 'dark';
+  return theme === 'light' || theme === 'glacial' || theme === 'gnome' ? 'light' : 'dark';
 }
 
 export interface AppPreferences {

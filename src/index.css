@@ -1545,3 +1545,476 @@ html[data-theme="glacial"] .custom-range::-moz-range-thumb {
   background: #2b4c59;
   box-shadow: 0 0 0 2px rgba(43, 76, 89, 0.3);
 }
+
+/* —— GNOME appearance: Adwaita light, with the Adwaita blue accent (Linux desktop look) —— */
+html[data-theme="gnome"] {
+  /* Adwaita light surfaces: window, headerbar/sidebar, cards, borders */
+  --color-neutral-700: #c0bfbc;
+  --color-neutral-750: #d5d4d0;
+  --color-neutral-800: #e1e1e0;
+  --color-neutral-850: #ebebeb;
+  --color-neutral-900: #ebebeb;
+  --color-neutral-950: #f6f5f4;
+  --color-neutral-600: rgba(46, 52, 54, 0.72);
+  --color-neutral-500: rgba(46, 52, 54, 0.8);
+  --color-neutral-400: rgba(46, 52, 54, 0.9);
+  --color-neutral-300: #2e3436;
+  --color-neutral-200: #2e3436;
+  --color-neutral-100: #2e3436;
+  --color-neutral-50: #2e3436;
+  --color-sky-200: #1a5fb4;
+  --color-sky-300: #1c71d8;
+  --color-sky-400: #1c71d8;
+  --color-sky-500: #1c71d8;
+  --color-sky-600: #1a5fb4;
+  --color-cyan-200: #2190a4;
+  --color-cyan-300: #2190a4;
+  --color-cyan-400: #2190a4;
+  --color-cyan-500: #2190a4;
+  --color-emerald-200: #1a7f4b;
+  --color-emerald-300: #26a269;
+  --color-emerald-400: #1a7f4b;
+  --color-emerald-500: #1a7f4b;
+  --color-emerald-600: #1a7f4b;
+  --color-green-200: #1a7f4b;
+  --color-green-300: #26a269;
+  --color-green-400: #1a7f4b;
+  --color-green-500: #1a7f4b;
+  --color-purple-200: #613583;
+  --color-purple-300: #813d9c;
+  --color-purple-400: #613583;
+  --color-purple-500: #613583;
+  --color-violet-200: #613583;
+  --color-violet-300: #813d9c;
+  --color-violet-400: #613583;
+  --color-violet-500: #613583;
+  --color-indigo-200: #3d3846;
+  --color-indigo-300: #5e5c64;
+  --color-indigo-400: #3d3846;
+  --color-indigo-500: #3d3846;
+  --color-pink-200: #813d9c;
+  --color-pink-300: #c061cb;
+  --color-pink-400: #813d9c;
+  --color-pink-500: #813d9c;
+  --color-rose-200: #c01c28;
+  --color-rose-300: #e01b24;
+  --color-rose-400: #c01c28;
+  --color-lime-200: #1a7f4b;
+  --color-lime-300: #26a269;
+  --color-lime-400: #1a7f4b;
+  --color-lime-500: #1a7f4b;
+  --color-lime-600: #1a7f4b;
+  --color-orange-200: #c64600;
+  --color-orange-300: #e66100;
+  --color-orange-400: #c64600;
+  --color-orange-500: #c64600;
+  --color-amber-200: #a66a00;
+  --color-amber-300: #cd9309;
+  --color-amber-400: #a66a00;
+  --color-amber-500: #a66a00;
+  --color-amber-600: #a66a00;
+  --color-amber-700: #a66a00;
+  --color-amber-800: #a66a00;
+  --color-red-200: #c01c28;
+  --color-red-300: #e01b24;
+  --color-red-400: #c01c28;
+  --color-red-500: #c01c28;
+  --font-sans: Cantarell, system-ui, -apple-system, sans-serif;
+}
+
+
+html[data-theme="gnome"] body {
+  color: #2e3436;
+  background-color: #f6f5f4;
+}
+
+html[data-theme="gnome"] ::-webkit-scrollbar-thumb {
+  background: rgba(46, 52, 54, 0.22);
+}
+html[data-theme="gnome"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(46, 52, 54, 0.34);
+}
+
+html[data-theme="gnome"] .macos-window {
+  background: rgba(246, 245, 244, 0.94);
+  border-color: rgba(46, 52, 54, 0.1);
+  box-shadow:
+    0 25px 70px -15px rgba(46, 52, 54, 0.22),
+    0 0 0 1px rgba(46, 52, 54, 0.06),
+    inset 0 1px 0 0 rgba(246, 245, 244, 0.55);
+}
+
+html[data-theme="gnome"] .macos-sidebar-glass {
+  background: rgba(225, 225, 224, 0.42);
+  border-right-color: rgba(46, 52, 54, 0.1);
+  box-shadow: inset -1px 0 0 0 rgba(246, 245, 244, 0.35);
+}
+
+html[data-theme="gnome"] .macos-toolbar-glass {
+  background: rgba(246, 245, 244, 0.94);
+  border-bottom-color: rgba(46, 52, 54, 0.1);
+  box-shadow: inset 0 1px 0 0 rgba(246, 245, 244, 0.5);
+}
+
+/* Audio player — match light toolbar chrome, edge-to-edge */
+html[data-theme="gnome"] .audio-player-bar {
+  background: rgba(246, 245, 244, 0.97);
+  border-top-color: rgba(46, 52, 54, 0.12);
+  box-shadow:
+    inset 0 1px 0 0 rgba(246, 245, 244, 0.55),
+    0 -6px 18px -12px rgba(46, 52, 54, 0.18);
+  color: #2e3436;
+}
+html[data-theme="gnome"] .audio-player-title {
+  color: #2e3436;
+}
+html[data-theme="gnome"] .audio-player-time {
+  color: rgba(46, 52, 54, 0.55);
+}
+html[data-theme="gnome"] .audio-player-divider {
+  background: rgba(46, 52, 54, 0.14);
+}
+html[data-theme="gnome"] .audio-player-art {
+  background: rgba(46, 52, 54, 0.06);
+  border-color: rgba(46, 52, 54, 0.14);
+  box-shadow: inset 0 1px 2px rgba(46, 52, 54, 0.08);
+}
+html[data-theme="gnome"] .audio-player-btn {
+  color: #2e3436;
+}
+html[data-theme="gnome"] .audio-player-btn:hover {
+  background: rgba(46, 52, 54, 0.08);
+}
+html[data-theme="gnome"] .audio-player-play {
+  border-color: rgba(46, 52, 54, 0.28);
+}
+html[data-theme="gnome"] .audio-player-btn-active {
+  color: #2e3436;
+  background: rgba(46, 52, 54, 0.12);
+}
+html[data-theme="gnome"] .audio-player-btn-muted {
+  color: rgba(46, 52, 54, 0.4);
+}
+html[data-theme="gnome"] .audio-player-menu {
+  background: rgba(246, 245, 244, 0.98);
+  border-color: rgba(46, 52, 54, 0.12);
+  box-shadow: 0 10px 28px -8px rgba(46, 52, 54, 0.22);
+}
+html[data-theme="gnome"] .audio-player-menu-item {
+  color: #2e3436;
+}
+html[data-theme="gnome"] .audio-player-menu-item:hover {
+  background: rgba(46, 52, 54, 0.06);
+}
+html[data-theme="gnome"] .audio-scrubber {
+  background: linear-gradient(
+    to right,
+    #2e3436 0%,
+    #2e3436 var(--audio-progress, 0%),
+    rgba(46, 52, 54, 0.16) var(--audio-progress, 0%),
+    rgba(46, 52, 54, 0.16) 100%
+  );
+}
+html[data-theme="gnome"] .audio-volume-scrubber {
+  background: linear-gradient(
+    to right,
+    #2e3436 0%,
+    #2e3436 var(--audio-volume, 0%),
+    rgba(46, 52, 54, 0.16) var(--audio-volume, 0%),
+    rgba(46, 52, 54, 0.16) 100%
+  );
+}
+html[data-theme="gnome"] .audio-scrubber::-webkit-slider-thumb,
+html[data-theme="gnome"] .audio-volume-scrubber::-webkit-slider-thumb {
+  background: #2e3436;
+  box-shadow: 0 0 0 2px rgba(46, 52, 54, 0.28);
+}
+html[data-theme="gnome"] .audio-scrubber::-moz-range-thumb,
+html[data-theme="gnome"] .audio-volume-scrubber::-moz-range-thumb {
+  background: #2e3436;
+}
+
+html[data-theme="gnome"] .audio-player-queue {
+  background: rgba(246, 245, 244, 0.98);
+  border-color: rgba(46, 52, 54, 0.12);
+  color: #2e3436;
+  box-shadow: 0 14px 36px -10px rgba(46, 52, 54, 0.28);
+}
+html[data-theme="gnome"] .audio-player-queue-header {
+  border-bottom-color: rgba(46, 52, 54, 0.1);
+}
+html[data-theme="gnome"] .audio-player-queue-count {
+  background: rgba(46, 52, 54, 0.08);
+  color: rgba(46, 52, 54, 0.65);
+}
+html[data-theme="gnome"] .audio-player-queue-now {
+  border-bottom-color: rgba(46, 52, 54, 0.08);
+}
+html[data-theme="gnome"] .audio-player-queue-label {
+  color: rgba(46, 52, 54, 0.45);
+}
+html[data-theme="gnome"] .audio-player-queue-row:hover {
+  background: rgba(46, 52, 54, 0.06);
+}
+html[data-theme="gnome"] .audio-player-queue-row-current {
+  background: rgba(46, 52, 54, 0.14);
+}
+html[data-theme="gnome"] .audio-player-queue-live {
+  color: #2e3436;
+}
+
+/* Glacial Tint terminal — Carbon Fiber console */
+html[data-theme="gnome"] .system-terminal-panel {
+  background-color: #2e3436 !important;
+  border-left-color: rgba(246, 245, 244, 0.12);
+}
+html[data-theme="gnome"] .system-terminal-panel .terminal-panel-header {
+  background-color: #2e3436;
+  border-bottom-color: rgba(246, 245, 244, 0.1);
+}
+html[data-theme="gnome"] .system-terminal-panel .xterm,
+html[data-theme="gnome"] .system-terminal-panel .xterm-viewport,
+html[data-theme="gnome"] .system-terminal-panel .xterm-screen {
+  background-color: #2e3436 !important;
+}
+html[data-theme="gnome"] .system-terminal-panel .bg-white\/5,
+html[data-theme="gnome"] .system-terminal-panel .hover\:bg-white\/5:hover,
+html[data-theme="gnome"] .system-terminal-panel .hover\:bg-white\/10:hover {
+  background-color: rgba(246, 245, 244, 0.06);
+}
+html[data-theme="gnome"] .system-terminal-panel .border-white\/10 {
+  border-color: rgba(246, 245, 244, 0.1);
+}
+/* Undo global light-mode lime darkening inside the terminal */
+html[data-theme="gnome"] .system-terminal-panel [class*="text-lime-"],
+html[data-theme="gnome"] .system-terminal-panel [class*="ring-lime-"] {
+  color: #f6f5f4;
+}
+html[data-theme="gnome"] .system-terminal-panel [class*="border-lime-"] {
+  border-color: rgb(190 206 218 / 0.4);
+}
+html[data-theme="gnome"] .system-terminal-panel [class*="bg-lime-"] {
+  background-color: rgb(190 206 218 / 0.12);
+}
+html[data-theme="gnome"] .system-terminal-panel .xterm {
+  color: #f6f5f4;
+}
+
+html[data-theme="gnome"] .notification-panel,
+html[data-theme="gnome"] .app-modal-panel {
+  box-shadow:
+    0 20px 48px -14px rgba(46, 52, 54, 0.2),
+    0 0 0 1px rgba(46, 52, 54, 0.08);
+}
+
+/* Soften dark P2P banner washes so remapped dark text stays readable */
+html[data-theme="gnome"] .bg-purple-950\/40 {
+  background-color: rgba(46, 52, 54, 0.16);
+}
+html[data-theme="gnome"] .bg-emerald-950\/40 {
+  background-color: rgba(46, 52, 54, 0.16);
+}
+html[data-theme="gnome"] .border-purple-500\/25 {
+  border-color: rgba(46, 52, 54, 0.4);
+}
+html[data-theme="gnome"] .border-emerald-500\/25 {
+  border-color: rgba(46, 52, 54, 0.4);
+}
+
+/* P2P recipients row — deep ink on the tinted banner */
+html[data-theme="gnome"] .p2p-recipients-row .text-neutral-400,
+html[data-theme="gnome"] .p2p-recipients-row .text-white,
+html[data-theme="gnome"] .p2p-recipients-row .text-neutral-200 {
+  color: #2e3436;
+}
+
+html[data-theme="gnome"] .macos-glass-card {
+  background: rgba(225, 225, 224, 0.2);
+  border-color: rgba(46, 52, 54, 0.1);
+  box-shadow:
+    0 8px 24px -6px rgba(46, 52, 54, 0.16),
+    inset 0 1px 0 0 rgba(246, 245, 244, 0.55);
+}
+
+html[data-theme="gnome"] .macos-glass-card:hover {
+  background: rgba(225, 225, 224, 0.3);
+  border-color: rgba(46, 52, 54, 0.14);
+}
+
+html[data-theme="gnome"] .macos-segmented-pill {
+  background: rgba(46, 52, 54, 0.08);
+  border-color: rgba(46, 52, 54, 0.1);
+  box-shadow: inset 0 1px 2px rgba(46, 52, 54, 0.08);
+}
+
+html[data-theme="gnome"] .gallery-scrubber {
+  scrollbar-color: rgba(46, 52, 54, 0.32) rgba(46, 52, 54, 0.08);
+}
+html[data-theme="gnome"] .gallery-scrubber::-webkit-scrollbar-track {
+  background: rgba(46, 52, 54, 0.08);
+}
+html[data-theme="gnome"] .gallery-scrubber::-webkit-scrollbar-thumb {
+  background: rgba(46, 52, 54, 0.3);
+}
+
+/* Remap common dark-only utilities used across the UI */
+html[data-theme="gnome"] .text-white {
+  color: #2e3436;
+}
+/* Solid / gradient accent chips keep white glyph ink */
+html[data-theme="gnome"] [class*="bg-sky-"].text-white,
+html[data-theme="gnome"] [class*="bg-purple-"].text-white,
+html[data-theme="gnome"] [class*="bg-cyan-"].text-white,
+html[data-theme="gnome"] [class*="bg-emerald-"].text-white,
+html[data-theme="gnome"] [class*="bg-green-"].text-white,
+html[data-theme="gnome"] [class*="bg-amber-"].text-white,
+html[data-theme="gnome"] [class*="bg-red-"].text-white,
+html[data-theme="gnome"] [class*="bg-rose-"].text-white,
+html[data-theme="gnome"] [class*="bg-violet-"].text-white,
+html[data-theme="gnome"] [class*="bg-indigo-"].text-white,
+html[data-theme="gnome"] [class*="bg-orange-"].text-white,
+html[data-theme="gnome"] [class*="bg-pink-"].text-white,
+html[data-theme="gnome"] [class*="bg-lime-"].text-white,
+html[data-theme="gnome"] [class*="from-sky-"].text-white,
+html[data-theme="gnome"] [class*="from-indigo-"].text-white,
+html[data-theme="gnome"] [class*="bg-\[#0060df\]"].text-white,
+html[data-theme="gnome"] [class*="bg-\[#0250bb\]"].text-white {
+  color: #f6f5f4;
+}
+/* Video / media overlays stay dark — force light ink */
+html[data-theme="gnome"] .bg-black .text-white,
+html[data-theme="gnome"] .bg-black\/50 .text-white,
+html[data-theme="gnome"] .group\/player .text-white,
+html[data-theme="gnome"] .from-black\/90 .text-white {
+  color: #f6f5f4;
+}
+
+html[data-theme="gnome"] .bg-black\/80,
+html[data-theme="gnome"] .bg-black\/60,
+html[data-theme="gnome"] .bg-black\/40,
+html[data-theme="gnome"] .bg-black\/30,
+html[data-theme="gnome"] .bg-black\/25,
+html[data-theme="gnome"] .bg-black\/20 {
+  background-color: rgba(225, 225, 224, 0.35);
+}
+html[data-theme="gnome"] .border-white\/5,
+html[data-theme="gnome"] .border-white\/8,
+html[data-theme="gnome"] .border-white\/10,
+html[data-theme="gnome"] .border-white\/12,
+html[data-theme="gnome"] .border-white\/15 {
+  border-color: rgba(46, 52, 54, 0.14);
+}
+html[data-theme="gnome"] .hover\:bg-white\/5:hover,
+html[data-theme="gnome"] .hover\:bg-white\/6:hover,
+html[data-theme="gnome"] .hover\:bg-white\/10:hover,
+html[data-theme="gnome"] .hover\:bg-white\/12:hover,
+html[data-theme="gnome"] .hover\:bg-white\/15:hover {
+  background-color: rgba(46, 52, 54, 0.07);
+}
+html[data-theme="gnome"] .bg-white\/5,
+html[data-theme="gnome"] .bg-white\/\[0\.04\],
+html[data-theme="gnome"] .bg-white\/10,
+html[data-theme="gnome"] .bg-white\/12,
+html[data-theme="gnome"] .bg-white\/15 {
+  background-color: rgba(46, 52, 54, 0.06);
+}
+html[data-theme="gnome"] .placeholder-neutral-500::placeholder,
+html[data-theme="gnome"] .placeholder-neutral-400::placeholder,
+html[data-theme="gnome"] .placeholder-neutral-600::placeholder {
+  color: #2e3436;
+}
+
+/* Disabled / idle tab labels stay readable */
+html[data-theme="gnome"] .text-neutral-400\/80,
+html[data-theme="gnome"] .text-neutral-500\/80 {
+  color: rgb(43 76 89 / 0.85);
+}
+
+/* Stronger tinted surfaces so selection / badges stay visible */
+html[data-theme="gnome"] [class*="ring-sky-"],
+html[data-theme="gnome"] [class*="ring-purple-"],
+html[data-theme="gnome"] [class*="ring-emerald-"],
+html[data-theme="gnome"] [class*="ring-orange-"],
+html[data-theme="gnome"] [class*="ring-pink-"],
+html[data-theme="gnome"] [class*="ring-lime-"],
+html[data-theme="gnome"] [class*="ring-cyan-"] {
+  --tw-ring-opacity: 0.55;
+}
+
+html[data-theme="gnome"] [class*="border-sky-"],
+html[data-theme="gnome"] [class*="border-purple-"],
+html[data-theme="gnome"] [class*="border-emerald-"],
+html[data-theme="gnome"] [class*="border-orange-"],
+html[data-theme="gnome"] [class*="border-pink-"],
+html[data-theme="gnome"] [class*="border-lime-"],
+html[data-theme="gnome"] [class*="border-cyan-"] {
+  --tw-border-opacity: 0.45;
+}
+
+html[data-theme="gnome"] [class*="bg-sky-500/"],
+html[data-theme="gnome"] [class*="bg-purple-500/"],
+html[data-theme="gnome"] [class*="bg-emerald-500/"],
+html[data-theme="gnome"] [class*="bg-orange-500/"],
+html[data-theme="gnome"] [class*="bg-pink-500/"],
+html[data-theme="gnome"] [class*="bg-lime-500/"],
+html[data-theme="gnome"] [class*="bg-cyan-500/"] {
+  --tw-bg-opacity: 0.22;
+}
+
+html[data-theme="gnome"] .finder-folder-icon .finder-folder-back {
+  fill: #c0bfbc;
+}
+html[data-theme="gnome"] .finder-folder-icon .finder-folder-front {
+  fill: #e1e1e0;
+}
+html[data-theme="gnome"] .finder-folder-icon .finder-folder-highlight {
+  fill: #f6f5f4;
+}
+html[data-theme="gnome"] .custom-range::-webkit-slider-runnable-track,
+html[data-theme="gnome"] .custom-range::-moz-range-track {
+  background: rgba(46, 52, 54, 0.25);
+}
+html[data-theme="gnome"] .custom-range::-webkit-slider-thumb,
+html[data-theme="gnome"] .custom-range::-moz-range-thumb {
+  background: #2e3436;
+  box-shadow: 0 0 0 2px rgba(46, 52, 54, 0.3);
+}
+
+/* Adwaita: flat surfaces, no glass, 12px rounded cards (window chrome stays as is) */
+html[data-theme="gnome"] body {
+  color: #2e3436;
+  background-color: #f6f5f4;
+}
+html[data-theme="gnome"] .macos-window,
+html[data-theme="gnome"] .macos-sidebar-glass,
+html[data-theme="gnome"] .macos-toolbar-glass,
+html[data-theme="gnome"] .audio-player-bar {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+html[data-theme="gnome"] .macos-toolbar-glass {
+  background: #ebebeb;
+  border-bottom-color: rgba(0, 0, 0, 0.12);
+  box-shadow: none;
+}
+html[data-theme="gnome"] .macos-sidebar-glass {
+  background: #ebebeb;
+  border-right-color: rgba(0, 0, 0, 0.12);
+  box-shadow: none;
+}
+html[data-theme="gnome"] .macos-window {
+  background: #f6f5f4;
+  border-color: rgba(0, 0, 0, 0.12);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1), 0 8px 24px -8px rgba(0, 0, 0, 0.18);
+}
+html[data-theme="gnome"] .macos-glass-card,
+html[data-theme="gnome"] .macos-glass-card:hover {
+  border-radius: 12px;
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.04);
+}
+html[data-theme="gnome"] ::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.28);
+  border-radius: 9999px;
+}

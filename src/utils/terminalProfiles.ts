@@ -89,6 +89,7 @@ export function cloudbreakTheme(): ITheme {
   const theme = typeof document !== 'undefined' ? document.documentElement.getAttribute('data-theme') : null;
   if (theme === 'light') return XTERM_THEME_LIGHT;
   if (theme === 'glacial') return XTERM_THEME_GLACIAL;
+  if (theme === 'gnome') return XTERM_THEME_LIGHT;
   return XTERM_THEME_DARK;
 }
 
