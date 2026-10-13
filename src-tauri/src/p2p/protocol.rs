@@ -4,7 +4,8 @@ use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
-pub const PROTOCOL_VERSION: u32 = 1;
+/// 2: a peer must present a library's access token (`Access`) before it is told about or sent anything.
+pub const PROTOCOL_VERSION: u32 = 2;
 pub const DEFAULT_PORT: u16 = 7421;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -15,6 +16,12 @@ pub enum P2pMessage {
         public_key_hex: String,
         protocol_version: u32,
         listen_addrs: Vec<String>,
+    },
+    /// Sent by the dialer after `Identify`: the token from the library's invite. Until one matches,
+    /// the listener says nothing about what it seeds and serves no chunk.
+    Access {
+        root_cid: String,
+        token: String,
     },
     Have {
         root_cid: String,

@@ -488,6 +488,7 @@ mod tests {
             created_at: "2026-01-01T00:00:00Z".into(),
             file_ids: vec![],
             member_count: 1,
+            access_token: None,
             local_wrapped_key: crate::p2p::keys::WrappedLibraryKey {
                 scheme: "self".into(),
                 eph_public_hex: None,

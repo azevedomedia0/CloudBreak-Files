@@ -207,6 +207,8 @@ pub async fn p2p_create_library(
         wrap_with_passphrase(&root_key, "aetherlib-default-invite-key").map_err(|e| e.to_string())?
     };
 
+    let access_token = new_access_token();
+
     let expires_days = req.expires_in_days.unwrap_or(30);
     let expires_at_ts = if expires_days <= 0 {
         0 // never (invite verify treats 0 as no expiry)
@@ -236,6 +238,7 @@ pub async fn p2p_create_library(
         epoch: 1,
         manifest_nonce_hex: blob.nonce_hex.clone(),
         private_mode: true,
+        access_token: access_token.clone(),
     }
     .sign_with(&identity);
     let invite_str = invite.encode().map_err(|e| e.to_string())?;
@@ -267,6 +270,7 @@ pub async fn p2p_create_library(
         private_mode: true,
         expires_at: expires_at_iso,
         allow_downloads,
+        access_token: Some(access_token.clone()),
     };
 
     let mut index = LibraryIndex::load(&data).map_err(|e| e.to_string())?;
@@ -274,7 +278,7 @@ pub async fn p2p_create_library(
     index.save(&data).map_err(|e| e.to_string())?;
 
     // Private mode: seed locally only — peers must dial via the invite, never DHT announce.
-    swarm.seed_library(blob.root_cid.clone(), library_id.clone());
+    swarm.seed_library(blob.root_cid.clone(), library_id.clone(), access_token);
     tray::refresh_tray_status(&app);
 
     Ok(CreateLibraryResult {
@@ -309,6 +313,10 @@ pub async fn p2p_accept_invite(
     let identity = ensure_identity(&app, &state, "Cloudbreak User")?;
     let data = app_data_dir(&app)?;
     let invite = LibraryInvite::decode(&req.invite).map_err(|e| e.to_string())?;
+    if invite.access_token.is_empty() {
+        return Err(crate::p2p::invite::InviteError::Outdated.to_string());
+    }
+    let token = invite.access_token.clone();
 
     let root_key = if let Some(pass) = req.invite_passphrase.as_ref().filter(|s| !s.is_empty()) {
         unwrap_with_passphrase(&invite.wrapped_library_key, pass).map_err(|e| e.to_string())?
@@ -322,7 +330,7 @@ pub async fn p2p_accept_invite(
 
     let swarm = ensure_swarm(&app, &state).await?;
     // Private mode: dial only multiaddrs embedded in the signed invite.
-    swarm.dial_invite(invite.root_cid.clone(), invite.seeder_addrs.clone());
+    swarm.dial_invite(invite.root_cid.clone(), invite.seeder_addrs.clone(), token.clone());
 
     let dir = library_dir(&data, &invite.library_id);
     let store = ChunkStore::open(dir.clone()).map_err(|e| e.to_string())?;
@@ -335,17 +343,10 @@ pub async fn p2p_accept_invite(
                 invite.root_cid.clone(),
                 vec![invite.root_cid.clone()],
                 invite.library_id.clone(),
+                token.clone(),
             )
             .await
-            .unwrap_or(0);
-        // Also try copying from inbox
-        let inbox = data.join("chunk_inbox").join(&invite.root_cid);
-        if inbox.exists() && !store.has(&invite.root_cid) {
-            if let Ok(bytes) = std::fs::read(&inbox) {
-                let _ = store.put_raw(&bytes);
-                fetched += 1;
-            }
-        }
+            .map_err(|e| format!("Could not reach the library's seeder: {e}"))?;
     }
 
     let ct = store
@@ -369,7 +370,7 @@ pub async fn p2p_accept_invite(
     }
     if !want.is_empty() {
         fetched += swarm
-            .fetch_missing(invite.root_cid.clone(), want, invite.library_id.clone())
+            .fetch_missing(invite.root_cid.clone(), want, invite.library_id.clone(), token.clone())
             .await
             .unwrap_or(0);
     }
@@ -409,6 +410,7 @@ pub async fn p2p_accept_invite(
             None
         },
         allow_downloads: true,
+        access_token: Some(token.clone()),
     };
 
     let mut index = LibraryIndex::load(&data).map_err(|e| e.to_string())?;
@@ -416,12 +418,21 @@ pub async fn p2p_accept_invite(
     index.save(&data).map_err(|e| e.to_string())?;
 
     // Serve chunks we have to invite-dialed peers only (no announce / DHT).
-    swarm.seed_library(invite.root_cid.clone(), invite.library_id);
+    swarm.seed_library(invite.root_cid.clone(), invite.library_id, token);
 
     Ok(AcceptInviteResult {
         record,
         fetched_chunks: fetched,
     })
+}
+
+/// A fresh access token: 32 random bytes, hex. The listener serves a library only to peers that
+/// present its token, and only the library's invite carries it.
+fn new_access_token() -> String {
+    use rand::RngCore;
+    let mut bytes = [0u8; 32];
+    rand::rngs::OsRng.fill_bytes(&mut bytes);
+    hex::encode(bytes)
 }
 
 /// The library's invite with this Mac's addresses as of now. The saved copy carries the addresses
@@ -444,11 +455,26 @@ pub async fn p2p_export_invite(
         .ok_or_else(|| "no invite for this library".to_string())?;
     // Only this Mac's own invites can be refreshed: the addresses are signed, and a library received
     // from someone else carries its sender's signature and addresses.
-    let own = LibraryInvite::decode_unverified(&saved).map_err(|e| e.to_string())?;
+    let mut own = LibraryInvite::decode_unverified(&saved).map_err(|e| e.to_string())?;
     if own.seeder_peer_id != identity.peer_id {
         return Ok(saved);
     }
     let swarm = ensure_swarm(&app, &state).await?;
+    // Libraries made before access tokens get one now; it is saved and the listener learns it.
+    let token = match rec.access_token.clone() {
+        Some(token) => token,
+        None => {
+            let token = new_access_token();
+            let mut index = LibraryIndex::load(&data).map_err(|e| e.to_string())?;
+            if let Some(r) = index.get_mut(&library_id) {
+                r.access_token = Some(token.clone());
+            }
+            index.save(&data).map_err(|e| e.to_string())?;
+            swarm.seed_library(rec.root_cid.clone(), library_id.clone(), token.clone());
+            token
+        }
+    };
+    own.access_token = token;
     own.with_seeder_addrs(swarm.listen_addrs(), &identity)
         .encode()
         .map_err(|e| e.to_string())
@@ -474,8 +500,22 @@ pub async fn p2p_start_seeding(
         .ok_or_else(|| "library not found".to_string())?
         .clone();
     let swarm = ensure_swarm(&app, &state).await?;
-    // Private mode: listen + seed only; peers find us via invite seederAddrs.
-    swarm.seed_library(rec.root_cid.clone(), library_id);
+    // Private mode: listen + seed only; peers find us via invite seederAddrs, presenting its token.
+    // A library from before tokens gets one (copy its invite again to hand it out); until then
+    // no peer can be served, which is the safe way round.
+    let token = match rec.access_token.clone() {
+        Some(token) => token,
+        None => {
+            let token = new_access_token();
+            let mut index = LibraryIndex::load(&data).map_err(|e| e.to_string())?;
+            if let Some(r) = index.get_mut(&library_id) {
+                r.access_token = Some(token.clone());
+            }
+            index.save(&data).map_err(|e| e.to_string())?;
+            token
+        }
+    };
+    swarm.seed_library(rec.root_cid.clone(), library_id, token);
     tray::refresh_tray_status(&app);
     Ok(swarm.status())
 }

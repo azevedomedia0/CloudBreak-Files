@@ -41,6 +41,10 @@ pub struct LibraryInvite {
     /// Invite-dial only; no DHT / STUN / peer announce (always true).
     #[serde(default = "invite_private_default")]
     pub private_mode: bool,
+    /// The secret the seeder's listener asks for before it serves this library. Anyone holding
+    /// the invite has it, which is the point: the invite is the permission.
+    #[serde(default)]
+    pub access_token: String,
 }
 
 fn invite_private_default() -> bool {
@@ -176,6 +180,7 @@ mod tests {
             epoch: 1,
             manifest_nonce_hex: "00".repeat(12),
             private_mode: true,
+            access_token: "aa".repeat(32),
         }
         .sign_with(&id);
         let encoded = invite.encode().unwrap();
@@ -221,6 +226,7 @@ mod tests {
             epoch: 1,
             manifest_nonce_hex: "00".repeat(12),
             private_mode: true,
+            access_token: "aa".repeat(32),
         };
         invite.capability_sig = id.sign(&legacy_capability_message(&invite));
         let encoded = invite.encode().unwrap();
