@@ -10,8 +10,8 @@
 use crate::p2p::chunk_store::{cid_of_ciphertext, ChunkStore};
 use crate::p2p::identity::PeerIdentity;
 use crate::p2p::protocol::{
-    multiaddr_tcp, parse_tcp_multiaddr, read_message, write_message, P2pMessage, DEFAULT_PORT,
-    PROTOCOL_VERSION,
+    access_proof, multiaddr_tcp, parse_tcp_multiaddr, read_message, verify_access_proof, write_message, P2pMessage,
+    DEFAULT_PORT, PROTOCOL_VERSION,
 };
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
@@ -20,7 +20,6 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use subtle::ConstantTimeEq;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, Semaphore};
 use tokio::time::timeout;
@@ -300,13 +299,44 @@ impl SwarmHandle {
     }
 }
 
-/// Whether `token` is the access token of a library this Mac seeds. Constant-time, so the
-/// comparison does not reveal how much of a guess was right.
-fn token_matches(inner: &Arc<RwLock<SwarmInner>>, root_cid: &str, token: &str) -> bool {
-    let r = inner.read();
-    match r.access_tokens.get(root_cid) {
-        Some(expected) if !expected.is_empty() => expected.as_bytes().ct_eq(token.as_bytes()).into(),
-        _ => false,
+/// The access token of a library this Mac seeds, if it has one.
+fn token_for(inner: &Arc<RwLock<SwarmInner>>, root_cid: &str) -> Option<String> {
+    inner.read().access_tokens.get(root_cid).filter(|t| !t.is_empty()).cloned()
+}
+
+/// A fresh random nonce for an access challenge.
+fn new_nonce() -> String {
+    use rand::RngCore;
+    let mut bytes = [0u8; 32];
+    rand::rngs::OsRng.fill_bytes(&mut bytes);
+    hex::encode(bytes)
+}
+
+/// Dialer side of the access handshake: ask for the library, answer the listener's challenge with a proof
+/// that needs the token, and read the verdict. The token itself never goes on the wire.
+async fn request_access(
+    stream: &mut TcpStream,
+    root_cid: &str,
+    token: &str,
+    my_id: &str,
+    remote_id: &str,
+) -> Result<(), String> {
+    write_message(stream, &P2pMessage::AccessRequest { root_cid: root_cid.to_string() })
+        .await
+        .map_err(|e| e.to_string())?;
+    let nonce_hex = match timeout(HANDSHAKE_TIMEOUT, read_message(stream)).await {
+        Ok(Ok(P2pMessage::Challenge { root_cid: r, nonce_hex })) if r == root_cid => nonce_hex,
+        Ok(Ok(P2pMessage::Error { message })) => return Err(message),
+        _ => return Err("the peer did not answer the access request".into()),
+    };
+    let proof_hex = access_proof(token, root_cid, &nonce_hex, my_id, remote_id);
+    write_message(stream, &P2pMessage::Access { root_cid: root_cid.to_string(), proof_hex })
+        .await
+        .map_err(|e| e.to_string())?;
+    match timeout(HANDSHAKE_TIMEOUT, read_message(stream)).await {
+        Ok(Ok(P2pMessage::Have { .. })) => Ok(()),
+        Ok(Ok(P2pMessage::Error { message })) => Err(message),
+        _ => Err("the peer did not accept the access proof".into()),
     }
 }
 
@@ -369,20 +399,16 @@ async fn handle_connection(
         other => return Err(format!("expected Identify, got {other:?}")),
     };
 
-    if let Some((root_cid, token)) = &access {
-        write_message(
-            &mut stream,
-            &P2pMessage::Access {
-                root_cid: root_cid.clone(),
-                token: token.clone(),
-            },
-        )
-        .await
-        .map_err(|e| e.to_string())?;
+    if let Some((root_cid, _)) = &access {
+        write_message(&mut stream, &P2pMessage::AccessRequest { root_cid: root_cid.clone() })
+            .await
+            .map_err(|e| e.to_string())?;
     }
 
     // Libraries the other side has proved it was invited to, on this connection.
     let mut authorised: HashSet<String> = HashSet::new();
+    // The challenge this (listening) side has put to the other side and not yet had answered.
+    let mut challenge: Option<(String, String)> = None;
 
     loop {
         // Until a token matches, a silent or slow peer is dropped quickly.
@@ -392,8 +418,42 @@ async fn handle_connection(
             _ => break,
         };
         match msg {
-            P2pMessage::Access { root_cid, token } => {
-                if !inbound || !token_matches(&inner, &root_cid, &token) {
+            P2pMessage::AccessRequest { root_cid } => {
+                // Only a listener answers; and only for a library it seeds (and that is a real cid).
+                if !inbound || !is_cid(&root_cid) || token_for(&inner, &root_cid).is_none() {
+                    let _ = write_message(
+                        &mut stream,
+                        &P2pMessage::Error {
+                            message: "This library was not shared with you.".into(),
+                        },
+                    )
+                    .await;
+                    break;
+                }
+                let nonce_hex = new_nonce();
+                challenge = Some((root_cid.clone(), nonce_hex.clone()));
+                write_message(&mut stream, &P2pMessage::Challenge { root_cid, nonce_hex })
+                    .await
+                    .map_err(|e| e.to_string())?;
+            }
+            P2pMessage::Challenge { root_cid, nonce_hex } => {
+                // The dialing side answers the listener's challenge with a proof that needs the token.
+                let Some((wanted_root, token)) = access.as_ref().filter(|(r, _)| *r == root_cid) else { break };
+                let proof_hex = access_proof(token, wanted_root, &nonce_hex, &peer_id, &remote);
+                write_message(&mut stream, &P2pMessage::Access { root_cid, proof_hex })
+                    .await
+                    .map_err(|e| e.to_string())?;
+            }
+            P2pMessage::Access { root_cid, proof_hex } => {
+                // One try per challenge: a wrong proof ends the connection.
+                let pending = challenge.take();
+                let proven = match (&pending, token_for(&inner, &root_cid)) {
+                    (Some((wanted_root, nonce)), Some(token)) if *wanted_root == root_cid => {
+                        verify_access_proof(&token, &root_cid, nonce, &remote, &peer_id, &proof_hex)
+                    }
+                    _ => false,
+                };
+                if !inbound || !proven {
                     let _ = write_message(
                         &mut stream,
                         &P2pMessage::Error {
@@ -585,7 +645,7 @@ async fn fetch_blocks_invite_only(
         write_message(
             &mut stream,
             &P2pMessage::Identify {
-                peer_id: my_id,
+                peer_id: my_id.clone(),
                 public_key_hex: my_pk,
                 protocol_version: PROTOCOL_VERSION,
                 listen_addrs: vec![],
@@ -593,29 +653,14 @@ async fn fetch_blocks_invite_only(
         )
         .await
         .map_err(|e| e.to_string())?;
-        if !matches!(
-            timeout(HANDSHAKE_TIMEOUT, read_message(&mut stream)).await,
-            Ok(Ok(P2pMessage::Identify { .. }))
-        ) {
-            continue;
-        }
-
-        write_message(
-            &mut stream,
-            &P2pMessage::Access {
-                root_cid: root_cid.to_string(),
-                token: token.to_string(),
-            },
-        )
-        .await
-        .map_err(|e| e.to_string())?;
-        match timeout(HANDSHAKE_TIMEOUT, read_message(&mut stream)).await {
-            Ok(Ok(P2pMessage::Have { .. })) => {}
-            Ok(Ok(P2pMessage::Error { message })) => {
-                refused = Some(message);
-                continue;
-            }
+        let remote_id = match timeout(HANDSHAKE_TIMEOUT, read_message(&mut stream)).await {
+            Ok(Ok(P2pMessage::Identify { peer_id, .. })) => peer_id,
             _ => continue,
+        };
+
+        if let Err(message) = request_access(&mut stream, root_cid, token, &my_id, &remote_id).await {
+            refused = Some(message);
+            continue;
         }
 
         let still_need: Vec<String> = want_cids
@@ -715,67 +760,169 @@ mod tests {
         let _ = std::fs::remove_dir_all(&data);
     }
 
-    /// What a stranger on the internet gets by connecting: nothing without the library's token.
-    #[tokio::test]
-    async fn the_listener_serves_only_peers_holding_the_token() {
+    /// Dial a listener the way a stranger can: raw messages, optionally proving knowledge of `token`.
+    async fn probe(port: u16, root: &str, cid: &str, token: Option<&str>) -> Vec<P2pMessage> {
+        // The seed command is applied on the swarm's own task; give it a moment.
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let me = PeerIdentity::generate("stranger");
+        let mut s = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+        write_message(&mut s, &P2pMessage::Identify {
+            peer_id: me.peer_id.clone(),
+            public_key_hex: me.public_key_hex.clone(),
+            protocol_version: PROTOCOL_VERSION,
+            listen_addrs: vec![],
+        })
+        .await
+        .unwrap();
+        let Ok(Ok(P2pMessage::Identify { peer_id: listener_id, .. })) =
+            timeout(Duration::from_secs(2), read_message(&mut s)).await
+        else {
+            panic!("the listener did not identify");
+        };
+        let mut seen = Vec::new();
+        if let Some(token) = token {
+            write_message(&mut s, &P2pMessage::AccessRequest { root_cid: root.to_string() }).await.unwrap();
+            if let Ok(Ok(P2pMessage::Challenge { nonce_hex, .. })) =
+                timeout(Duration::from_millis(500), read_message(&mut s)).await
+            {
+                let proof_hex = access_proof(token, root, &nonce_hex, &me.peer_id, &listener_id);
+                write_message(&mut s, &P2pMessage::Access { root_cid: root.to_string(), proof_hex }).await.unwrap();
+            }
+            // Wait for the verdict, as the real dialer does: a refusal closes the connection.
+            while let Ok(Ok(msg)) = timeout(Duration::from_millis(500), read_message(&mut s)).await {
+                let verdict = matches!(msg, P2pMessage::Have { .. } | P2pMessage::Error { .. });
+                seen.push(msg);
+                if verdict {
+                    break;
+                }
+            }
+        }
+        let _ = write_message(&mut s, &P2pMessage::Want { root_cid: root.to_string(), cids: vec![cid.to_string()] }).await;
+        while let Ok(Ok(msg)) = timeout(Duration::from_millis(500), read_message(&mut s)).await {
+            seen.push(msg);
+        }
+        seen
+    }
+
+    fn served(seen: &[P2pMessage]) -> bool {
+        seen.iter().any(|m| matches!(m, P2pMessage::Have { .. } | P2pMessage::Block { .. }))
+    }
+
+    async fn seeder_with_chunk(token: &str) -> (SwarmHandle, PathBuf, String, String) {
         let data = std::env::temp_dir().join(format!("cb-swarm-{}", uuid::Uuid::new_v4()));
         let store = ChunkStore::open(data.join("libraries").join("lib")).unwrap();
         let cid = store.put_raw(b"sealed chunk").unwrap();
         let root = "ab".repeat(32);
-        let token = "cd".repeat(32);
         let swarm = SwarmHandle::start(PeerIdentity::generate("seeder"), data.clone(), Some(0)).await.unwrap();
-        swarm.seed_library(root.clone(), "lib".into(), token.clone());
+        swarm.seed_library(root.clone(), "lib".into(), token.to_string());
+        (swarm, data, root, cid)
+    }
+
+    /// What a stranger on the internet gets by connecting: nothing without a proof from the library's token.
+    #[tokio::test]
+    async fn the_listener_serves_only_peers_holding_the_token() {
+        let token = "cd".repeat(32);
+        let (swarm, data, root, cid) = seeder_with_chunk(&token).await;
         let port = swarm.port();
 
-        let stranger = PeerIdentity::generate("stranger");
-        let connect = |access: Option<String>| {
-            let (root, cid, stranger) = (root.clone(), cid.clone(), stranger.clone());
-            async move {
-                // The seed command is applied on the swarm's own task; give it a moment.
-                tokio::time::sleep(Duration::from_millis(100)).await;
-                let mut s = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
-                write_message(&mut s, &P2pMessage::Identify {
-                    peer_id: stranger.peer_id.clone(),
-                    public_key_hex: stranger.public_key_hex.clone(),
-                    protocol_version: PROTOCOL_VERSION,
-                    listen_addrs: vec![],
-                })
-                .await
-                .unwrap();
-                let mut seen = Vec::new();
-                if let Some(token) = access {
-                    write_message(&mut s, &P2pMessage::Access { root_cid: root.clone(), token }).await.unwrap();
-                    // Wait for the answer, as the real dialer does: a refusal closes the connection.
-                    while let Ok(Ok(msg)) = timeout(Duration::from_millis(500), read_message(&mut s)).await {
-                        let answered = matches!(msg, P2pMessage::Have { .. } | P2pMessage::Error { .. });
-                        seen.push(msg);
-                        if answered {
-                            break;
-                        }
-                    }
-                }
-                let _ = write_message(&mut s, &P2pMessage::Want { root_cid: root, cids: vec![cid] }).await;
-                while let Ok(Ok(msg)) = timeout(Duration::from_millis(500), read_message(&mut s)).await {
-                    seen.push(msg);
-                }
-                seen
-            }
-        };
-
-        let no_token = connect(None).await;
-        assert!(
-            !no_token.iter().any(|m| matches!(m, P2pMessage::Have { .. } | P2pMessage::Block { .. })),
-            "no token: {no_token:?}"
-        );
-        let wrong = connect(Some("ef".repeat(32))).await;
+        let no_proof = probe(port, &root, &cid, None).await;
+        assert!(!served(&no_proof), "no proof: {no_proof:?}");
+        let wrong = probe(port, &root, &cid, Some(&"ef".repeat(32))).await;
         assert!(wrong.iter().any(|m| matches!(m, P2pMessage::Error { .. })), "wrong token: {wrong:?}");
-        assert!(!wrong.iter().any(|m| matches!(m, P2pMessage::Have { .. } | P2pMessage::Block { .. })));
-        let right = connect(Some(token)).await;
+        assert!(!served(&wrong));
+        let unknown_root = probe(port, &"12".repeat(32), &cid, Some(&token)).await;
+        assert!(!served(&unknown_root), "a library it does not seed: {unknown_root:?}");
+        let right = probe(port, &root, &cid, Some(&token)).await;
         assert!(right.iter().any(|m| matches!(m, P2pMessage::Have { .. })), "right token: {right:?}");
         assert!(
             right.iter().any(|m| matches!(m, P2pMessage::Block { cid: c, .. } if *c == cid)),
             "right token: {right:?}"
         );
         let _ = std::fs::remove_dir_all(&data);
+    }
+
+    /// The scenario cross-network joins create: an unrelated device answers at the seeder's old private
+    /// address. It must learn nothing it could use to get the library.
+    #[tokio::test]
+    async fn a_wrong_device_at_the_address_never_sees_the_token() {
+        use tokio::io::AsyncReadExt;
+        let token = "9f".repeat(32);
+        let root = "ab".repeat(32);
+        let impostor = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let impostor_port = impostor.local_addr().unwrap().port();
+        let captured = std::sync::Arc::new(parking_lot::Mutex::new(Vec::<u8>::new()));
+        let sink = captured.clone();
+        let root_for_task = root.clone();
+        tokio::spawn(async move {
+            while let Ok((mut stream, _)) = impostor.accept().await {
+                let sink = sink.clone();
+                let root = root_for_task.clone();
+                tokio::spawn(async move {
+                    let me = PeerIdentity::generate("impostor");
+                    let _ = write_message(&mut stream, &P2pMessage::Identify {
+                        peer_id: me.peer_id.clone(),
+                        public_key_hex: me.public_key_hex.clone(),
+                        protocol_version: PROTOCOL_VERSION,
+                        listen_addrs: vec![],
+                    })
+                    .await;
+                    // Play along as far as a listener can, and record every byte the dialer sends.
+                    let mut buf = [0u8; 4096];
+                    let mut challenged = false;
+                    while let Ok(Ok(n)) = timeout(Duration::from_secs(2), stream.read(&mut buf)).await {
+                        if n == 0 {
+                            break;
+                        }
+                        sink.lock().extend_from_slice(&buf[..n]);
+                        if !challenged {
+                            challenged = true;
+                            let _ = write_message(&mut stream, &P2pMessage::Challenge {
+                                root_cid: root.clone(),
+                                nonce_hex: "00".repeat(32),
+                            })
+                            .await;
+                        } else {
+                            let _ = write_message(&mut stream, &P2pMessage::Error { message: "no".into() }).await;
+                            break;
+                        }
+                    }
+                });
+            }
+        });
+
+        let data = std::env::temp_dir().join(format!("cb-swarm-{}", uuid::Uuid::new_v4()));
+        let invitee = SwarmHandle::start(PeerIdentity::generate("invitee"), data.clone(), Some(0)).await.unwrap();
+        let addr = format!("/ip4/127.0.0.1/tcp/{impostor_port}");
+        invitee.dial_invite(root.clone(), vec![addr], token.clone());
+        let cid = "34".repeat(32);
+        let result = invitee.fetch_missing(root, vec![cid], "lib".into(), token.clone()).await;
+        assert!(result.is_err() || result == Ok(0), "an impostor served nothing: {result:?}");
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        let bytes = captured.lock().clone();
+        let text = String::from_utf8_lossy(&bytes);
+        assert!(!text.is_empty(), "the dialer did reach the impostor");
+        assert!(!text.contains(&token), "the token went over the wire: {text}");
+        let _ = std::fs::remove_dir_all(&data);
+    }
+
+    /// Joining from another network: the invite lists a LAN address that does not answer, then the address
+    /// the router forwards. The fetch falls through to it and gets the chunk.
+    #[tokio::test]
+    async fn a_join_falls_through_dead_addresses_to_the_forwarded_one() {
+        let token = "5a".repeat(32);
+        let (seeder, seeder_data, root, cid) = seeder_with_chunk(&token).await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let public = format!("/ip4/127.0.0.1/tcp/{}", seeder.port());
+
+        let data = std::env::temp_dir().join(format!("cb-swarm-{}", uuid::Uuid::new_v4()));
+        let invitee = SwarmHandle::start(PeerIdentity::generate("invitee"), data.clone(), Some(0)).await.unwrap();
+        // Port 1 on loopback refuses at once, standing in for a private address on another network.
+        invitee.dial_invite(root.clone(), vec!["/ip4/127.0.0.1/tcp/1".into(), public], token.clone());
+        let got = invitee.fetch_missing(root, vec![cid.clone()], "lib".into(), token).await;
+        assert_eq!(got, Ok(1));
+        let store = ChunkStore::open(data.join("libraries").join("lib")).unwrap();
+        assert_eq!(store.get_raw(&cid).unwrap(), b"sealed chunk");
+        let _ = std::fs::remove_dir_all(&data);
+        let _ = std::fs::remove_dir_all(&seeder_data);
     }
 }

@@ -164,7 +164,15 @@ export function useP2pLibraries({
     try {
       const invite = await p2pBridge.exportInvite(selectedLibraryId);
       await navigator.clipboard.writeText(invite);
-      showToast('P2P invite copied to clipboard');
+      // Say how far the invite reaches: it carries a public address only when the router opened a port.
+      const remote = await p2pBridge.remoteAccessStatus().catch(() => null);
+      showToast(
+        !remote ? 'P2P invite copied to clipboard'
+          : remote.publicAddress ? 'P2P invite copied · works from other networks'
+            : remote.enabled
+              ? 'P2P invite copied · works on your network only (your router did not open a port, see Preferences → Network)'
+              : 'P2P invite copied · works on your network only. To share it elsewhere, turn on "Allow connections from other networks" in Preferences → Network',
+      );
     } catch (err) {
       showToast(err instanceof Error ? err.message : String(err));
     }

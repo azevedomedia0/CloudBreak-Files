@@ -17,11 +17,21 @@ pub enum P2pMessage {
         protocol_version: u32,
         listen_addrs: Vec<String>,
     },
-    /// Sent by the dialer after `Identify`: the token from the library's invite. Until one matches,
-    /// the listener says nothing about what it seeds and serves no chunk.
+    /// Dialer, after `Identify`: "I was invited to this library." Until a proof checks out, the listener
+    /// says nothing about what it seeds and serves no chunk.
+    AccessRequest {
+        root_cid: String,
+    },
+    /// Listener's answer to `AccessRequest`: a fresh random nonce to prove the invite's token against.
+    Challenge {
+        root_cid: String,
+        nonce_hex: String,
+    },
+    /// Dialer's answer to `Challenge`: an HMAC keyed with the library's access token (see `access_proof`).
+    /// The token itself never goes on the wire, so a wrong device at a reused address learns nothing.
     Access {
         root_cid: String,
-        token: String,
+        proof_hex: String,
     },
     Have {
         root_cid: String,
@@ -110,4 +120,49 @@ pub fn parse_tcp_multiaddr(addr: &str) -> Option<(String, u16)> {
         }
     }
     None
+}
+
+/// HMAC-SHA256, keyed with the library's access token, over the library, the listener's fresh nonce and
+/// both peer ids. A device that is not the seeder can ask for a proof but cannot reuse it, and a proof
+/// for one connection is worthless on another.
+pub fn access_proof(token: &str, root_cid: &str, nonce_hex: &str, dialer_id: &str, listener_id: &str) -> String {
+    use hmac::{Hmac, Mac};
+    let mut mac = <Hmac<sha2::Sha256> as Mac>::new_from_slice(token.as_bytes()).expect("HMAC takes any key length");
+    mac.update(format!("aether-access-v1|{root_cid}|{nonce_hex}|{dialer_id}|{listener_id}").as_bytes());
+    hex::encode(mac.finalize().into_bytes())
+}
+
+/// Constant-time check of a dialer's proof.
+pub fn verify_access_proof(
+    token: &str,
+    root_cid: &str,
+    nonce_hex: &str,
+    dialer_id: &str,
+    listener_id: &str,
+    proof_hex: &str,
+) -> bool {
+    use hmac::{Hmac, Mac};
+    let Ok(proof) = hex::decode(proof_hex) else { return false };
+    let mut mac = <Hmac<sha2::Sha256> as Mac>::new_from_slice(token.as_bytes()).expect("HMAC takes any key length");
+    mac.update(format!("aether-access-v1|{root_cid}|{nonce_hex}|{dialer_id}|{listener_id}").as_bytes());
+    mac.verify_slice(&proof).is_ok()
+}
+
+#[cfg(test)]
+mod access_proof_tests {
+    use super::*;
+
+    #[test]
+    fn a_proof_needs_the_token_the_nonce_and_both_ids() {
+        let token = "ab".repeat(32);
+        let proof = access_proof(&token, "root", "nonce1", "dialer", "listener");
+        assert!(verify_access_proof(&token, "root", "nonce1", "dialer", "listener", &proof));
+        assert!(!verify_access_proof(&"cd".repeat(32), "root", "nonce1", "dialer", "listener", &proof), "other token");
+        assert!(!verify_access_proof(&token, "root", "nonce2", "dialer", "listener", &proof), "other nonce");
+        assert!(!verify_access_proof(&token, "root", "nonce1", "someone-else", "listener", &proof), "other dialer");
+        assert!(!verify_access_proof(&token, "other", "nonce1", "dialer", "listener", &proof), "other library");
+        assert!(!verify_access_proof(&token, "root", "nonce1", "dialer", "listener", "zz"), "not hex");
+        assert!(!verify_access_proof(&token, "root", "nonce1", "dialer", "listener", ""), "empty");
+        assert!(!proof.contains(&token), "the token is not in the proof");
+    }
 }
