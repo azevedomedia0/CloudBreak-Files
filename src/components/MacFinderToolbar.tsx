@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { DocumentsIcon } from './file-browser/DocumentsIcon';
 import {
   ChevronLeft, ChevronRight, LayoutGrid, List, Columns,
   GalleryVertical, Search, HardDrive, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, Bell,
   ArrowUpDown, ArrowUpAZ, ArrowDownAZ, Check, ListFilter,
-  FileText, Image as ImageIcon, Video, Music, Archive, Star, ListMusic,
+  Image as ImageIcon, Video, Music, Archive, Star, ListMusic,
 } from '@/src/icons';
 import { isTauri } from '@tauri-apps/api/core';
 import { CloudAccount, AppNotification, FileCategory } from '../types';
@@ -70,7 +71,7 @@ const SORT_OPTIONS: { id: FileSortKey; label: string }[] = [
 
 const KIND_OPTIONS: { id: FileCategory; label: string; icon: React.ElementType }[] = [
   { id: 'all', label: 'Any', icon: ListFilter },
-  { id: 'document', label: 'Documents', icon: FileText },
+  { id: 'document', label: 'Documents', icon: DocumentsIcon },
   { id: 'photo', label: 'Images', icon: ImageIcon },
   { id: 'video', label: 'Movies', icon: Video },
   { id: 'audio', label: 'Music', icon: Music },
