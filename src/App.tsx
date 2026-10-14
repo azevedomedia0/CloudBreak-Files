@@ -1253,7 +1253,7 @@ export default function App() {
                 }`}
                 title="Drag to resize sidebar (Double-click to reset)"
               >
-                <div className="w-0.5 h-6 mx-auto mt-2 rounded bg-white/20 group-hover:bg-sky-300 transition-colors" />
+                <div className="w-0.5 h-6 mx-auto mt-2 rounded bg-transparent" />
               </div>
             )}
 
@@ -1344,7 +1344,7 @@ export default function App() {
                 }`}
                 title="Drag to resize side panel (Double-click to reset)"
               >
-                <div className="w-0.5 h-6 mx-auto mt-2 rounded bg-white/20 group-hover:bg-sky-300 transition-colors" />
+                <div className="w-0.5 h-6 mx-auto mt-2 rounded bg-transparent" />
               </div>
             )}
 
