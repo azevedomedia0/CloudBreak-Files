@@ -606,6 +606,25 @@ pub async fn local_pick_save_folder(app: AppHandle, state: State<'_, LocalRoots>
     add_root(&app, &state, path, false).map(Some)
 }
 
+/// Folder picker for choosing a folder to share. The folder is allowed for this session only, so sharing it does
+/// not add it to Local Files.
+#[tauri::command]
+pub async fn local_pick_share_folder(app: AppHandle, state: State<'_, LocalRoots>) -> Result<Option<LocalFolder>, String> {
+    let dialog_app = app.clone();
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        dialog_app
+            .dialog()
+            .file()
+            .set_title("Choose a folder to share")
+            .blocking_pick_folder()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    let Some(picked) = picked else { return Ok(None) };
+    let path = picked.into_path().map_err(|e| e.to_string())?;
+    add_root(&app, &state, path, false).map(Some)
+}
+
 /// Allow a folder path (e.g. a mounted volume) for browsing without using the picker.
 #[tauri::command]
 pub fn local_remember_folder(path: String, app: AppHandle, state: State<'_, LocalRoots>) -> Result<LocalFolder, String> {

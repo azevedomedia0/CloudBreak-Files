@@ -220,7 +220,7 @@ export const AppModals: React.FC<AppModalsProps> = ({
     isOpen={isNewLibraryOpen}
     onClose={() => { setIsNewLibraryOpen(false); setLibraryDraft(null); }}
     draft={libraryDraft}
-    onCreateLibrary={form => handleCreateLibrary(form, libraryDraft)}
+    onCreateLibrary={(form, draft) => handleCreateLibrary(form, draft)}
   />
 
   <JoinIncomingLibraryModal

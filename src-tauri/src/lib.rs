@@ -149,6 +149,7 @@ pub fn run() {
             selftest::selftest_window_buttons,
             local_fs::local_pick_folder,
             local_fs::local_pick_save_folder,
+            local_fs::local_pick_share_folder,
             local_fs::local_trash_file,
             local_fs::local_save_from_temp,
             local_fs::local_list_folders,

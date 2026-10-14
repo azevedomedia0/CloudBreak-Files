@@ -61,6 +61,11 @@ export const localFs = {
     return invoke<LocalFolder | null>('local_pick_folder');
   },
 
+  /** Folder picker for choosing a folder to share. Allowed for this session only, never remembered. */
+  pickShareFolder(): Promise<LocalFolder | null> {
+    return invoke<LocalFolder | null>('local_pick_share_folder');
+  },
+
   /** Folder picker for choosing where to save something. Allowed for this session only, never remembered. */
   pickSaveFolder(): Promise<LocalFolder | null> {
     return invoke<LocalFolder | null>('local_pick_save_folder');

@@ -24,6 +24,8 @@ export type LocalFolderImport = {
   files: FileItem[];
   /** True when the folder had more items than the scan limit and the rest were skipped. */
   truncated?: boolean;
+  /** Where the folder is on disk (desktop app). */
+  path?: string;
 };
 
 const MIME_BY_EXTENSION: Record<string, string> = {
@@ -352,13 +354,14 @@ export async function importLocalFolderAtPath(
   }
 
   recountFolderItems(folders, files);
-  return { rootFolder, folders, files, truncated };
+  return { rootFolder, folders, files, truncated, path: folder.path };
 }
 
 /** Open the system folder picker and import the tree into Local Files. */
-export async function pickLocalFolderFromDisk(): Promise<LocalFolderImport | null> {
+export async function pickLocalFolderFromDisk(opts: { sessionOnly?: boolean } = {}): Promise<LocalFolderImport | null> {
   if (localFs.available()) {
-    const picked = await localFs.pickFolder();
+    // Sharing a folder only needs to read it now, so it is not added to Local Files (session-only access).
+    const picked = opts.sessionOnly ? await localFs.pickShareFolder() : await localFs.pickFolder();
     return picked ? importLocalFolderAtPath(picked) : null;
   }
 

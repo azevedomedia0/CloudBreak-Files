@@ -13,6 +13,7 @@ Tauri 2 + React 19 + Vite + Tailwind 4 desktop app. It manages many cloud accoun
 - Terminal splits, saved sessions and keys: `npx tsx scripts/terminal-layout-test.mts`
 - PDF editor maths and save step (renders the saved PDF with pdf.js and samples pixels): `npx tsx scripts/pdf-editor-test.mts`
 - Shared By Others refresh message: `npx tsx scripts/incoming-refresh-test.mts`
+- The sidebar "+" for Shared Folders asks for a folder with Browse Files… (`pickLocalFolderFromDisk({ sessionOnly: true })`: the system picker, or `showDirectoryPicker` in the browser). On desktop the folder is allowed for this session only (`local_pick_share_folder`), so it is not added to Local Files; what is inside is read when it is chosen and everything under it is shared (up to 500 files).
 - Invite preview for notifications: `npx tsx scripts/invite-preview-test.mts`
 - Desktop app: `npm run tauri dev`
 - In-app self-test (runs inside the real desktop app, debug build only): `npm run test:app`. It checks vault unlock and `vault.json`, the security policy, the asset protocol, local file saves, the path limits, video trim and save, drag permission and toolbar spacing. It uses a throwaway app data folder. Needs port 3000 free and ffmpeg.
