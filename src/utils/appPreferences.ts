@@ -40,6 +40,10 @@ export interface AppPreferences {
   startOnline: boolean;
   /** Ask the router to forward the P2P port so invited peers on other networks can connect. */
   p2pRemoteAccess: boolean;
+  /** A relay server (host:port) this device connects out to, so invites work from any network. Empty: none. */
+  p2pRelayAddress: string;
+  /** The relay operator's password for who may host on it, if they set one. */
+  p2pRelayKey: string;
 }
 
 export const DEFAULT_PREFERENCES: AppPreferences = {
@@ -56,6 +60,8 @@ export const DEFAULT_PREFERENCES: AppPreferences = {
   p2pPeerAlerts: true,
   startOnline: true,
   p2pRemoteAccess: false,
+  p2pRelayAddress: '',
+  p2pRelayKey: '',
 };
 
 /** Apply theme to <html> for CSS `[data-theme]` rules. */

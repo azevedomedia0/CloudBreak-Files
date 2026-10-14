@@ -3,7 +3,8 @@
 //! Identity (Ed25519), library key wrapping, content-addressed encrypted chunks,
 //! signed invites, and a Have/Want/Block swarm over TCP.
 //! **Private mode (all libraries):** invite-dial only — no DHT, STUN, or peer announce.
-//! Reaching peers on other networks is opt-in router port mapping (`port_mapping.rs`).
+//! Reaching peers on other networks is opt-in: router port mapping (`port_mapping.rs`), or a relay server
+//! both sides connect out to (`relay.rs`, run by whoever hosts `relay/`).
 
 pub mod chunk_store;
 pub mod commands;
@@ -14,6 +15,7 @@ pub mod library_store;
 pub mod manifest;
 pub mod port_mapping;
 pub mod protocol;
+pub mod relay;
 pub mod swarm;
 
 pub use commands::P2pState;

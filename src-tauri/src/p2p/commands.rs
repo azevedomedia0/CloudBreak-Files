@@ -11,6 +11,7 @@ use crate::p2p::keys::{
 use crate::p2p::library_store::{LibraryIndex, LibraryRecord};
 use crate::p2p::manifest::{LibraryManifest, ManifestFileEntry};
 use crate::p2p::port_mapping::{self, Mapping, RemoteAccessStatus};
+use crate::p2p::relay::{self, RelayEndpoint, RelayStatus};
 use crate::p2p::swarm::{SwarmHandle, SwarmStatus};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
@@ -27,6 +28,20 @@ pub struct P2pState {
     pub remote: Mutex<RemoteAccess>,
     /// Turning remote access on or off talks to the router; one change at a time.
     remote_change: tokio::sync::Mutex<()>,
+    /// This Mac's registration with a relay server, for peers on other networks when no port can be opened.
+    pub relay: Mutex<RelayRuntime>,
+    relay_change: tokio::sync::Mutex<()>,
+}
+
+pub struct RelayRuntime {
+    task: Option<tokio::task::JoinHandle<()>>,
+    status: Arc<parking_lot::RwLock<RelayStatus>>,
+}
+
+impl Default for RelayRuntime {
+    fn default() -> Self {
+        Self { task: None, status: Arc::new(parking_lot::RwLock::new(RelayStatus::off())) }
+    }
 }
 
 #[derive(Default)]
@@ -44,6 +59,8 @@ impl Default for P2pState {
             app_data: Mutex::new(None),
             remote: Mutex::new(RemoteAccess::default()),
             remote_change: tokio::sync::Mutex::new(()),
+            relay: Mutex::new(RelayRuntime::default()),
+            relay_change: tokio::sync::Mutex::new(()),
         }
     }
 }
@@ -899,6 +916,58 @@ pub async fn p2p_set_remote_access(
     Ok(status)
 }
 
+/// Register this Mac with a relay server (or stop, when `address` is empty), so invites carry a `relay://`
+/// address that works from any network. The Mac only connects out; no router setting is needed. `host_key` is
+/// the relay operator's password for who may host, if they set one.
+#[tauri::command]
+pub async fn p2p_set_relay(
+    app: AppHandle,
+    state: State<'_, P2pState>,
+    address: Option<String>,
+    host_key: Option<String>,
+) -> Result<RelayStatus, String> {
+    let _one_at_a_time = state.relay_change.lock().await;
+    let wanted = address.as_deref().map(str::trim).filter(|a| !a.is_empty());
+    // Check the address before touching anything that is running.
+    let endpoint = match wanted {
+        Some(text) => Some(RelayEndpoint::parse(text)?),
+        None => None,
+    };
+    let swarm = ensure_swarm(&app, &state).await?;
+    let identity = ensure_identity(&app, &state, "Cloudbreak User")?;
+    let status = {
+        let mut runtime = state.relay.lock();
+        if let Some(task) = runtime.task.take() {
+            task.abort();
+        }
+        runtime.status.clone()
+    };
+    swarm.set_relay_addr(None);
+    let Some(endpoint) = endpoint else {
+        *status.write() = RelayStatus::off();
+        return Ok(RelayStatus::off());
+    };
+    let task = relay::start_hosting(endpoint, host_key.filter(|k| !k.trim().is_empty()), &identity, swarm, status.clone());
+    state.relay.lock().task = Some(task);
+    // Give it a moment, so the first answer says whether the relay took this Mac.
+    for _ in 0..60 {
+        let current = status.read().clone();
+        if current.connected || current.message.starts_with("Not connected") {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    let current = status.read().clone();
+    Ok(current)
+}
+
+#[tauri::command]
+pub fn p2p_relay_status(state: State<'_, P2pState>) -> RelayStatus {
+    let status = state.relay.lock().status.clone();
+    let current = status.read().clone();
+    current
+}
+
 #[tauri::command]
 pub fn p2p_remote_access_status(state: State<'_, P2pState>) -> RemoteAccessStatus {
     state.remote.lock().status.clone()
@@ -929,6 +998,10 @@ async fn renew_mapping(app: AppHandle, swarm: Arc<SwarmHandle>) {
 /// On quit: remove the router mapping so the port does not stay open while the app is closed.
 pub fn release_remote_access(app: &AppHandle) {
     let state = app.state::<P2pState>();
+    // Leaving the relay needs no goodbye: the connection closes and the relay forgets this Mac.
+    if let Some(task) = state.relay.lock().task.take() {
+        task.abort();
+    }
     let mapping = {
         let mut remote = state.remote.lock();
         if let Some(task) = remote.renewer.take() {

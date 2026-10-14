@@ -25,3 +25,4 @@ flatpak/.repo/
 flatpak/.flatpak-builder/
 dist-flatpak/
 *.zip
+relay/target/

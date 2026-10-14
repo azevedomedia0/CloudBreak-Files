@@ -242,6 +242,28 @@ export default function App() {
       .catch(err => showToast(`Could not change remote access: ${err instanceof Error ? err.message : String(err)}`));
   }, [appPreferences.p2pRemoteAccess, showToast]);
 
+  // Relay server: connect out to it (and stop) when the address or key changes, and at launch when one is
+  // set. Nothing happens, and no swarm starts, while there is none.
+  const relayApplied = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isTauri()) return;
+    const address = appPreferences.p2pRelayAddress.trim();
+    const key = appPreferences.p2pRelayKey.trim();
+    const signature = `${address}\n${key}`;
+    const atLaunch = relayApplied.current === null;
+    if (relayApplied.current === signature || (atLaunch && !address)) {
+      relayApplied.current = signature;
+      return;
+    }
+    relayApplied.current = signature;
+    p2pBridge
+      .setRelay(address, key)
+      .then(status => {
+        if (!atLaunch || (address && !status.connected)) showToast(status.message);
+      })
+      .catch(err => showToast(`Could not use the relay server: ${err instanceof Error ? err.message : String(err)}`));
+  }, [appPreferences.p2pRelayAddress, appPreferences.p2pRelayKey, showToast]);
+
 
   // One-time notice when the desktop app has no ffmpeg (dev builds / incomplete release).
   useEffect(() => {
@@ -946,6 +968,9 @@ export default function App() {
     ? 'Private Vault'
     : activeAccount?.name || 'Cloud Bucket';
 
+  // A Local Files folder (not a library, drive or server) shows its sidebar icon in the toolbar title.
+  const activeFolderName = !activeSourceName && !selectedLibrary ? selectedFolder?.name : undefined;
+
   const navLocation = useMemo<NavLocation>(() => ({
     accountId: selectedAccountId,
     folderId: selectedFolderId,
@@ -968,9 +993,6 @@ export default function App() {
     const ids = new Set<string>([rootId]);
     let grew = true;
     while (grew) {
-  // A Local Files folder (not a library, drive or server) shows its sidebar icon in the toolbar title.
-  const activeFolderName = !activeSourceName && !selectedLibrary ? selectedFolder?.name : undefined;
-
       grew = false;
       for (const folder of folders) {
         if (!folder.parentId || ids.has(folder.id)) continue;
@@ -1207,6 +1229,7 @@ export default function App() {
             onUploadFiles={handleUploadFiles}
             onOpenAddAccount={() => setIsAddAccountOpen(true)}
             activePathTitle={activePathTitle}
+            activeFolderName={activeFolderName}
             activeAccount={activeAccount}
             canGoBack={canGoBack}
             canGoForward={canGoForward}
@@ -1229,7 +1252,6 @@ export default function App() {
             notifications={notifications}
             onAcceptLibrary={handleAcceptLibraryNotification}
             onDeclineLibrary={handleDeclineLibraryNotification}
-            activeFolderName={activeFolderName}
             onMarkAllAsRead={handleMarkAllNotificationsRead}
             onClearNotification={handleClearNotification}
             onSelectLibrary={libId => {
@@ -1411,6 +1433,7 @@ export default function App() {
                   setVideoPlacement('window');
                 }}
                 onPlay={playQueueItem}
+                onOpenFull={file => { void openVideoFromBrowser(file, 'window'); }}
                 onQueueDrop={queueFilesToPlayNext}
                 onRemoveQueued={file => setPlayNextIds(prev => prev.filter(id => id !== file.id))}
               />
@@ -1433,7 +1456,6 @@ export default function App() {
                 onClose={() => setIsInspectorOpen(false)}
               />
             )}
-                onOpenFull={file => { void openVideoFromBrowser(file, 'window'); }}
 
             {!videoInPanel && isInspectorOpen && sidePanelMode === 'queue' && (
               <PlayingNextPanel
@@ -1441,6 +1463,7 @@ export default function App() {
                 nowPlaying={playingAudioFile ?? playingVideoFile}
                 upcoming={playingNextItems}
                 onPlay={playQueueItem}
+                onOpenFull={file => { void openVideoFromBrowser(file, 'window'); }}
                 queuedIds={playNextIds}
                 onQueueDrop={queueFilesToPlayNext}
                 onRemoveQueued={file => setPlayNextIds(prev => prev.filter(id => id !== file.id))}
@@ -1463,8 +1486,8 @@ export default function App() {
                 onOpenVideo={(file, tab) => {
                   openFileSelection(file);
                   startVideo(file, tab, { queueFolder: !tab || tab === 'player' });
-                onOpenFull={file => { void openVideoFromBrowser(file, 'window'); }}
                 }}
+                onOpenVideoWindow={file => { void openVideoFromBrowser(file, 'window'); }}
                 onOpenAudio={playQueueItem}
                 onShare={file => openLibraryShare({ files: [file], folders: [] })}
                 onDownloadRemote={file => { void saveRemoteFile(file); }}
@@ -1487,7 +1510,6 @@ export default function App() {
                 onCompressFile={handleCompressFile}
                 onNewFolder={() => setIsNewFolderOpen(true)}
                 canPaste={clipboardFileIds.length > 0}
-                onOpenVideoWindow={file => { void openVideoFromBrowser(file, 'window'); }}
                 width={inspectorWidth}
               />
             )}

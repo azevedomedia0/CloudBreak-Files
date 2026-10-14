@@ -9,6 +9,7 @@
 
 use crate::p2p::chunk_store::{cid_of_ciphertext, ChunkStore};
 use crate::p2p::identity::PeerIdentity;
+use crate::p2p::relay;
 use crate::p2p::protocol::{
     access_proof, multiaddr_tcp, parse_tcp_multiaddr, read_message, verify_access_proof, write_message, P2pMessage,
     DEFAULT_PORT, PROTOCOL_VERSION,
@@ -72,6 +73,8 @@ struct SwarmInner {
     access_tokens: HashMap<String, String>,
     /// This Mac's address on the internet when router port mapping is on.
     public_addr: Option<(Ipv4Addr, u16)>,
+    /// `relay://…` address while this Mac is registered with a relay server.
+    relay_addr: Option<String>,
     /// peer_id -> status (session UI only; addrs are not used for dial)
     peers: HashMap<String, SwarmPeerStatus>,
     /// root_cid -> multiaddrs from the invite only (private-mode dial allowlist)
@@ -83,6 +86,8 @@ struct SwarmInner {
 pub struct SwarmHandle {
     inner: Arc<RwLock<SwarmInner>>,
     cmd_tx: mpsc::UnboundedSender<SwarmCmd>,
+    /// Inbound connections served at once, direct or through a relay.
+    slots: Arc<Semaphore>,
 }
 
 enum SwarmCmd {
@@ -119,6 +124,7 @@ impl SwarmHandle {
             seeding: HashMap::new(),
             access_tokens: HashMap::new(),
             public_addr: None,
+            relay_addr: None,
             peers: HashMap::new(),
             invite_dial_addrs: HashMap::new(),
             bytes_sent: 0,
@@ -126,13 +132,14 @@ impl SwarmHandle {
         }));
 
         let (cmd_tx, mut cmd_rx) = mpsc::unbounded_channel();
+        let slots = Arc::new(Semaphore::new(MAX_INBOUND));
         let handle = SwarmHandle {
             inner: inner.clone(),
             cmd_tx,
+            slots: slots.clone(),
         };
 
         let accept_inner = inner.clone();
-        let slots = Arc::new(Semaphore::new(MAX_INBOUND));
         tokio::spawn(async move {
             loop {
                 match listener.accept().await {
@@ -165,22 +172,13 @@ impl SwarmHandle {
                             }
                         }
                         for addr in addrs {
-                            if let Some((host, port)) = parse_tcp_multiaddr(&addr) {
-                                let host = if host == "0.0.0.0" {
-                                    "127.0.0.1".to_string()
-                                } else {
-                                    host
-                                };
-                                let inner = cmd_inner.clone();
-                                let access = (root_cid.clone(), token.clone());
-                                tokio::spawn(async move {
-                                    if let Ok(Ok(stream)) =
-                                        timeout(DIAL_TIMEOUT, TcpStream::connect((host.as_str(), port))).await
-                                    {
-                                        let _ = handle_connection(inner, stream, Some(addr), Some(access)).await;
-                                    }
-                                });
-                            }
+                            let inner = cmd_inner.clone();
+                            let access = (root_cid.clone(), token.clone());
+                            tokio::spawn(async move {
+                                if let Some(stream) = connect_addr(&addr).await {
+                                    let _ = handle_connection(inner, stream, Some(addr), Some(access)).await;
+                                }
+                            });
                         }
                     }
                     SwarmCmd::Seed {
@@ -238,11 +236,11 @@ impl SwarmHandle {
 
     /// Where other devices can reach this listener right now, most reachable first.
     pub fn listen_addrs(&self) -> Vec<String> {
-        let (port, public) = {
+        let (port, public, relay) = {
             let r = self.inner.read();
-            (r.port, r.public_addr)
+            (r.port, r.public_addr, r.relay_addr.clone())
         };
-        advertised_addrs(lan_ipv4(), public, port)
+        advertised_addrs(lan_ipv4(), public, relay.as_deref(), port)
     }
 
     /// The port the listener is bound to (what router port mapping forwards to).
@@ -253,6 +251,22 @@ impl SwarmHandle {
     /// Set or clear the internet address that router port mapping obtained.
     pub fn set_public_addr(&self, addr: Option<(Ipv4Addr, u16)>) {
         self.inner.write().public_addr = addr;
+    }
+
+    /// Set or clear the relay address this Mac is registered under.
+    pub fn set_relay_addr(&self, addr: Option<String>) {
+        self.inner.write().relay_addr = addr;
+    }
+
+    /// Serve a connection that arrived through the relay like one that arrived directly: the dialer still has
+    /// to prove it holds a library's access token before it learns anything.
+    pub fn accept_relayed(&self, stream: TcpStream) {
+        let Ok(permit) = self.slots.clone().try_acquire_owned() else { return };
+        let inner = self.inner.clone();
+        tokio::spawn(async move {
+            let _ = handle_connection(inner, stream, Some("relay".into()), None).await;
+            drop(permit);
+        });
     }
 
     /// Private mode: register invite multiaddrs and dial only those, presenting the invite's token.
@@ -577,17 +591,32 @@ pub fn lan_ipv4() -> Option<Ipv4Addr> {
     }
 }
 
+/// Open a connection to one invite address: a TCP address directly, a `relay://` one through the relay.
+/// `None` when it does not answer (the caller moves on to the next address).
+async fn connect_addr(addr: &str) -> Option<TcpStream> {
+    if let Some((endpoint, id)) = relay::parse_relay_addr(addr) {
+        return relay::dial(&endpoint, &id).await.ok();
+    }
+    let (host, port) = parse_tcp_multiaddr(addr)?;
+    let host = if host == "0.0.0.0" { "127.0.0.1".to_string() } else { host };
+    timeout(DIAL_TIMEOUT, TcpStream::connect((host.as_str(), port))).await.ok()?.ok()
+}
+
 /// The multiaddrs an invite can carry for a listener on `port`, in the order a dialer tries them:
 /// the LAN address (a peer on the same network), then the internet address router port mapping
-/// opened (a peer elsewhere), then loopback (a second copy on this Mac).
+/// opened (a peer elsewhere), then the relay (a peer elsewhere when no port could be opened), then
+/// loopback (a second copy on this Mac).
 /// Never `0.0.0.0`: it is a bind address, not a place to dial.
-pub fn advertised_addrs(lan: Option<Ipv4Addr>, public: Option<(Ipv4Addr, u16)>, port: u16) -> Vec<String> {
-    let mut addrs = Vec::with_capacity(3);
+pub fn advertised_addrs(lan: Option<Ipv4Addr>, public: Option<(Ipv4Addr, u16)>, relay: Option<&str>, port: u16) -> Vec<String> {
+    let mut addrs = Vec::with_capacity(4);
     if let Some(ip) = lan {
         addrs.push(multiaddr_tcp(&ip.to_string(), port));
     }
     if let Some((ip, public_port)) = public {
         addrs.push(multiaddr_tcp(&ip.to_string(), public_port));
+    }
+    if let Some(relay) = relay {
+        addrs.push(relay.to_string());
     }
     addrs.push(multiaddr_tcp("127.0.0.1", port));
     addrs
@@ -626,15 +655,7 @@ async fn fetch_blocks_invite_only(
     let store = ChunkStore::open(store_path).map_err(|e| e.to_string())?;
 
     for addr in addrs {
-        let Some((host, port)) = parse_tcp_multiaddr(&addr) else {
-            continue;
-        };
-        let host = if host == "0.0.0.0" {
-            "127.0.0.1".to_string()
-        } else {
-            host
-        };
-        let Ok(Ok(mut stream)) = timeout(DIAL_TIMEOUT, TcpStream::connect((host.as_str(), port))).await else {
+        let Some(mut stream) = connect_addr(&addr).await else {
             continue;
         };
 
@@ -720,19 +741,19 @@ mod tests {
 
     #[test]
     fn invite_carries_the_lan_address_before_loopback() {
-        let addrs = advertised_addrs(Some(Ipv4Addr::new(192, 168, 1, 20)), None, 7421);
+        let addrs = advertised_addrs(Some(Ipv4Addr::new(192, 168, 1, 20)), None, None, 7421);
         assert_eq!(addrs, vec!["/ip4/192.168.1.20/tcp/7421", "/ip4/127.0.0.1/tcp/7421"]);
     }
 
     #[test]
     fn offline_mac_still_advertises_loopback() {
-        assert_eq!(advertised_addrs(None, None, 7421), vec!["/ip4/127.0.0.1/tcp/7421"]);
+        assert_eq!(advertised_addrs(None, None, None, 7421), vec!["/ip4/127.0.0.1/tcp/7421"]);
     }
 
     #[test]
     fn no_advertised_address_is_the_unspecified_bind_address() {
         for lan in [None, Some(Ipv4Addr::new(10, 0, 0, 5))] {
-            for addr in advertised_addrs(lan, Some((Ipv4Addr::new(203, 0, 113, 9), 7421)), 7421) {
+            for addr in advertised_addrs(lan, Some((Ipv4Addr::new(203, 0, 113, 9), 7421)), None, 7421) {
                 let (host, port) = parse_tcp_multiaddr(&addr).expect("valid multiaddr");
                 assert_ne!(host, "0.0.0.0");
                 assert_eq!(port, 7421);
@@ -755,7 +776,7 @@ mod tests {
         let addrs = swarm.listen_addrs();
         let port = parse_tcp_multiaddr(addrs.last().unwrap()).unwrap().1;
         assert_ne!(port, 0);
-        assert_eq!(addrs, advertised_addrs(lan_ipv4(), None, port));
+        assert_eq!(addrs, advertised_addrs(lan_ipv4(), None, None, port));
         assert_eq!(swarm.status().listen_addrs, addrs);
         let _ = std::fs::remove_dir_all(&data);
     }
@@ -922,6 +943,52 @@ mod tests {
         assert_eq!(got, Ok(1));
         let store = ChunkStore::open(data.join("libraries").join("lib")).unwrap();
         assert_eq!(store.get_raw(&cid).unwrap(), b"sealed chunk");
+        let _ = std::fs::remove_dir_all(&data);
+        let _ = std::fs::remove_dir_all(&seeder_data);
+    }
+
+    /// Two devices that cannot reach each other, joined through a relay: the seeder only connects out, and the
+    /// invitee fetches a chunk through the relay address alone (every direct address is dead).
+    #[tokio::test]
+    async fn a_join_through_a_relay_reaches_a_seeder_that_accepts_no_connections() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let relay_port = listener.local_addr().unwrap().port();
+        tokio::spawn(cloudbreak_relay::serve(listener, Default::default()));
+
+        let token = "7c".repeat(32);
+        let (seeder, seeder_data, root, cid) = seeder_with_chunk(&token).await;
+        let status = Arc::new(RwLock::new(crate::p2p::relay::RelayStatus::default()));
+        let identity = PeerIdentity::generate("relay-seeder");
+        let endpoint = crate::p2p::relay::RelayEndpoint::parse(&format!("127.0.0.1:{relay_port}")).unwrap();
+        let seeder = Arc::new(seeder);
+        let hosting = crate::p2p::relay::start_hosting(endpoint, None, &identity, seeder.clone(), status.clone());
+        for _ in 0..50 {
+            if status.read().connected {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        assert!(status.read().connected, "{:?}", status.read());
+        let relay_addr = seeder.listen_addrs().into_iter().find(|a| a.starts_with("relay://")).expect("the invite carries the relay");
+        assert_eq!(status.read().address.as_deref(), Some(relay_addr.as_str()));
+
+        let data = std::env::temp_dir().join(format!("cb-swarm-{}", uuid::Uuid::new_v4()));
+        let invitee = SwarmHandle::start(PeerIdentity::generate("relay-invitee"), data.clone(), Some(0)).await.unwrap();
+        // Port 1 refuses at once: the seeder's LAN address as seen from another network.
+        invitee.dial_invite(root.clone(), vec!["/ip4/127.0.0.1/tcp/1".into(), relay_addr.clone()], token.clone());
+        let got = invitee.fetch_missing(root.clone(), vec![cid.clone()], "lib".into(), token).await;
+        assert_eq!(got, Ok(1));
+        let store = ChunkStore::open(data.join("libraries").join("lib")).unwrap();
+        assert_eq!(store.get_raw(&cid).unwrap(), b"sealed chunk");
+
+        // The relay hands over a connection to anyone, but the seeder still wants the token's proof.
+        let wrong = SwarmHandle::start(PeerIdentity::generate("relay-stranger"), std::env::temp_dir().join(format!("cb-swarm-{}", uuid::Uuid::new_v4())), Some(0)).await.unwrap();
+        wrong.dial_invite(root.clone(), vec![relay_addr], "00".repeat(32));
+        let refused = wrong.fetch_missing(root, vec![cid], "lib".into(), "00".repeat(32)).await;
+        assert!(refused.is_err() || refused == Ok(0), "{refused:?}");
+
+        // When the host stops, its address goes out of invites.
+        hosting.abort();
         let _ = std::fs::remove_dir_all(&data);
         let _ = std::fs::remove_dir_all(&seeder_data);
     }

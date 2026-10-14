@@ -568,6 +568,7 @@ dependencies = [
  "aes-gcm",
  "base64 0.22.1",
  "chrono",
+ "cloudbreak-relay",
  "ed25519-dalek",
  "hex",
  "hkdf",
@@ -599,6 +600,16 @@ dependencies = [
  "uuid",
  "x25519-dalek",
  "zeroize",
+]
+
+[[package]]
+name = "cloudbreak-relay"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "rand 0.8.8",
+ "sha2",
+ "tokio",
 ]
 
 [[package]]

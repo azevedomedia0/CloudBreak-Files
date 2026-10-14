@@ -46,6 +46,15 @@ export interface RemoteAccessStatus {
   message: string;
 }
 
+/** This device's registration with a relay server (`relay/`), desktop only. */
+export interface RelayStatus {
+  enabled: boolean;
+  connected: boolean;
+  /** The `relay://` address invites carry while connected. */
+  address?: string | null;
+  message: string;
+}
+
 export interface CreateLibraryFileInput {
   name: string;
   mimeType: string;
@@ -332,6 +341,19 @@ export const p2pBridge = {
       return { enabled: false, message: 'Only the desktop app can accept connections from other networks.' };
     }
     return invoke<RemoteAccessStatus>('p2p_set_remote_access', { enabled });
+  },
+
+  /** Register with a relay server so invites work from any network; an empty address stops. Desktop only. */
+  async setRelay(address: string, hostKey: string): Promise<RelayStatus> {
+    if (!isTauri()) {
+      return { enabled: false, connected: false, message: 'Only the desktop app can use a relay server.' };
+    }
+    return invoke<RelayStatus>('p2p_set_relay', { address: address.trim() || null, hostKey: hostKey.trim() || null });
+  },
+
+  async relayStatus(): Promise<RelayStatus | null> {
+    if (!isTauri()) return null;
+    return invoke<RelayStatus>('p2p_relay_status');
   },
 
   async remoteAccessStatus(): Promise<RemoteAccessStatus | null> {

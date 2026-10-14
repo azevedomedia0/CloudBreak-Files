@@ -1,0 +1,20 @@
+[package]
+name = "cloudbreak-relay"
+version = "0.1.0"
+description = "Relay server for Cloudbreak Files P2P libraries: carries a connection between two devices that cannot reach each other directly"
+edition = "2021"
+license = "MIT"
+
+[lib]
+name = "cloudbreak_relay"
+path = "src/lib.rs"
+
+[[bin]]
+name = "cloudbreak-relay"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { version = "1.38", features = ["rt-multi-thread", "net", "io-util", "time", "sync", "macros"] }
+sha2 = "0.10"
+hex = "0.4"
+rand = "0.8"

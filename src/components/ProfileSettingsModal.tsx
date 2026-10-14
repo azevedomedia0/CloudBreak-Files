@@ -20,7 +20,7 @@ import {
 } from '../utils/appPreferences';
 import { fullDiskAccessGranted, requestFullDiskAccess } from '../services/permissionsBridge';
 import { DEFAULT_AVATAR_URL } from '../utils/defaultAvatar';
-import { p2pBridge, type RemoteAccessStatus } from '../services/p2pBridge';
+import { p2pBridge, type RelayStatus, type RemoteAccessStatus } from '../services/p2pBridge';
 
 export interface UserProfile {
   name: string;
@@ -174,6 +174,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
   const [fdaGranted, setFdaGranted] = useState<boolean | null>(null);
   const [fdaBusy, setFdaBusy] = useState(false);
   const [remoteStatus, setRemoteStatus] = useState<RemoteAccessStatus | null>(null);
+  const [relayStatus, setRelayStatus] = useState<RelayStatus | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -188,6 +189,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     if (isTauri()) {
       void fullDiskAccessGranted().then(setFdaGranted);
       void p2pBridge.remoteAccessStatus().then(setRemoteStatus).catch(() => setRemoteStatus(null));
+      void p2pBridge.relayStatus().then(setRelayStatus).catch(() => setRelayStatus(null));
     } else {
       setFdaGranted(null);
     }
@@ -768,6 +770,52 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                 {prefs.p2pRemoteAccess && !remoteStatus?.enabled && (
                   <div className="text-[11px] text-neutral-500">Takes effect when you click Save &amp; Apply.</div>
                 )}
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-white/5 border border-white/5 space-y-2.5">
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold text-white">Relay server</div>
+                  <div className="text-[11px] text-neutral-400 mt-0.5">
+                    For when your router will not open a port. Your device connects out to a relay you run (see <span className="font-mono">relay/</span>),
+                    and invites you copy carry its address. People you invite need no setup. The relay sees who connects and how much is
+                    transferred, never what is in a library. Leave empty to turn it off.
+                  </div>
+                </div>
+                <input
+                  type="text"
+                  value={prefs.p2pRelayAddress}
+                  onChange={e => patchPrefs('p2pRelayAddress', e.target.value)}
+                  placeholder="relay.example.com:7422"
+                  spellCheck={false}
+                  autoCapitalize="off"
+                  aria-label="Relay server address"
+                  className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-2 text-xs font-mono text-white placeholder:text-neutral-600 focus:outline-none focus:border-sky-400/60"
+                />
+                {prefs.p2pRelayAddress.trim() && (
+                  <input
+                    type="password"
+                    value={prefs.p2pRelayKey}
+                    onChange={e => patchPrefs('p2pRelayKey', e.target.value)}
+                    placeholder="Relay key (only if the relay asks for one)"
+                    spellCheck={false}
+                    autoComplete="off"
+                    aria-label="Relay key"
+                    className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white placeholder:text-neutral-600 focus:outline-none focus:border-sky-400/60"
+                  />
+                )}
+                {prefs.p2pRelayAddress.trim() && relayStatus?.enabled && prefs.p2pRelayAddress.trim() === (preferencesProp ?? loadPreferences()).p2pRelayAddress.trim() ? (
+                  <div
+                    className={`text-[11px] rounded-lg px-2.5 py-2 border ${
+                      relayStatus.connected
+                        ? 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20'
+                        : 'bg-amber-500/10 text-amber-200 border-amber-500/20'
+                    }`}
+                  >
+                    {relayStatus.message}
+                  </div>
+                ) : prefs.p2pRelayAddress.trim() ? (
+                  <div className="text-[11px] text-neutral-500">Connects when you click Save &amp; Apply. The key is stored on this device.</div>
+                ) : null}
               </div>
 
               <PrefRow title="Show transfer speeds" description="Include bitrate on P2P library banners and share sheets">

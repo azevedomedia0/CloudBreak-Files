@@ -189,6 +189,8 @@ pub fn run() {
             p2p::commands::p2p_fetch_manifest,
             p2p::commands::p2p_set_remote_access,
             p2p::commands::p2p_remote_access_status,
+            p2p::commands::p2p_set_relay,
+            p2p::commands::p2p_relay_status,
             tray::tray_refresh_status,
             terminal::terminal_create,
             terminal::terminal_write,
