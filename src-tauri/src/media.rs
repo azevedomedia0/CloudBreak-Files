@@ -672,6 +672,113 @@ fn probe_video_size(ffmpeg: &Path, input: &str) -> Option<(u32, u32)> {
     parse_video_size(&String::from_utf8_lossy(&out.stderr))
 }
 
+/// What `ffmpeg -i` says about a video: the real details the app shows instead of guesses.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VideoProbe {
+    /// 0 when the file has no video stream (or ffmpeg did not say).
+    pub width: u32,
+    pub height: u32,
+    pub fps: Option<f64>,
+    pub duration_seconds: Option<f64>,
+    /// A readable name such as "H.264".
+    pub video_codec: Option<String>,
+    pub audio_codec: Option<String>,
+    pub bitrate_kbps: Option<u32>,
+}
+
+fn friendly_codec(raw: &str) -> String {
+    match raw.to_ascii_lowercase().as_str() {
+        "h264" => "H.264".into(),
+        "hevc" => "H.265".into(),
+        "vp8" => "VP8".into(),
+        "vp9" => "VP9".into(),
+        "av1" => "AV1".into(),
+        "mpeg4" => "MPEG-4".into(),
+        "mpeg2video" => "MPEG-2".into(),
+        "prores" => "ProRes".into(),
+        "gif" => "GIF".into(),
+        "aac" => "AAC".into(),
+        "mp3" => "MP3".into(),
+        "opus" => "Opus".into(),
+        "vorbis" => "Vorbis".into(),
+        "flac" => "FLAC".into(),
+        other if other.starts_with("pcm_") => "PCM".into(),
+        other => other.to_ascii_uppercase(),
+    }
+}
+
+/// The text of a stream line after `label` (e.g. "Video:"), up to the first space: the codec name.
+fn codec_after(line: &str, label: &str) -> Option<String> {
+    let rest = line.split(label).nth(1)?.trim_start();
+    let name = rest.split(|c: char| c.is_whitespace() || c == ',').next()?;
+    (!name.is_empty() && name != "none").then(|| friendly_codec(name))
+}
+
+/// A number of the form "29.97" that ends a comma-separated field ("29.97 fps" or "30 tbr").
+fn rate_field(line: &str, unit: &str) -> Option<f64> {
+    line.split(',').find_map(|field| {
+        let field = field.trim();
+        field.strip_suffix(unit)?.trim().parse::<f64>().ok().filter(|v| v.is_finite() && *v > 0.0)
+    })
+}
+
+/// Read `ffmpeg -hide_banner -i file` output (stderr). Anything it does not say stays unknown.
+pub fn parse_probe(ffmpeg_info: &str) -> VideoProbe {
+    let mut probe = VideoProbe::default();
+    if let Some(at) = ffmpeg_info.find("Duration: ") {
+        let text = &ffmpeg_info[at + 10..];
+        let stamp = text.split(',').next().unwrap_or("").trim();
+        let parts: Vec<&str> = stamp.split(':').collect();
+        if let [h, m, sec] = parts.as_slice() {
+            if let (Ok(h), Ok(m), Ok(sec)) = (h.parse::<f64>(), m.parse::<f64>(), sec.parse::<f64>()) {
+                probe.duration_seconds = Some(h * 3600.0 + m * 60.0 + sec);
+            }
+        }
+        if let Some(rest) = text.split("bitrate:").nth(1) {
+            let kbps = rest.trim().split_whitespace().next().and_then(|n| n.parse::<u32>().ok());
+            probe.bitrate_kbps = kbps;
+        }
+    }
+    let video = ffmpeg_info
+        .lines()
+        .find(|l| l.contains("Video:") && !l.contains("attached pic"));
+    if let Some(line) = video {
+        probe.video_codec = codec_after(line, "Video:");
+        probe.fps = rate_field(line, " fps").or_else(|| rate_field(line, " tbr"));
+        if let Some((w, h)) = parse_video_size(ffmpeg_info) {
+            probe.width = w;
+            probe.height = h;
+        }
+        // A phone video stored sideways says so in side data: the picture is shown turned.
+        let turned = ffmpeg_info.lines().any(|l| {
+            l.split("rotation of ")
+                .nth(1)
+                .and_then(|r| r.split_whitespace().next())
+                .and_then(|r| r.parse::<f64>().ok())
+                .is_some_and(|deg| (deg.abs() - 90.0).abs() < 1.0 || (deg.abs() - 270.0).abs() < 1.0)
+        });
+        if turned {
+            std::mem::swap(&mut probe.width, &mut probe.height);
+        }
+    }
+    if let Some(line) = ffmpeg_info.lines().find(|l| l.contains("Audio:")) {
+        probe.audio_codec = codec_after(line, "Audio:");
+    }
+    probe
+}
+
+pub fn probe_video(input: &Path) -> Result<VideoProbe, MediaError> {
+    let ffmpeg = find_ffmpeg()?;
+    let out = Command::new(&ffmpeg)
+        .args(["-hide_banner", "-i"])
+        .arg(input)
+        .output()
+        .map_err(|e| MediaError::Message(format!("Failed to spawn ffmpeg: {e}")))?;
+    // ffmpeg exits with an error here (no output file); the description is on stderr either way.
+    Ok(parse_probe(&String::from_utf8_lossy(&out.stderr)))
+}
+
 /// The size the output will have after the requested scaling (even numbers, as the encoder needs).
 fn output_size(source: (u32, u32), target_resolution: &str) -> (u32, u32) {
     let Some(filter) = scale_filter(target_resolution) else { return source };
@@ -1096,6 +1203,34 @@ mod tests {
         assert_eq!(parse_video_size("  Stream #0:1: Video: mjpeg (Baseline), yuvj420p, 600x600, 90k tbr (attached pic)\n"), None);
         assert_eq!(parse_video_size("Video: vp9 (Profile 0), yuv420p(tv), 854x480, SAR 1:1 DAR 427:240, 24 fps"), Some((854, 480)));
         assert_eq!(parse_video_size(""), None);
+    }
+
+    #[test]
+    fn probe_reads_what_ffmpeg_says_and_leaves_the_rest_unknown() {
+        let mp4 = "Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'a.mp4':\n  Duration: 00:01:02.50, start: 0.000000, bitrate: 5168 kb/s\n  \
+            Stream #0:0[0x1](und): Video: h264 (High) (avc1 / 0x31637661), yuv420p(tv, bt709, progressive), 1920x1080 [SAR 1:1 DAR 16:9], 5000 kb/s, 29.97 fps, 29.97 tbr, 30k tbn (default)\n  \
+            Stream #0:1[0x2](und): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 128 kb/s (default)\n";
+        let p = parse_probe(mp4);
+        assert_eq!((p.width, p.height), (1920, 1080));
+        assert_eq!(p.fps, Some(29.97));
+        assert_eq!(p.duration_seconds, Some(62.5));
+        assert_eq!(p.bitrate_kbps, Some(5168));
+        assert_eq!((p.video_codec.as_deref(), p.audio_codec.as_deref()), (Some("H.264"), Some("AAC")));
+
+        // Variable frame rate: only a tbr is given. A phone clip stored sideways swaps width and height.
+        let phone = "  Duration: 00:00:10.00, start: 0.0, bitrate: 20000 kb/s\n  \
+            Stream #0:0: Video: hevc (Main), yuv420p, 1920x1080, 19000 kb/s, 59.94 tbr, 600 tbn\n      \
+            Side data:\n        displaymatrix: rotation of -90.00 degrees\n";
+        let p = parse_probe(phone);
+        assert_eq!((p.width, p.height), (1080, 1920));
+        assert_eq!((p.fps, p.video_codec.as_deref(), p.audio_codec.clone()), (Some(59.94), Some("H.265"), None));
+
+        // Audio only, an unknown duration, and an empty string: nothing is invented.
+        let audio = "  Duration: N/A, bitrate: N/A\n  Stream #0:0: Audio: mp3, 44100 Hz, stereo, fltp, 192 kb/s\n";
+        let p = parse_probe(audio);
+        assert_eq!((p.width, p.height, p.fps, p.duration_seconds, p.bitrate_kbps), (0, 0, None, None, None));
+        assert_eq!(p.audio_codec.as_deref(), Some("MP3"));
+        assert_eq!(parse_probe(""), VideoProbe::default());
     }
 
     #[test]

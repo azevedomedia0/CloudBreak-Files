@@ -117,6 +117,7 @@ pub fn run() {
             commands::process_photo_render,
             commands::ffmpeg_status,
             commands::trim_video_stream,
+            commands::media_probe_video,
             commands::media_stage_temp,
             commands::media_read_temp,
             commands::media_cleanup_temp,

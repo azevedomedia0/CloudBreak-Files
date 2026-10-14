@@ -5,7 +5,7 @@ Tauri 2 + React 19 + Vite + Tailwind 4 desktop app. It manages many cloud accoun
 ## Commands
 - Web dev: `npm install && npm run dev` (port 3000)
 - Type check: `npm run lint`
-- Rust tests: `cd src-tauri && cargo test` (115 tests, plus one hand-run Trash test: `cargo test trash_moves -- --ignored`)
+- Rust tests: `cd src-tauri && cargo test` (116 tests, plus one hand-run Trash test: `cargo test trash_moves -- --ignored`)
 - Crypto interop (Rust and Web Crypto): `npm run test:crypto`
 - Browser vault persistence: `npm run test:vault`
 - Photo pipeline parity (canvas preview vs Rust render): `npx tsx scripts/photo-pipeline-test.mts`

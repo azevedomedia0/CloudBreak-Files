@@ -335,6 +335,21 @@ pub fn trim_video_stream(
     media::trim_video_stream(&req).map_err(|e| e.to_string())
 }
 
+/// Size, frame rate, duration and codecs of a video, read with ffmpeg (so the app shows real details).
+/// The video is a staged copy or a file in an added folder, as for `trim_video_stream`.
+#[tauri::command]
+pub fn media_probe_video(
+    path: String,
+    app: AppHandle,
+    roots: State<'_, crate::local_fs::LocalRoots>,
+) -> Result<media::VideoProbe, String> {
+    let input = in_media_temp(&app, &path).or_else(|_| {
+        crate::local_fs::resolve_in_roots(&crate::local_fs::snapshot(&roots), std::path::Path::new(&path))
+            .map_err(|_| "The video must be in an added folder".to_string())
+    })?;
+    media::probe_video(&input).map_err(|e| e.to_string())
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StageTempRequest {
