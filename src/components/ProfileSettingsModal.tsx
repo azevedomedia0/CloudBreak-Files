@@ -19,6 +19,7 @@ import {
   saveProfile,
 } from '../utils/appPreferences';
 import { fullDiskAccessGranted, requestFullDiskAccess } from '../services/permissionsBridge';
+import { DEFAULT_AVATAR_URL } from '../utils/defaultAvatar';
 import { p2pBridge, type RemoteAccessStatus } from '../services/p2pBridge';
 
 export interface UserProfile {
@@ -256,7 +257,6 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     }
   };
 
-  const initials = name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'CB';
 
   const tabs: Array<{ id: SettingsTab; label: string; icon: React.ReactNode }> = [
     { id: 'profile', label: 'Profile', icon: <User className="w-3.5 h-3.5" /> },
@@ -318,11 +318,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                     title="Change profile photo"
                     aria-label="Change profile photo"
                   >
-                    {avatarUrl ? (
-                      <img src={avatarUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
-                    ) : (
-                      <span className="relative z-10">{initials}</span>
-                    )}
+                    <img src={avatarUrl || DEFAULT_AVATAR_URL} alt="" className="absolute inset-0 w-full h-full object-cover" />
                     <span className="absolute inset-0 z-20 flex items-center justify-center bg-black/55 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
                       {avatarBusy ? (
                         <RefreshCw className="w-5 h-5 animate-spin text-white" />
@@ -356,7 +352,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                       className="inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-1 rounded-md bg-sky-500/15 text-sky-200 border border-sky-400/25 hover:bg-sky-500/25 disabled:opacity-50 transition-colors"
                     >
                       <ImagePlus className="w-3 h-3" />
-                      {avatarUrl ? 'Change photo' : 'Add photo'}
+                      {avatarUrl ? 'Change photo' : 'Choose photo'}
                     </button>
                     {avatarUrl && (
                       <button
@@ -366,7 +362,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                         className="inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-1 rounded-md bg-white/5 text-neutral-300 border border-white/10 hover:bg-white/10 disabled:opacity-50 transition-colors"
                       >
                         <Trash2 className="w-3 h-3" />
-                        Remove
+                        Use default
                       </button>
                     )}
                   </div>
