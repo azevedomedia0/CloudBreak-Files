@@ -23,7 +23,7 @@ const Art: React.FC<{ file: FileItem; className?: string }> = ({ file, className
 
 const Duration: React.FC<{ file: FileItem }> = ({ file }) => (
   <span className="text-[10px] font-mono text-neutral-500 tabular-nums">
-    {file.videoMeta ? formatTimecode(file.videoMeta.durationSeconds) : '—'}
+    {file.videoMeta && file.videoMeta.durationSeconds > 0 ? formatTimecode(file.videoMeta.durationSeconds) : '—'}
   </span>
 );
 

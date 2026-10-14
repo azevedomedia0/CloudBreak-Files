@@ -5,6 +5,7 @@
 
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import type { PhotoAdjustments, VideoConvertOptions } from '../types';
+import type { VideoProbe } from '../utils/videoSpecs';
 
 export interface PhotoRenderResult {
   imageBase64: string;
@@ -58,6 +59,16 @@ export interface FfmpegStatus {
 
 const FFMPEG_INSTALL_HINT =
   'Install ffmpeg with Homebrew: brew install ffmpeg. Release builds of Cloudbreak Files ship a bundled copy.';
+
+/** Real details of a video on this computer, read by ffmpeg. Null in the browser or when it cannot be read. */
+export async function probeVideo(path: string): Promise<VideoProbe | null> {
+  if (!isTauri()) return null;
+  try {
+    return await invoke<VideoProbe>('media_probe_video', { path });
+  } catch {
+    return null;
+  }
+}
 
 /** Desktop: whether ffmpeg is available for trim / convert. Browser always reports unavailable. */
 export async function getFfmpegStatus(): Promise<FfmpegStatus> {

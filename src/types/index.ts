@@ -243,7 +243,8 @@ export interface VideoConvertOptions {
   format: VideoConvertFormat;
   resolution: 'original' | '4k' | '2k' | '1080p' | '720p' | '480p';
   quality: 'lossless' | 'high' | 'balanced' | 'compact';
-  fps: 24 | 30 | 60;
+  /** 0 keeps the video's own frame rate. */
+  fps: 0 | 24 | 30 | 60;
   trimStart: number;
   trimEnd: number;
   includeAudio: boolean;

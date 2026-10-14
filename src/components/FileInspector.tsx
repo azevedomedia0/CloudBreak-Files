@@ -16,6 +16,8 @@ import {
   needsNativeThumbnail,
 } from '../utils/documentKind';
 import { formatBytes, formatDate, formatTimecode } from '../utils/format';
+import { useProbedVideoMeta } from '../hooks/useProbedVideoMeta';
+import { fpsLabel } from '../utils/videoSpecs';
 import { isZipArchive } from '../utils/unzipArchive';
 import { DocumentPreview } from './document-editor/DocumentPreview';
 import { emitFileContextMenu } from '../utils/fileContextMenuBus';
@@ -90,6 +92,7 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
   modeSwitch,
 }) => {
   const [isBodyCollapsed, setIsBodyCollapsed] = useState<boolean>(false);
+  const specs = useProbedVideoMeta(file);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   // Stop the preview video when the full player takes over, so two videos never play at once.
@@ -823,7 +826,7 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
           </div>
         )}
 
-        {file.videoMeta && (
+        {specs && (
           <div className="space-y-2">
             <div 
               onClick={() => toggleSection('specs')}
@@ -839,21 +842,21 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
               <div className="grid grid-cols-2 gap-1.5 text-xs">
                 <div className="p-2 bg-black/30 rounded-lg border border-white/5">
                   <span className="text-neutral-500 text-[9px] block">Length</span>
-                  <span className="text-neutral-200 font-mono text-[11px]">{formatTimecode(file.videoMeta.durationSeconds)}</span>
+                  <span className="text-neutral-200 font-mono text-[11px]">{specs.durationSeconds > 0 ? formatTimecode(specs.durationSeconds) : '—'}</span>
                 </div>
                 <div className="p-2 bg-black/30 rounded-lg border border-white/5">
                   <span className="text-neutral-500 text-[9px] block">{file.category === 'audio' ? 'Audio' : 'Frame Rate'}</span>
                   <span className="text-neutral-200 text-[11px]">
-                    {file.category === 'audio' ? file.videoMeta.audioCodec : `${file.videoMeta.framerate} fps`}
+                    {file.category === 'audio' ? specs.audioCodec : fpsLabel(specs) ?? '—'}
                   </span>
                 </div>
                 <div className="p-2 bg-black/30 rounded-lg border border-white/5">
                   <span className="text-neutral-500 text-[9px] block">Codec</span>
-                  <span className="text-neutral-200 text-[11px]">{file.videoMeta.codec}</span>
+                  <span className="text-neutral-200 text-[11px]">{specs.codec}</span>
                 </div>
                 <div className="p-2 bg-black/30 rounded-lg border border-white/5">
                   <span className="text-neutral-500 text-[9px] block">Bitrate</span>
-                  <span className="text-neutral-200 text-[11px]">{file.videoMeta.bitrate}</span>
+                  <span className="text-neutral-200 text-[11px]">{specs.bitrate}</span>
                 </div>
               </div>
             )}

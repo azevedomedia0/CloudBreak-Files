@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Play } from '@/src/icons';
 import { FileItem, VideoConvertOptions, CloudAccount, FolderItem, isAudioConvertFormat, convertFormatMime } from '../types';
-import { discardTempOutput, getFfmpegStatus, trimAndTranscode, type FfmpegStatus } from '../services/mediaBridge';
+import { discardTempOutput, getFfmpegStatus, probeVideo, trimAndTranscode, type FfmpegStatus } from '../services/mediaBridge';
+import { useProbedVideoMeta } from '../hooks/useProbedVideoMeta';
+import { mergeProbe, unknownVideoMeta } from '../utils/videoSpecs';
 import { localFs } from '../services/localFsBridge';
 import { isTauri } from '@tauri-apps/api/core';
 import { PlayerHeader } from './video-player/PlayerHeader';
@@ -92,12 +94,21 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const [trimEnd, setTrimEnd] = useState<number>(duration);
   const [isPlayingTrimLoop, setIsPlayingTrimLoop] = useState<boolean>(false);
 
+  // Real details of the video: read by ffmpeg for files on this computer, and the player's own size otherwise.
+  const probedMeta = useProbedVideoMeta(file);
+  const [elementSize, setElementSize] = useState<{ width: number; height: number } | null>(null);
+  const meta = (() => {
+    const base = probedMeta ?? unknownVideoMeta();
+    if (base.dimensions.width > 0 || !elementSize) return base;
+    return { ...base, dimensions: elementSize };
+  })();
+
   // Converter states
   const [convertOptions, setConvertOptions] = useState<VideoConvertOptions>({
     format: 'mp4',
-    resolution: '1080p',
+    resolution: 'original',
     quality: 'high',
-    fps: 30,
+    fps: 0,
     trimStart: 0,
     trimEnd: duration,
     includeAudio: true,
@@ -232,6 +243,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       const raw = videoRef.current.duration;
       const dur = Number.isFinite(raw) && raw > 0 ? raw : file.videoMeta?.durationSeconds || 15;
       setDuration(dur);
+      const { videoWidth, videoHeight } = videoRef.current;
+      setElementSize(videoWidth > 0 && videoHeight > 0 ? { width: videoWidth, height: videoHeight } : null);
       setTrimStart(0);
       setTrimEnd(dur);
       setConvertOptions(prev => ({ ...prev, trimEnd: dur }));
@@ -293,7 +306,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
   const stepFrame = (frames: number) => {
     if (!videoRef.current) return;
-    const fps = file.videoMeta?.framerate || 30;
+    const fps = meta.framerate || 30;
     const newTime = videoRef.current.currentTime + frames * (1 / fps);
     seek(newTime);
   };
@@ -337,7 +350,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const isTrimmed = trimStart > 0.001 || trimEnd < duration - 0.001;
   const clipLength = Math.max(0.1, trimEnd - trimStart);
   const sourceBaseName = file.name.replace(/\.[^/.]+$/, '');
-  const defaultBaseName = `${sourceBaseName}${isTrimmed ? '_clip' : ''}${isAudioConvertFormat(convertOptions.format) ? '' : `_${convertOptions.resolution}`}`;
+  const defaultBaseName = `${sourceBaseName}${isTrimmed ? '_clip' : ''}${isAudioConvertFormat(convertOptions.format) ? '' : convertOptions.resolution === 'original' ? '' : `_${convertOptions.resolution}`}`;
   const outputName = `${customBaseName.trim() || defaultBaseName}.${convertOptions.format}`;
 
   const ffmpegMissing = isTauri() && ffmpegStatus !== null && !ffmpegStatus.available;
@@ -398,6 +411,12 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       sizeBytes = (await (await fetch(transcodedResultUrl)).blob()).size;
     } catch { /* keep estimate */ }
 
+    // The details of the file that was made, read from it when ffmpeg made it on this computer.
+    let outputMeta = { ...unknownVideoMeta(parseFloat(clipLength.toFixed(2))) };
+    if (!isAudioConvertFormat(ext) && outputPathRef.current) {
+      outputMeta = mergeProbe(outputMeta, await probeVideo(outputPathRef.current));
+    }
+
     const convertedFile: FileItem = {
       ...file,
       id: `file-conv-${Date.now()}`,
@@ -413,18 +432,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       updatedAt: new Date().toISOString(),
       version: 1,
       tags: [...file.tags.filter(t => t !== 'New Upload'), 'Converted'],
-      videoMeta: isAudioConvertFormat(ext) ? undefined : {
-        ...(file.videoMeta || {
-          dimensions: { width: 1920, height: 1080 },
-          framerate: convertOptions.fps,
-          codec: ext.toUpperCase(),
-          bitrate: '15 Mbps',
-          audioCodec: 'AAC',
-        }),
-        durationSeconds: parseFloat(clipLength.toFixed(2)),
-        framerate: convertOptions.fps,
-        codec: ext.toUpperCase(),
-      },
+      videoMeta: isAudioConvertFormat(ext) ? undefined : outputMeta,
     };
 
     onSaveTrimmedVideo(convertedFile);
@@ -520,7 +528,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       >
         
         {/* Header */}
-        <PlayerHeader file={file} duration={duration} activeTab={activeTab} setActiveTab={setActiveTab} onClose={onClose} />
+        <PlayerHeader file={file} duration={duration} meta={meta} activeTab={activeTab} setActiveTab={setActiveTab} onClose={onClose} />
 
         {ffmpegMissing && (activeTab === 'trim' || activeTab === 'convert') && (
           <div
@@ -632,7 +640,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                 <TrimPanel
                   duration={duration}
                   currentTime={currentTime}
-                  fps={file.videoMeta?.framerate || 30}
+                  fps={meta.framerate || 30}
                   isPlaying={isPlaying}
                   onTogglePlay={togglePlay}
                   onSeek={seek}
@@ -669,6 +677,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
               <ConvertPanel
                 file={file}
                 duration={duration}
+                sourceHeight={meta.dimensions.height || undefined}
                 convertOptions={convertOptions}
                 setConvertOptions={setConvertOptions}
                 isTranscoding={isTranscoding}

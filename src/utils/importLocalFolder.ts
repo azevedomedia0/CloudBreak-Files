@@ -132,9 +132,9 @@ async function fileToItem(
     videoMeta: category === 'video'
       ? {
           durationSeconds: 0,
-          dimensions: { width: 1920, height: 1080 },
-          framerate: 30,
-          codec: 'Unknown',
+          dimensions: { width: 0, height: 0 },
+          framerate: 0,
+          codec: '—',
           bitrate: '—',
           audioCodec: '—',
         }
@@ -282,9 +282,9 @@ async function diskEntryToItem(entry: LocalEntry, folderId: string, folderPath: 
     videoMeta: category === 'video'
       ? {
           durationSeconds: 0,
-          dimensions: { width: 1920, height: 1080 },
-          framerate: 30,
-          codec: 'Unknown',
+          dimensions: { width: 0, height: 0 },
+          framerate: 0,
+          codec: '—',
           bitrate: '—',
           audioCodec: '—',
         }

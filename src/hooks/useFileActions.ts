@@ -597,12 +597,12 @@ export function useFileActions({
         encryption,
         videoMeta: isVideo
           ? {
-              durationSeconds: 15,
-              dimensions: { width: 1920, height: 1080 },
-              framerate: 30,
-              codec: 'H.264',
-              bitrate: '24 Mbps',
-              audioCodec: 'AAC',
+              durationSeconds: 0,
+              dimensions: { width: 0, height: 0 },
+              framerate: 0,
+              codec: '—',
+              bitrate: '—',
+              audioCodec: '—',
             }
           : undefined,
         photoExif: isImage
