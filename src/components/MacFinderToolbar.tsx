@@ -9,6 +9,7 @@ import {
 import { isTauri } from '@tauri-apps/api/core';
 import { CloudAccount, AppNotification, FileCategory } from '../types';
 import { DateFilter, FileSortDirection, FileSortKey } from '../utils/filterFiles';
+import { getFolderIcon } from '../utils/folderIcons';
 import { NotificationPanel } from './NotificationPanel';
 import { FileInspectorIcon } from './file-browser/FileInspectorIcon';
 import { isMacLike, WindowControls } from './WindowControls';
@@ -39,6 +40,8 @@ interface MacFinderToolbarProps {
   onUploadFiles: (files: FileList) => void;
   onOpenAddAccount: () => void;
   activePathTitle: string;
+  /** Set when a Local Files folder is open: its title gets the same icon as its sidebar row. */
+  activeFolderName?: string;
   activeAccount: CloudAccount | undefined;
   canGoBack?: boolean;
   canGoForward?: boolean;
@@ -103,6 +106,7 @@ export const MacFinderToolbar: React.FC<MacFinderToolbarProps> = ({
   sortDirection,
   onSortDirectionChange,
   activePathTitle,
+  activeFolderName,
   canGoBack = false,
   canGoForward = false,
   onGoBack,
@@ -210,7 +214,9 @@ export const MacFinderToolbar: React.FC<MacFinderToolbarProps> = ({
       {/* Center: view modes + notifications / search / sort */}
       <div data-tauri-drag-region className="flex-1 flex items-center justify-center gap-2.5 min-w-0 px-2">
         <div className="flex items-center gap-2 font-semibold text-neutral-100 min-w-0 max-w-[210px] md:max-w-sm pointer-events-none shrink-0">
-          <HardDrive className="w-[18px] h-[18px] text-sky-400 shrink-0" />
+          {activeFolderName
+            ? getFolderIcon(activeFolderName, true, 'w-[18px] h-[18px]')
+            : <HardDrive className="w-[18px] h-[18px] text-sky-400 shrink-0" />}
           <span className="truncate text-sm sm:text-[14px] font-semibold tracking-tight text-white">{activePathTitle}</span>
         </div>
 

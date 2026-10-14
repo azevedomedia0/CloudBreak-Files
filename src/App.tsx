@@ -968,6 +968,9 @@ export default function App() {
     const ids = new Set<string>([rootId]);
     let grew = true;
     while (grew) {
+  // A Local Files folder (not a library, drive or server) shows its sidebar icon in the toolbar title.
+  const activeFolderName = !activeSourceName && !selectedLibrary ? selectedFolder?.name : undefined;
+
       grew = false;
       for (const folder of folders) {
         if (!folder.parentId || ids.has(folder.id)) continue;
@@ -1226,6 +1229,7 @@ export default function App() {
             notifications={notifications}
             onAcceptLibrary={handleAcceptLibraryNotification}
             onDeclineLibrary={handleDeclineLibraryNotification}
+            activeFolderName={activeFolderName}
             onMarkAllAsRead={handleMarkAllNotificationsRead}
             onClearNotification={handleClearNotification}
             onSelectLibrary={libId => {
