@@ -179,6 +179,7 @@ pub fn run() {
             p2p::commands::p2p_accept_invite,
             p2p::commands::p2p_export_invite,
             p2p::commands::p2p_list_libraries,
+            p2p::commands::p2p_refresh_incoming,
             p2p::commands::p2p_start_seeding,
             p2p::commands::p2p_swarm_status,
             p2p::commands::p2p_read_file,

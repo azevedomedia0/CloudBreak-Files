@@ -43,6 +43,8 @@ interface SidebarProps {
   isRescanningLocal?: boolean;
   onAddNewSharedLibrary?: () => void;
   onAddNewIncomingLibrary?: () => void;
+  onRefreshIncoming?: () => void;
+  isRefreshingIncoming?: boolean;
   onAddNewOutgoingLibrary?: () => void;
   onAddNetworkServer?: () => void;
   networkServers?: NetworkServerEntry[];
@@ -88,6 +90,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isRescanningLocal = false,
   onAddNewSharedLibrary,
   onAddNewIncomingLibrary,
+  onRefreshIncoming,
+  isRefreshingIncoming,
   onAddNewOutgoingLibrary,
   onAddNetworkServer,
   networkServers = [],
@@ -167,6 +171,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         onSelectLibrary={onSelectLibrary}
         onAddNewSharedLibrary={onAddNewSharedLibrary}
         onAddNewIncomingLibrary={onAddNewIncomingLibrary}
+        onRefreshIncoming={onRefreshIncoming}
+        isRefreshingIncoming={isRefreshingIncoming}
         collapsed={collapsed}
         toggleSection={toggleSection}
         incomingLibraries={incomingLibraries}
@@ -215,7 +221,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         totalServerCount={totalServerCount}
       />
     ),
-  }), [accounts, selectedAccountId, onSelectAccount, selectedFolderId, onSelectFolder, selectedLibraryId, onSelectLibrary, onAddFavorite, customFavorites, collapsed, visibleFolders, incomingLibraries, outgoingLibraries, onAddNewFolder, onRescanLocalFolders, isRescanningLocal, onAddNewSharedLibrary, onAddNewIncomingLibrary, onAddNewOutgoingLibrary, onOpenAddAccount, onOpenAccountSettings, onAddNetworkServer, networkServers, removableDevices, onEjectDevice, onSelectRemovableDevice, selectedRemovableDeviceId, onSelectNetworkServer, selectedNetworkServerId, onlineServerCount, totalServerCount, selectedSourceId, onSelectFavoriteSource]);
+  }), [accounts, selectedAccountId, onSelectAccount, selectedFolderId, onSelectFolder, selectedLibraryId, onSelectLibrary, onAddFavorite, customFavorites, collapsed, visibleFolders, incomingLibraries, outgoingLibraries, onAddNewFolder, onRescanLocalFolders, isRescanningLocal, onAddNewSharedLibrary, onAddNewIncomingLibrary, onRefreshIncoming, isRefreshingIncoming, onAddNewOutgoingLibrary, onOpenAddAccount, onOpenAccountSettings, onAddNetworkServer, networkServers, removableDevices, onEjectDevice, onSelectRemovableDevice, selectedRemovableDeviceId, onSelectNetworkServer, selectedNetworkServerId, onlineServerCount, totalServerCount, selectedSourceId, onSelectFavoriteSource]);
 
   if (isCollapsed) {
     return null;

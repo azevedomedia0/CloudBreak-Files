@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, ChevronDown } from '@/src/icons';
+import { ChevronDown, RefreshCw } from '@/src/icons';
 import { SharedLibrary } from '../../types';
 import { SidebarSectionKey } from './sectionKey';
 import { IncomingLibraryIcon } from './IncomingLibraryIcon';
@@ -10,12 +10,15 @@ export interface IncomingLibrariesSectionProps {
   onSelectLibrary: (libraryId: string | null) => void;
   onAddNewSharedLibrary?: () => void;
   onAddNewIncomingLibrary?: () => void;
+  /** Check incoming libraries for missing files (re-dials their senders). */
+  onRefreshIncoming?: () => void;
+  isRefreshingIncoming?: boolean;
   collapsed: Partial<Record<SidebarSectionKey, boolean>>;
   toggleSection: (section: SidebarSectionKey) => void;
   incomingLibraries: SharedLibrary[];
 }
 
-export const IncomingLibrariesSection: React.FC<IncomingLibrariesSectionProps> = ({ onSelectFolder, selectedLibraryId, onSelectLibrary, onAddNewSharedLibrary, onAddNewIncomingLibrary, collapsed, toggleSection, incomingLibraries }) => (
+export const IncomingLibrariesSection: React.FC<IncomingLibrariesSectionProps> = ({ onSelectFolder, selectedLibraryId, onSelectLibrary, onAddNewSharedLibrary, onAddNewIncomingLibrary, onRefreshIncoming, isRefreshingIncoming, collapsed, toggleSection, incomingLibraries }) => (
     <div className="space-y-0.5">
       <div 
         onClick={() => toggleSection('incomingLibraries')}
@@ -30,14 +33,14 @@ export const IncomingLibrariesSection: React.FC<IncomingLibrariesSectionProps> =
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            if (onAddNewIncomingLibrary) onAddNewIncomingLibrary();
-            else if (onAddNewSharedLibrary) onAddNewSharedLibrary();
+            onRefreshIncoming?.();
           }}
-          className="w-4 h-4 flex items-center justify-center bg-transparent text-neutral-400 hover:text-emerald-300 transition-colors"
-          title="Connect / Accept Incoming P2P Media Library"
-          aria-label="Connect Incoming P2P Library"
+          disabled={isRefreshingIncoming}
+          className="w-4 h-4 flex items-center justify-center bg-transparent text-neutral-400 hover:text-emerald-300 disabled:opacity-60 transition-colors"
+          title="Refresh: re-contact the senders of incoming libraries and fetch any missing files"
+          aria-label="Refresh incoming libraries"
         >
-          <Plus className="w-3 h-3 stroke-[2.5]" />
+          <RefreshCw className={`w-3 h-3 stroke-[2.5] ${isRefreshingIncoming ? 'animate-spin' : ''}`} />
         </button>
       </div>
 

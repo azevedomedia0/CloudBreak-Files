@@ -5,6 +5,7 @@
  */
 
 import { invoke, isTauri } from '@tauri-apps/api/core';
+import type { IncomingRefresh } from '../utils/incomingRefresh';
 
 export interface P2pIdentity {
   peerId: string;
@@ -300,6 +301,12 @@ export const p2pBridge = {
       return invoke<P2pLibraryRecord[]>('p2p_list_libraries');
     }
     return [...browserLibs.values()].map(({ files: _f, invite: _i, ...rec }) => rec);
+  },
+
+  /** Finish incoming libraries whose files are not all here yet, by dialling their senders again. */
+  async refreshIncoming(): Promise<IncomingRefresh[]> {
+    if (!(await isTauri())) return [];
+    return invoke<IncomingRefresh[]>('p2p_refresh_incoming');
   },
 
   async startSeeding(libraryId: string): Promise<SwarmStatus> {

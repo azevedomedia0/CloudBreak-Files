@@ -171,6 +171,7 @@ export default function App() {
   const {
     sharedLibraries, setSharedLibraries, swarmStatus, markSeeding,
     refreshSwarm, copyLibraryInvite, handleCreateLibrary, handleJoinIncomingLibrary,
+    refreshIncomingLibraries, isRefreshingIncoming,
   } = useP2pLibraries({
     userName: userProfile.name,
     files, selectedFileId, selectedLibraryId,
@@ -1224,6 +1225,8 @@ export default function App() {
               onRescanLocalFolders={handleRescanLocalFolders}
               isRescanningLocal={isRescanningLocal}
               onAddNewIncomingLibrary={() => setIsJoinIncomingOpen(true)}
+              onRefreshIncoming={() => { void refreshIncomingLibraries(); }}
+              isRefreshingIncoming={isRefreshingIncoming}
               onAddNewOutgoingLibrary={() => { setLibraryDraft(null); setIsNewLibraryOpen(true); }}
               onAddNewSharedLibrary={() => { setLibraryDraft(null); setIsNewLibraryOpen(true); }}
               onAddNetworkServer={() => setIsConnectServerOpen(true)}

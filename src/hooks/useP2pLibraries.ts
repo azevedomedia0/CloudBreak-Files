@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import { summarizeIncomingRefresh } from '../utils/incomingRefresh';
 import type { FileItem, SharedLibrary } from '../types';
 import { p2pBridge, recordToSharedLibrary, type SwarmStatus } from '../services/p2pBridge';
 import type { CreateP2pLibraryForm, JoinP2pLibraryForm } from '../components/SidebarModals';
@@ -140,6 +141,31 @@ export function useP2pLibraries({
       cancelIdle();
     };
   }, [userName]);
+
+  const [isRefreshingIncoming, setIsRefreshingIncoming] = useState(false);
+
+  /** Re-dial the senders of incoming libraries that are missing files, then reload the list and peers. */
+  const refreshIncomingLibraries = async () => {
+    if (isRefreshingIncoming) return;
+    setIsRefreshingIncoming(true);
+    try {
+      const results = await p2pBridge.refreshIncoming();
+      const records = await p2pBridge.listLibraries();
+      setSharedLibraries(prev => {
+        const byId = new Map(prev.map(l => [l.id, l]));
+        for (const rec of records) byId.set(rec.libraryId, recordToSharedLibrary(rec));
+        return [...byId.values()];
+      });
+      const status = await p2pBridge.swarmStatus();
+      setSwarmStatus(status);
+      setSharedLibraries(prev => mergeSwarmPeersIntoLibraries(prev, status));
+      showToast(summarizeIncomingRefresh(results));
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsRefreshingIncoming(false);
+    }
+  };
 
   const refreshSwarm = async () => {
     try {
@@ -404,5 +430,6 @@ export function useP2pLibraries({
   return {
     sharedLibraries, setSharedLibraries, swarmStatus, markSeeding,
     refreshSwarm, copyLibraryInvite, handleCreateLibrary, handleJoinIncomingLibrary,
+    refreshIncomingLibraries, isRefreshingIncoming,
   };
 }

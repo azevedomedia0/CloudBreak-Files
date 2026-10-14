@@ -501,6 +501,120 @@ pub fn p2p_list_libraries(app: AppHandle) -> Result<Vec<LibraryRecord>, String> 
     Ok(index.libraries)
 }
 
+/// How one incoming library fared in a refresh.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct IncomingRefresh {
+    pub library_id: String,
+    pub name: String,
+    /// `synced` (everything is here), `partial` (some files arrived, some are still missing), `offline`
+    /// (the sender could not be reached and files are missing) or `expired` (its invite has lapsed).
+    pub status: String,
+    pub missing_chunks: usize,
+    pub fetched_chunks: usize,
+    pub message: Option<String>,
+}
+
+/// The chunks a manifest lists that this Mac does not have yet.
+fn missing_chunks(manifest: &LibraryManifest, store: &ChunkStore) -> Vec<String> {
+    manifest
+        .files
+        .iter()
+        .flat_map(|f| f.chunks.iter())
+        .map(|c| c.cid.clone())
+        .filter(|cid| !store.has(cid))
+        .collect()
+}
+
+fn refresh_status(missing_after: usize, fetched: usize) -> &'static str {
+    if missing_after == 0 {
+        "synced"
+    } else if fetched > 0 {
+        "partial"
+    } else {
+        "offline"
+    }
+}
+
+/// "Refresh" for Incoming Libraries: for each library whose files are not all here, dial its sender again
+/// with the invite that was used to join and fetch what is missing. A library that is complete costs no
+/// network traffic. This cannot find libraries nobody has sent an invite for: there is no server or
+/// announce to ask (invite-dial only), so a new library still arrives as an invite.
+#[tauri::command]
+pub async fn p2p_refresh_incoming(
+    app: AppHandle,
+    state: State<'_, P2pState>,
+) -> Result<Vec<IncomingRefresh>, String> {
+    let data = app_data_dir(&app)?;
+    let index = LibraryIndex::load(&data).map_err(|e| e.to_string())?;
+    let incoming: Vec<LibraryRecord> = index.libraries.into_iter().filter(|l| l.direction == "incoming").collect();
+    let mut results = Vec::new();
+    let mut statuses: Vec<(String, &'static str)> = Vec::new();
+
+    for rec in incoming {
+        let dir = library_dir(&data, &rec.library_id);
+        let report = |status: &str, missing: usize, fetched: usize, message: Option<String>| IncomingRefresh {
+            library_id: rec.library_id.clone(),
+            name: rec.name.clone(),
+            status: status.into(),
+            missing_chunks: missing,
+            fetched_chunks: fetched,
+            message,
+        };
+        let Ok(store) = ChunkStore::open(dir.clone()) else {
+            results.push(report("offline", 0, 0, Some("The library's folder could not be opened.".into())));
+            continue;
+        };
+        let Ok((manifest, _)) = LibraryManifest::load_local(&dir) else {
+            results.push(report("offline", 0, 0, Some("The library's file list could not be read.".into())));
+            continue;
+        };
+        let missing = missing_chunks(&manifest, &store);
+        if missing.is_empty() {
+            statuses.push((rec.library_id.clone(), "synced"));
+            results.push(report("synced", 0, 0, None));
+            continue;
+        }
+        // The saved invite says where the sender is and holds the token. It was checked when it was
+        // accepted; a lapsed one is not used again, as its sender meant it to end.
+        let Some(invite) = rec.last_invite.as_deref().and_then(|text| LibraryInvite::decode_unverified(text).ok()) else {
+            results.push(report("offline", missing.len(), 0, Some("The invite this library came from was not kept.".into())));
+            continue;
+        };
+        if invite.expires_at > 0 && chrono::Utc::now().timestamp() > invite.expires_at {
+            results.push(report("expired", missing.len(), 0, Some("The invite for this library has expired.".into())));
+            continue;
+        }
+        let swarm = ensure_swarm(&app, &state).await?;
+        swarm.dial_invite(invite.root_cid.clone(), invite.seeder_addrs.clone(), invite.access_token.clone());
+        let outcome = swarm
+            .fetch_missing(invite.root_cid.clone(), missing.clone(), invite.library_id.clone(), invite.access_token.clone())
+            .await;
+        let (fetched, message) = match outcome {
+            Ok(n) => (n, None),
+            Err(e) => (0, Some(e)),
+        };
+        let still = missing_chunks(&manifest, &store).len();
+        let status = refresh_status(still, fetched);
+        statuses.push((rec.library_id.clone(), status));
+        results.push(report(status, still, fetched, message));
+        // What arrived can be served on to the next person who is invited.
+        swarm.seed_library(invite.root_cid.clone(), invite.library_id.clone(), invite.access_token.clone());
+    }
+
+    // Remember how each library stands, so its status survives a restart.
+    if !statuses.is_empty() {
+        let mut index = LibraryIndex::load(&data).map_err(|e| e.to_string())?;
+        for (id, status) in statuses {
+            if let Some(r) = index.get_mut(&id) {
+                r.seeding_status = Some(status.into());
+            }
+        }
+        index.save(&data).map_err(|e| e.to_string())?;
+    }
+    Ok(results)
+}
+
 #[tauri::command]
 pub async fn p2p_start_seeding(
     app: AppHandle,
@@ -826,5 +940,62 @@ pub fn release_remote_access(app: &AppHandle) {
         tauri::async_runtime::block_on(async {
             let _ = tokio::time::timeout(std::time::Duration::from_secs(2), port_mapping::unmap(&mapping)).await;
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::p2p::chunk_store::EncryptedChunkMeta;
+    use crate::p2p::manifest::ManifestFileEntry;
+
+    fn manifest_with(chunks: &[&str]) -> LibraryManifest {
+        LibraryManifest {
+            version: 1,
+            library_id: "lib".into(),
+            name: "Test".into(),
+            description: String::new(),
+            epoch: 1,
+            owner_peer_id: "peer".into(),
+            created_at: "2026-01-01T00:00:00Z".into(),
+            files: vec![ManifestFileEntry {
+                file_id: "f1".into(),
+                name: "a.bin".into(),
+                mime_type: "application/octet-stream".into(),
+                size_bytes: 0,
+                plaintext_sha256: String::new(),
+                chunks: chunks
+                    .iter()
+                    .enumerate()
+                    .map(|(i, cid)| EncryptedChunkMeta {
+                        index: i as u32,
+                        cid: (*cid).into(),
+                        nonce_hex: String::new(),
+                        size: 0,
+                    })
+                    .collect(),
+            }],
+        }
+    }
+
+    #[test]
+    fn a_refresh_asks_only_for_the_chunks_that_are_missing() {
+        let dir = std::env::temp_dir().join(format!("cb-refresh-{}", uuid::Uuid::new_v4()));
+        let store = ChunkStore::open(dir.clone()).unwrap();
+        let have = store.put_raw(b"already here").unwrap();
+        let want = "ab".repeat(32);
+        let manifest = manifest_with(&[&have, &want]);
+        assert_eq!(missing_chunks(&manifest, &store), vec![want.clone()]);
+        store.put_raw(b"already here").unwrap();
+        assert!(missing_chunks(&manifest_with(&[&have]), &store).is_empty(), "complete: nothing to fetch");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_refresh_status_says_how_far_it_got() {
+        assert_eq!(refresh_status(0, 0), "synced");
+        assert_eq!(refresh_status(0, 5), "synced");
+        assert_eq!(refresh_status(2, 3), "partial");
+        assert_eq!(refresh_status(4, 0), "offline");
     }
 }
