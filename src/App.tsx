@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { looksLikeInvite } from './utils/invitePreview';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { MacFinderToolbar, MacViewMode } from './components/MacFinderToolbar';
 import { Sidebar } from './components/Sidebar';
@@ -102,6 +103,8 @@ export default function App() {
   const [isNewLibraryOpen, setIsNewLibraryOpen] = useState<boolean>(false);
   const [libraryDraft, setLibraryDraft] = useState<LibraryDraft | null>(null);
   const [isJoinIncomingOpen, setIsJoinIncomingOpen] = useState<boolean>(false);
+  /** An invite to fill in when the join dialog opens (from a notification that needs a passphrase). */
+  const [joinInitialInvite, setJoinInitialInvite] = useState<string>('');
   const [isAddFavoriteOpen, setIsAddFavoriteOpen] = useState<boolean>(false);
   const [isConnectServerOpen, setIsConnectServerOpen] = useState<boolean>(false);
 
@@ -183,10 +186,34 @@ export default function App() {
     showToast,
   });
   const {
-    notifications, isNotificationOpen, setIsNotificationOpen,
+    notifications, isNotificationOpen, setIsNotificationOpen, addInviteNotification,
     handleAcceptLibraryNotification, handleDeclineLibraryNotification,
     handleMarkAllNotificationsRead, handleClearNotification,
-  } = useNotifications({ setSharedLibraries, setSelectedLibraryId, setSelectedFolderId, showToast });
+  } = useNotifications({
+    setSharedLibraries, setSelectedLibraryId, setSelectedFolderId, showToast,
+    joinLibrary: handleJoinIncomingLibrary,
+    existingLibraryIds: sharedLibraries.map(l => l.id),
+    openJoinDialog: invite => { setJoinInitialInvite(invite); setIsJoinIncomingOpen(true); },
+  });
+
+  // An invite pasted into the app (outside a text field) shows up as a notification that offers to join.
+  const addInviteRef = useRef(addInviteNotification);
+  addInviteRef.current = addInviteNotification;
+  useEffect(() => {
+    const onPaste = (event: ClipboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('input, textarea, select, [contenteditable="true"], .xterm')) return;
+      const text = event.clipboardData?.getData('text/plain') ?? '';
+      if (!looksLikeInvite(text)) return;
+      event.preventDefault();
+      const result = addInviteRef.current(text);
+      if (result === 'added' || result === 'duplicate') setIsNotificationOpen(true);
+      if (result === 'already-joined') showToast('You already have that library.');
+      if (result === 'invalid') showToast('That does not look like a valid library invite.');
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, [setIsNotificationOpen, showToast]);
 
   // Apply the theme to the document root
   useEffect(() => {
@@ -364,6 +391,10 @@ export default function App() {
       const action = (event as CustomEvent<FileMenuActionDetail>).detail?.action;
       if (action === 'new-folder') setIsNewFolderOpen(true);
       if (action === 'upload') uploadInputRef.current?.click();
+      if (action === 'join-library') {
+        setJoinInitialInvite('');
+        setIsJoinIncomingOpen(true);
+      }
     };
     window.addEventListener(FILE_MENU_ACTION_EVENT, onFileMenu);
     return () => window.removeEventListener(FILE_MENU_ACTION_EVENT, onFileMenu);
@@ -1469,6 +1500,7 @@ export default function App() {
         handleCreateLibrary={handleCreateLibrary}
         isJoinIncomingOpen={isJoinIncomingOpen}
         setIsJoinIncomingOpen={setIsJoinIncomingOpen}
+        joinInitialInvite={joinInitialInvite}
         handleJoinIncomingLibrary={handleJoinIncomingLibrary}
         isAddFavoriteOpen={isAddFavoriteOpen}
         setIsAddFavoriteOpen={setIsAddFavoriteOpen}

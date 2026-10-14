@@ -305,7 +305,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         toggleSelectAll();
         return;
       }
-      if (action === 'new-folder' || action === 'upload') return;
+      if (action === 'new-folder' || action === 'upload' || action === 'join-library') return;
 
       const file = files.find(item => item.id === selectedFileId);
       if (!file) return;

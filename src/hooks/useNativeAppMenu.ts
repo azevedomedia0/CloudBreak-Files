@@ -41,6 +41,7 @@ export function useNativeAppMenu(state: NativeAppMenuState) {
         const [
           newFolder,
           upload,
+          joinLibrary,
           sep1,
           open,
           sep2,
@@ -70,6 +71,11 @@ export function useNativeAppMenu(state: NativeAppMenuState) {
             text: 'Upload Files…',
             accelerator: 'CmdOrCtrl+U',
             action: run('upload'),
+          }),
+          MenuItem.new({
+            id: 'file-join-library',
+            text: 'Join Library with Invite…',
+            action: run('join-library'),
           }),
           PredefinedMenuItem.new({ item: 'Separator' }),
           needsSelection('open', 'Open', 'CmdOrCtrl+Down'),
@@ -125,6 +131,7 @@ export function useNativeAppMenu(state: NativeAppMenuState) {
           items: [
             newFolder,
             upload,
+            joinLibrary,
             sep1,
             open,
               sep2,

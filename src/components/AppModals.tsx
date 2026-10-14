@@ -57,6 +57,7 @@ export interface AppModalsProps {
   handleCreateLibrary: (form: CreateP2pLibraryForm, draft?: LibraryDraft | null) => void | Promise<void>;
   isJoinIncomingOpen: boolean;
   setIsJoinIncomingOpen: (open: boolean) => void;
+  joinInitialInvite?: string;
   handleJoinIncomingLibrary: (form: JoinP2pLibraryForm) => void | Promise<void>;
   isAddFavoriteOpen: boolean;
   setIsAddFavoriteOpen: (open: boolean) => void;
@@ -117,6 +118,7 @@ export const AppModals: React.FC<AppModalsProps> = ({
   handleCreateLibrary,
   isJoinIncomingOpen,
   setIsJoinIncomingOpen,
+  joinInitialInvite,
   handleJoinIncomingLibrary,
   isAddFavoriteOpen,
   setIsAddFavoriteOpen,
@@ -225,6 +227,7 @@ export const AppModals: React.FC<AppModalsProps> = ({
     isOpen={isJoinIncomingOpen}
     onClose={() => setIsJoinIncomingOpen(false)}
     onJoinLibrary={handleJoinIncomingLibrary}
+    initialInvite={joinInitialInvite}
   />
 
   <AddFavoriteModal

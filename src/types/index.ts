@@ -273,6 +273,8 @@ export interface AppNotification {
     itemCount: number;
   };
   status?: 'pending' | 'accepted' | 'declined';
+  /** The aetherlib:1:… invite this notification offers to join (joining checks its signature). */
+  invite?: string;
 }
 
 export interface RemovableDevice {

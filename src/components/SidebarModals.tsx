@@ -950,19 +950,27 @@ interface JoinIncomingLibraryModalProps {
   isOpen: boolean;
   onClose: () => void;
   onJoinLibrary: (form: JoinP2pLibraryForm) => void | Promise<void>;
+  /** An invite to fill in when the dialog opens. */
+  initialInvite?: string;
 }
 
 export const JoinIncomingLibraryModal: React.FC<JoinIncomingLibraryModalProps> = ({
   isOpen,
   onClose,
   onJoinLibrary,
+  initialInvite = '',
 }) => {
   const [libraryName, setLibraryName] = useState('');
-  const [inviteCode, setInviteCode] = useState('');
+  const [inviteCode, setInviteCode] = useState(initialInvite);
   const [ownerName, setOwnerName] = useState('');
   const [p2pPassphrase, setP2pPassphrase] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Opening with an invite (from a notification) fills it in.
+  useEffect(() => {
+    if (isOpen && initialInvite) setInviteCode(initialInvite);
+  }, [isOpen, initialInvite]);
 
   if (!isOpen) return null;
 

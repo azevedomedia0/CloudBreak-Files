@@ -13,7 +13,8 @@ export type FileMenuAction =
   | 'share'
   | 'encrypt'
   | 'trash'
-  | 'select-all';
+  | 'select-all'
+  | 'join-library';
 
 export type FileMenuActionDetail = { action: FileMenuAction };
 
@@ -30,6 +31,11 @@ function focusIsInTextTarget(): boolean {
 }
 
 export function emitFileMenuAction(action: FileMenuAction) {
+  // Joining a library acts on no file, so it works from anywhere, including while typing in the terminal.
+  if (action === 'join-library') {
+    window.dispatchEvent(new CustomEvent<FileMenuActionDetail>(FILE_MENU_ACTION_EVENT, { detail: { action } }));
+    return;
+  }
   // ⌘⌫, ⌘C, ⌘A and ⌘D belong to the File menu, so they also arrive while typing in the terminal. Never let
   // them move, copy or select files then.
   if (focusIsInTextTarget()) {
@@ -58,5 +64,6 @@ export function fileMenuActionLabel(action: FileMenuAction, encrypted?: boolean)
     case 'encrypt': return encrypted ? 'Decrypt with Vault' : 'Encrypt with Vault';
     case 'trash': return 'Move to Trash';
     case 'select-all': return 'Select All';
+    case 'join-library': return 'Join Library with Invite…';
   }
 }
