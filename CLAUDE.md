@@ -12,7 +12,7 @@ Tauri 2 + React 19 + Vite + Tailwind 4 desktop app. It manages many cloud accoun
 - Editor text round-trip (what gets written to local files): `npx tsx scripts/editor-text-roundtrip-test.mts`
 - Terminal splits, saved sessions and keys: `npx tsx scripts/terminal-layout-test.mts`
 - PDF editor maths and save step (renders the saved PDF with pdf.js and samples pixels): `npx tsx scripts/pdf-editor-test.mts`
-- Incoming Libraries refresh message: `npx tsx scripts/incoming-refresh-test.mts`
+- Shared By Others refresh message: `npx tsx scripts/incoming-refresh-test.mts`
 - Invite preview for notifications: `npx tsx scripts/invite-preview-test.mts`
 - Desktop app: `npm run tauri dev`
 - In-app self-test (runs inside the real desktop app, debug build only): `npm run test:app`. It checks vault unlock and `vault.json`, the security policy, the asset protocol, local file saves, the path limits, video trim and save, drag permission and toolbar spacing. It uses a throwaway app data folder. Needs port 3000 free and ffmpeg.

@@ -223,7 +223,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
                         {isAccepted && (
                           <span className="ml-auto flex items-center gap-1 text-[10px] text-emerald-400">
                             <Check className="w-3 h-3" />
-                            Joined. It is in Incoming Libraries.
+                            Joined. It is in Shared By Others.
                           </span>
                         )}
                         {isDeclined && (

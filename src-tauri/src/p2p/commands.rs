@@ -536,7 +536,7 @@ fn refresh_status(missing_after: usize, fetched: usize) -> &'static str {
     }
 }
 
-/// "Refresh" for Incoming Libraries: for each library whose files are not all here, dial its sender again
+/// "Refresh" for Shared By Others: for each library whose files are not all here, dial its sender again
 /// with the invite that was used to join and fetch what is missing. A library that is complete costs no
 /// network traffic. This cannot find libraries nobody has sent an invite for: there is no server or
 /// announce to ask (invite-dial only), so a new library still arrives as an invite.

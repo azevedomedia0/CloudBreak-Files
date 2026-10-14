@@ -9,7 +9,7 @@ interface UseNotificationsOptions {
   setSelectedLibraryId: (id: string | null) => void;
   setSelectedFolderId: (id: string | null) => void;
   showToast: (message: string) => void;
-  /** Join a library for real, as the Join dialog does (decrypts, fetches, adds it to Incoming Libraries). */
+  /** Join a library for real, as the Join dialog does (decrypts, fetches, adds it to Shared By Others). */
   joinLibrary: (form: JoinP2pLibraryForm) => Promise<void>;
   /** Libraries already here, so an invite for one of them is not offered again. */
   existingLibraryIds: string[];

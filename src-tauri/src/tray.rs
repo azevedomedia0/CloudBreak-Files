@@ -16,7 +16,7 @@ use tauri::{
 
 pub const TRAY_ID: &str = "cloudbreak-main";
 
-/// 0 = idle, 1 = online (listening, not seeding), 2 = seeding outgoing libraries
+/// 0 = idle, 1 = online (listening, not seeding), 2 = sharing folders
 static LAST_STATUS: AtomicU8 = AtomicU8::new(255);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -31,7 +31,7 @@ impl TrayStatus {
         match self {
             Self::Idle => "Idle — not seeding",
             Self::Online => "Online — listening (no active seeds)",
-            Self::Seeding => "Online — seeding outgoing libraries",
+            Self::Seeding => "Online — sharing folders",
         }
     }
 
@@ -121,7 +121,7 @@ static LINES: OnceLock<Mutex<Option<StatLines>>> = OnceLock::new();
 static LAST_TEXT: OnceLock<Mutex<[String; 3]>> = OnceLock::new();
 static LIBRARIES: OnceLock<Mutex<LibrarySummary>> = OnceLock::new();
 
-/// Outgoing libraries that are currently shared (not expired), as shown in the menu.
+/// Shared folders (outgoing libraries) that are currently shared (not expired), as shown in the menu.
 #[derive(Default, Clone, PartialEq)]
 struct LibrarySummary {
     /// One line per library: "Name — expires in 12 days".
@@ -208,9 +208,9 @@ fn load_library_summary(app: &AppHandle) -> LibrarySummary {
 fn stat_texts(status: TrayStatus, swarm: Option<&SwarmStatus>, libs: &LibrarySummary) -> (String, String) {
     let Some(st) = swarm else {
         let summary = if libs.count == 0 {
-            "No outgoing libraries".to_string()
+            "No shared folders".to_string()
         } else {
-            format!("{} shared · not connected", plural(libs.count, "library", "libraries"))
+            format!("{} shared · not connected", plural(libs.count, "folder", "folders"))
         };
         return (summary, "↑ 0 B sent · ↓ 0 B received".to_string());
     };
@@ -221,11 +221,11 @@ fn stat_texts(status: TrayStatus, swarm: Option<&SwarmStatus>, libs: &LibrarySum
         format!("{connected} of {} connected", plural(st.peers.len(), "peer", "peers"))
     };
     let libraries = if libs.count == 0 {
-        "No outgoing libraries".to_string()
+        "No shared folders".to_string()
     } else if status == TrayStatus::Seeding {
-        format!("Seeding {}", plural(libs.count, "library", "libraries"))
+        format!("Seeding {}", plural(libs.count, "folder", "folders"))
     } else {
-        format!("{} shared", plural(libs.count, "library", "libraries"))
+        format!("{} shared", plural(libs.count, "folder", "folders"))
     };
     (
         format!("{libraries} · {peers}"),
@@ -250,7 +250,7 @@ fn build_menu(
     let sep3 = PredefinedMenuItem::separator(app)?;
 
     let libraries: Submenu<tauri::Wry> = {
-        let title = if libs.count == 0 { "Outgoing libraries".to_string() } else { format!("Outgoing libraries ({})", libs.count) };
+        let title = if libs.count == 0 { "Shared folders".to_string() } else { format!("Shared folders ({})", libs.count) };
         let submenu = Submenu::with_id(app, "libraries", title, libs.count > 0)?;
         for (i, line) in libs.lines.iter().enumerate() {
             submenu.append(&MenuItem::with_id(app, format!("lib-{i}"), line, false, None::<&str>)?)?;
@@ -449,7 +449,7 @@ mod tests {
     fn stat_lines_cover_idle_and_seeding() {
         let none = LibrarySummary::default();
         let (summary, traffic) = stat_texts(TrayStatus::Idle, None, &none);
-        assert_eq!(summary, "No outgoing libraries");
+        assert_eq!(summary, "No shared folders");
         assert_eq!(traffic, "↑ 0 B sent · ↓ 0 B received");
 
         let libs = LibrarySummary { lines: vec!["Trip — expires in 3 days".into()], count: 2, more: 1 };
@@ -468,7 +468,7 @@ mod tests {
             private_mode: true,
         };
         let (summary, traffic) = stat_texts(TrayStatus::Seeding, Some(&st), &libs);
-        assert_eq!(summary, "Seeding 2 libraries · 1 of 3 peers connected");
+        assert_eq!(summary, "Seeding 2 folders · 1 of 3 peers connected");
         assert_eq!(traffic, "↑ 3.0 MB sent · ↓ 2.0 KB received");
     }
 

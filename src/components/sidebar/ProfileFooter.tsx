@@ -61,10 +61,10 @@ export const ProfileFooter: React.FC<ProfileFooterProps> = ({
           <span className="text-neutral-300 font-medium text-[10px]">P2P Protocol</span>
         </div>
         <div className="flex items-center gap-1.5 text-[9px] font-mono">
-          <span className="text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1 py-0.2 rounded" title="Incoming P2P libraries">
+          <span className="text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1 py-0.2 rounded" title="Shared by others">
             {incomingLibraries.length} In
           </span>
-          <span className="text-purple-300 bg-purple-500/10 border border-purple-400/20 px-1 py-0.2 rounded" title="Outgoing libraries">
+          <span className="text-purple-300 bg-purple-500/10 border border-purple-400/20 px-1 py-0.2 rounded" title="Shared folders">
             {outgoingLibraries.length} Out
           </span>
           {connectedPeers > 0 && (

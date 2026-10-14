@@ -10,7 +10,7 @@ export interface IncomingLibrariesSectionProps {
   onSelectLibrary: (libraryId: string | null) => void;
   onAddNewSharedLibrary?: () => void;
   onAddNewIncomingLibrary?: () => void;
-  /** Check incoming libraries for missing files (re-dials their senders). */
+  /** Check folders shared with you for missing files (re-dials their senders). */
   onRefreshIncoming?: () => void;
   isRefreshingIncoming?: boolean;
   collapsed: Partial<Record<SidebarSectionKey, boolean>>;
@@ -26,7 +26,7 @@ export const IncomingLibrariesSection: React.FC<IncomingLibrariesSectionProps> =
         title="Media libraries from other users sent via encrypted P2P protocol"
       >
         <div className="flex items-center gap-1.5">
-          <span>Incoming Libraries</span>
+          <span>Shared By Others</span>
           <ChevronDown className={`w-3 h-3 text-neutral-500 group-hover:text-neutral-300 transition-transform duration-200 ${collapsed.incomingLibraries ? '-rotate-90' : ''}`} />
         </div>
         <button
@@ -37,8 +37,8 @@ export const IncomingLibrariesSection: React.FC<IncomingLibrariesSectionProps> =
           }}
           disabled={isRefreshingIncoming}
           className="w-4 h-4 flex items-center justify-center bg-transparent text-neutral-400 hover:text-emerald-300 disabled:opacity-60 transition-colors"
-          title="Refresh: re-contact the senders of incoming libraries and fetch any missing files"
-          aria-label="Refresh incoming libraries"
+          title="Refresh: re-contact the people who shared folders with you and fetch any missing files"
+          aria-label="Refresh folders shared by others"
         >
           <RefreshCw className={`w-3 h-3 stroke-[2.5] ${isRefreshingIncoming ? 'animate-spin' : ''}`} />
         </button>
@@ -47,7 +47,7 @@ export const IncomingLibrariesSection: React.FC<IncomingLibrariesSectionProps> =
       {!collapsed.incomingLibraries && (
         <div className="space-y-0.5">
           {incomingLibraries.length === 0 ? (
-            <div className="px-2.5 py-1 text-[10px] text-neutral-500 italic">No incoming P2P libraries</div>
+            <div className="px-2.5 py-1 text-[10px] text-neutral-500 italic">No folders shared with you</div>
           ) : (
             incomingLibraries.map(lib => {
               const isSelected = selectedLibraryId === lib.id;

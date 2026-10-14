@@ -23,7 +23,7 @@ export const OutgoingLibrariesSection: React.FC<OutgoingLibrariesSectionProps> =
         title="Media libraries currently seeding to specified P2P users"
       >
         <div className="flex items-center gap-1.5">
-          <span>Outgoing Libraries</span>
+          <span>Shared Folders</span>
           <ChevronDown className={`w-3 h-3 text-neutral-500 group-hover:text-neutral-300 transition-transform duration-200 ${collapsed.outgoingLibraries ? '-rotate-90' : ''}`} />
         </div>
         <button
@@ -44,7 +44,7 @@ export const OutgoingLibrariesSection: React.FC<OutgoingLibrariesSectionProps> =
       {!collapsed.outgoingLibraries && (
         <div className="space-y-0.5">
           {outgoingLibraries.length === 0 ? (
-            <div className="px-2.5 py-1 text-[10px] text-neutral-500 italic">No outgoing seeding libraries</div>
+            <div className="px-2.5 py-1 text-[10px] text-neutral-500 italic">No shared folders</div>
           ) : (
             outgoingLibraries.map(lib => {
               const isSelected = selectedLibraryId === lib.id;

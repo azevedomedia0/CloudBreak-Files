@@ -484,7 +484,7 @@ export const ShareLibraryModal: React.FC<ShareLibraryModalProps> = ({
                       className="w-full sm:w-auto px-4 py-2 rounded-xl bg-red-950/40 hover:bg-red-900/50 border border-red-800/50 text-red-300 hover:text-red-100 text-xs font-medium transition-all flex items-center justify-center gap-1.5"
                     >
                       <Unlink className="w-3.5 h-3.5" />
-                      Disconnect from Incoming Library
+                      Disconnect from this shared folder
                     </button>
                   )}
                 </div>
