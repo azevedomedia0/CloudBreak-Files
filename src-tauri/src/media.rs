@@ -96,7 +96,8 @@ pub struct VideoTrimRequest {
     pub target_resolution: String,
     #[serde(default = "default_true")]
     pub include_audio: bool,
-    #[serde(default = "default_fps")]
+    /// Frames per second of the result; 0 keeps the source's frame rate (a GIF then uses 15).
+    #[serde(default)]
     pub fps: u32,
     /// lossless | high | balanced | compact
     #[serde(default = "default_quality")]
@@ -105,9 +106,6 @@ pub struct VideoTrimRequest {
 
 fn default_true() -> bool {
     true
-}
-fn default_fps() -> u32 {
-    30
 }
 fn default_quality() -> String {
     "high".into()
@@ -667,9 +665,11 @@ fn parse_video_size(ffmpeg_info: &str) -> Option<(u32, u32)> {
     })
 }
 
-fn probe_video_size(ffmpeg: &Path, input: &str) -> Option<(u32, u32)> {
-    let out = Command::new(ffmpeg).args(["-hide_banner", "-i", input]).output().ok()?;
-    parse_video_size(&String::from_utf8_lossy(&out.stderr))
+fn probe_input(ffmpeg: &Path, input: &str) -> VideoProbe {
+    match Command::new(ffmpeg).args(["-hide_banner", "-i", input]).output() {
+        Ok(out) => parse_probe(&String::from_utf8_lossy(&out.stderr)),
+        Err(_) => VideoProbe::default(),
+    }
 }
 
 /// What `ffmpeg -i` says about a video: the real details the app shows instead of guesses.
@@ -847,7 +847,8 @@ pub fn trim_video_stream(req: &VideoTrimRequest) -> Result<MediaProcessResult, M
     let duration = req.end_seconds - req.start_seconds;
     let fmt = req.target_format.to_ascii_lowercase();
     let is_audio = matches!(fmt.as_str(), "mp3" | "aac" | "wav" | "flac");
-    let fps = req.fps.clamp(1, 120);
+    // 0 keeps the source's frame rate; anything else is a fixed rate.
+    let fps = req.fps.min(120);
 
     let mut args: Vec<String> = vec![
         "-y".into(),
@@ -879,7 +880,8 @@ pub fn trim_video_stream(req: &VideoTrimRequest) -> Result<MediaProcessResult, M
     } else if fmt == "gif" {
         let scale = scale_filter(&req.target_resolution).unwrap_or("scale=480:-2");
         let vf = format!(
-            "fps={fps},{scale}:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse"
+            "fps={},{scale}:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse",
+            if fps == 0 { 15 } else { fps }
         );
         args.extend(["-vf".into(), vf, "-loop".into(), "0".into()]);
     } else {
@@ -887,8 +889,12 @@ pub fn trim_video_stream(req: &VideoTrimRequest) -> Result<MediaProcessResult, M
         if let Some(scale) = scale_filter(&req.target_resolution) {
             vf_parts.push(scale.to_string());
         }
-        vf_parts.push(format!("fps={fps}"));
-        args.extend(["-vf".into(), vf_parts.join(",")]);
+        if fps > 0 {
+            vf_parts.push(format!("fps={fps}"));
+        }
+        if !vf_parts.is_empty() {
+            args.extend(["-vf".into(), vf_parts.join(",")]);
+        }
 
         let crf = crf_for_quality(&req.quality);
         match fmt.as_str() {
@@ -919,9 +925,11 @@ pub fn trim_video_stream(req: &VideoTrimRequest) -> Result<MediaProcessResult, M
                 let encoder = detect_h264_encoder(&ffmpeg)?;
                 // Only the bitrate-mode path (Intel VideoToolbox) needs the output's size and frame rate.
                 let shape = if encoder == H264Encoder::VideoToolbox && !cfg!(target_arch = "aarch64") {
-                    probe_video_size(&ffmpeg, &req.input_path).map(|source| {
-                        let (width, height) = output_size(source, &req.target_resolution);
-                        VideoShape { width, height, fps: f64::from(fps) }
+                    let probe = probe_input(&ffmpeg, &req.input_path);
+                    (probe.width > 0 && probe.height > 0).then(|| {
+                        let (width, height) = output_size((probe.width, probe.height), &req.target_resolution);
+                        let fps = if fps > 0 { f64::from(fps) } else { probe.fps.unwrap_or(30.0) };
+                        VideoShape { width, height, fps }
                     })
                 } else {
                     None
@@ -1324,6 +1332,11 @@ mod tests {
         eprintln!("mp4 sizes by level: {sizes:?}");
         assert!(sizes[0].1 >= sizes[1].1 && sizes[1].1 >= sizes[2].1 && sizes[2].1 >= sizes[3].1,
             "a higher level is never smaller: {sizes:?}");
+        // 0 keeps the source's 30 fps; a number changes it.
+        let (_, info, _) = convert("mp4", "original", "balanced", true, 0);
+        assert_eq!(parse_probe(&info).fps, Some(30.0), "same frame rate: {info}");
+        let (_, info, _) = convert("mp4", "original", "balanced", true, 15);
+        assert_eq!(parse_probe(&info).fps, Some(15.0), "fixed frame rate: {info}");
         for resolution in ["1080p", "720p", "480p"] {
             let (_, info, _) = convert("mp4", resolution, "balanced", true, 30);
             let expected = output_size((640, 360), resolution);
