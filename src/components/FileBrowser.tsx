@@ -565,7 +565,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
               <ColumnsView onOpenVideoWindow={onOpenVideoWindow} accent={accent} files={files} selectedFolder={selectedFolder} selectedFileId={selectedFileId} selectedIds={selectedIds} folders={folders.filter(f => f.accountId === 'all' ? !f.parentId : true)} totalSize={totalSize} onSelectFile={selectFile} onEditPhoto={onEditPhoto} onOpenDocument={onOpenDocument} onOpenVideo={onOpenVideo} onOpenAudio={onOpenAudio} onOpenOther={onOpenOther} onFileContextMenu={openContextMenu} onFolderContextMenu={openFolderContextMenu} onSelectFolder={onSelectFolder} toggleSelectOne={toggleSelectOne} />
             )}
               {viewMode === 'gallery' && selectedFile && (
-              <GalleryView accent={accent} files={files} selectedFile={selectedFile} selectedIds={selectedIds} onSelectFile={selectFile} onEditPhoto={onEditPhoto} onOpenVideo={onOpenVideo} onOpenDocument={onOpenDocument} onFileContextMenu={openContextMenu} toggleSelectOne={toggleSelectOne} />
+              <GalleryView onOpenVideoWindow={onOpenVideoWindow} accent={accent} files={files} selectedFile={selectedFile} selectedIds={selectedIds} onSelectFile={selectFile} onEditPhoto={onEditPhoto} onOpenVideo={onOpenVideo} onOpenDocument={onOpenDocument} onFileContextMenu={openContextMenu} toggleSelectOne={toggleSelectOne} />
               )}
           </>
         )}

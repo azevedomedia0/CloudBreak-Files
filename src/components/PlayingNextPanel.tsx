@@ -79,11 +79,13 @@ interface UpcomingListProps {
   /** Ids the user queued by dragging; those rows get a remove button. */
   queuedIds?: string[];
   onPlay: (file: FileItem) => void;
+  /** Double-click on a video: the full player in the center area. */
+  onOpenFull?: (file: FileItem) => void;
   onRemoveQueued?: (file: FileItem) => void;
 }
 
 /** Numbered list of what plays next. */
-export const UpcomingList: React.FC<UpcomingListProps> = ({ upcoming, queuedIds = [], onPlay, onRemoveQueued }) => {
+export const UpcomingList: React.FC<UpcomingListProps> = ({ upcoming, queuedIds = [], onPlay, onOpenFull, onRemoveQueued }) => {
   const queued = new Set(queuedIds);
   if (upcoming.length === 0) {
     return <p className="text-xs text-neutral-500 px-2 py-3">Nothing else is queued. Drag songs or videos here to add them.</p>;
@@ -95,6 +97,7 @@ export const UpcomingList: React.FC<UpcomingListProps> = ({ upcoming, queuedIds 
           <button
             type="button"
             onClick={() => onPlay(file)}
+            onDoubleClick={() => { if (file.category === 'video') onOpenFull?.(file); }}
             className="w-full flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-white/8 transition-colors"
             title={`Play ${mediaLabel(file)}`}
           >
@@ -132,6 +135,7 @@ interface PlayingNextPanelProps {
   /** What plays after it, in order. */
   upcoming: FileItem[];
   onPlay: (file: FileItem) => void;
+  onOpenFull?: (file: FileItem) => void;
   queuedIds?: string[];
   /** Files dragged onto the panel (ids from the browser). */
   onQueueDrop?: (ids: string[]) => void;
@@ -144,7 +148,7 @@ interface PlayingNextPanelProps {
 
 /** Right side panel listing what is playing and what comes next. Thumbnails dragged here play next. */
 export const PlayingNextPanel: React.FC<PlayingNextPanelProps> = ({
-  width = 320, nowPlaying, upcoming, onPlay, queuedIds = [], onQueueDrop, onRemoveQueued, onClose, modeSwitch,
+  width = 320, nowPlaying, upcoming, onPlay, onOpenFull, queuedIds = [], onQueueDrop, onRemoveQueued, onClose, modeSwitch,
 }) => {
   const { dragOver, zoneProps } = useQueueDropZone(onQueueDrop);
   return (
@@ -207,7 +211,7 @@ export const PlayingNextPanel: React.FC<PlayingNextPanelProps> = ({
             <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500">Next up</p>
           </div>
           <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-3 space-y-0.5">
-            <UpcomingList upcoming={upcoming} queuedIds={queuedIds} onPlay={onPlay} onRemoveQueued={onRemoveQueued} />
+            <UpcomingList upcoming={upcoming} queuedIds={queuedIds} onPlay={onPlay} onOpenFull={onOpenFull} onRemoveQueued={onRemoveQueued} />
           </div>
         </>
       )}

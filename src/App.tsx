@@ -1433,6 +1433,7 @@ export default function App() {
                 onClose={() => setIsInspectorOpen(false)}
               />
             )}
+                onOpenFull={file => { void openVideoFromBrowser(file, 'window'); }}
 
             {!videoInPanel && isInspectorOpen && sidePanelMode === 'queue' && (
               <PlayingNextPanel
@@ -1462,6 +1463,7 @@ export default function App() {
                 onOpenVideo={(file, tab) => {
                   openFileSelection(file);
                   startVideo(file, tab, { queueFolder: !tab || tab === 'player' });
+                onOpenFull={file => { void openVideoFromBrowser(file, 'window'); }}
                 }}
                 onOpenAudio={playQueueItem}
                 onShare={file => openLibraryShare({ files: [file], folders: [] })}
@@ -1485,6 +1487,7 @@ export default function App() {
                 onCompressFile={handleCompressFile}
                 onNewFolder={() => setIsNewFolderOpen(true)}
                 canPaste={clipboardFileIds.length > 0}
+                onOpenVideoWindow={file => { void openVideoFromBrowser(file, 'window'); }}
                 width={inspectorWidth}
               />
             )}

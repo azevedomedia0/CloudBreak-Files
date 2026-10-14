@@ -15,6 +15,8 @@ export interface GalleryViewProps {
   onSelectFile: (file: FileItem) => void;
   onEditPhoto: (file: FileItem) => void;
   onOpenVideo: (file: FileItem) => void;
+  /** Double-click on a video thumbnail: the full player in the center area. */
+  onOpenVideoWindow?: (file: FileItem) => void;
   onOpenDocument: (file: FileItem) => void;
   onFileContextMenu: (file: FileItem, event: React.MouseEvent) => void;
   toggleSelectOne: (id: string, e: React.MouseEvent) => void;
@@ -23,7 +25,7 @@ export interface GalleryViewProps {
 const SCROLL_STEP = 280;
 
 export const GalleryView: React.FC<GalleryViewProps> = ({
-  accent, files, selectedFile, selectedIds, onSelectFile, onEditPhoto, onOpenVideo, onOpenDocument, onFileContextMenu, toggleSelectOne,
+  accent, files, selectedFile, selectedIds, onSelectFile, onEditPhoto, onOpenVideo, onOpenVideoWindow, onOpenDocument, onFileContextMenu, toggleSelectOne,
 }) => {
   const reelRef = useRef<HTMLDivElement>(null);
   const viewportVideoRef = useRef<HTMLVideoElement>(null);
@@ -170,6 +172,11 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
                     viewportVideoRef.current?.pause();
                     onOpenVideo(file);
                   }
+                }}
+                onDoubleClick={() => {
+                  if (file.category !== 'video') return;
+                  viewportVideoRef.current?.pause();
+                  (onOpenVideoWindow ?? onOpenVideo)(file);
                 }}
                 onContextMenu={event => onFileContextMenu(file, event)}
                 className={`group h-[calc(100%-6px)] aspect-video rounded-lg border shrink-0 cursor-pointer relative transition-all overflow-hidden ${

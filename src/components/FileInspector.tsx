@@ -37,6 +37,8 @@ interface FileInspectorProps {
   onEditPhoto: (file: FileItem) => void;
   onOpenDocument: (file: FileItem) => void;
   onOpenVideo: (file: FileItem, tab?: 'player' | 'trim' | 'convert') => void;
+  /** Double-click on the video preview: the full player in the center area. */
+  onOpenVideoWindow?: (file: FileItem) => void;
   onOpenAudio?: (file: FileItem) => void;
   onShare: (file: FileItem) => void;
   onToggleEncrypt: (file: FileItem) => void;
@@ -71,6 +73,7 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
   onEditPhoto,
   onOpenDocument,
   onOpenVideo,
+  onOpenVideoWindow,
   onOpenAudio,
   onShare,
   onToggleEncrypt,
@@ -353,6 +356,7 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                     onLoadedMetadata={handleLoadedMetadata}
                     onEnded={() => setIsPlaying(false)}
                     onClick={togglePlay}
+                    onDoubleClick={() => { videoRef.current?.pause(); onOpenVideoWindow?.(file); }}
                     className="w-full h-full object-contain cursor-pointer"
                     playsInline
                     onContextMenu={event => {

@@ -31,6 +31,8 @@ interface VideoSidePanelProps {
   /** Open the full player window (trim, convert, bigger picture) at the current position. */
   onExpand: (atSeconds: number) => void;
   onPlay: (file: FileItem) => void;
+  /** Double-click on a video in the queue: the full player in the center area. */
+  onOpenFull?: (file: FileItem) => void;
   onQueueDrop: (ids: string[]) => void;
   onRemoveQueued: (file: FileItem) => void;
 }
@@ -41,7 +43,7 @@ const iconBtn =
 /** The video player, shown in the right-hand panel in place of the inspector. The queue sits below it. */
 export const VideoSidePanel: React.FC<VideoSidePanelProps> = ({
   width = 320, file, nextMedia, upcoming, queuedIds, canPrevious, canNext,
-  onPrevious, onNext, onClose, onExpand, onPlay, onQueueDrop, onRemoveQueued,
+  onPrevious, onNext, onClose, onExpand, onPlay, onOpenFull, onQueueDrop, onRemoveQueued,
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -210,7 +212,7 @@ export const VideoSidePanel: React.FC<VideoSidePanelProps> = ({
         <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500">Next up</p>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-3 space-y-0.5">
-        <UpcomingList upcoming={upcoming} queuedIds={queuedIds} onPlay={onPlay} onRemoveQueued={onRemoveQueued} />
+        <UpcomingList upcoming={upcoming} queuedIds={queuedIds} onPlay={onPlay} onOpenFull={onOpenFull} onRemoveQueued={onRemoveQueued} />
       </div>
     </div>
   );
