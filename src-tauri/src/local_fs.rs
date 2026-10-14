@@ -652,7 +652,10 @@ fn standard_folder_candidates() -> Vec<(String, PathBuf)> {
             out.push((name.to_string(), home.join(relative)));
         }
     }
-    out.push(("Applications".to_string(), PathBuf::from("/Applications")));
+    // /Applications is a macOS folder; other systems do not get an Applications entry.
+    if cfg!(target_os = "macos") {
+        out.push(("Applications".to_string(), PathBuf::from("/Applications")));
+    }
     out
 }
 
@@ -875,6 +878,13 @@ pub async fn local_save_from_temp(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn only_macos_offers_an_applications_folder() {
+        let names: Vec<String> = standard_folder_candidates().into_iter().map(|(n, _)| n).collect();
+        assert_eq!(names.iter().any(|n| n == "Applications"), cfg!(target_os = "macos"), "{names:?}");
+        assert!(names.iter().any(|n| n == "Desktop"), "the other standard folders stay");
+    }
+
     use super::*;
 
     struct Tmp(PathBuf);

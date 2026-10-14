@@ -1,4 +1,5 @@
 import type { FolderItem } from '../types';
+import { isLinuxLike } from './platform';
 
 /** Stable Local Files roots shown by default (Finder-style order). */
 export const DEFAULT_LOCAL_FOLDER_DEFS = [
@@ -22,9 +23,9 @@ const DEFAULT_ID_BY_NAME = new Map<string, string>([
   ['movies', 'folder-local-videos'],
 ]);
 
-/** Empty Local Files roots for the sidebar until a real folder is imported. */
-export function createDefaultLocalFolders(): FolderItem[] {
-  return DEFAULT_LOCAL_FOLDER_DEFS.map(def => ({
+/** Empty Local Files roots for the sidebar until a real folder is imported. Linux has no /Applications. */
+export function createDefaultLocalFolders(linux: boolean = isLinuxLike): FolderItem[] {
+  return DEFAULT_LOCAL_FOLDER_DEFS.filter(def => !(linux && def.name === 'Applications')).map(def => ({
     id: def.id,
     name: def.name,
     accountId: 'all' as const,
