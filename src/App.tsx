@@ -41,7 +41,7 @@ import {
   CloudProviderId, FileCategory,
 } from './types';
 import { createDefaultLocalFolders, DEFAULT_LOCAL_FOLDER_DEFS } from './utils/defaultLocalFolders';
-import { getFfmpegStatus } from './services/mediaBridge';
+import { getFfmpegStatus, stageTempBytes } from './services/mediaBridge';
 import {
   checkForAppUpdate,
   currentAppVersion,
@@ -475,6 +475,46 @@ export default function App() {
     } catch (err) {
       showToast(err instanceof Error ? err.message : String(err));
     }
+  };
+
+  /**
+   * Save an edited PDF as a new file: beside the original when it is a local file (never overwriting it), otherwise
+   * through the native Save dialog, or the browser's download in the web preview.
+   */
+  const savePdfCopy = async (source: FileItem, bytes: Uint8Array, name: string): Promise<string | void> => {
+    const dir = source.localPath ? source.localPath.slice(0, source.localPath.lastIndexOf('/')) : '';
+    if (dir && localFs.available()) {
+      const info = await localFs.saveNewFile(dir, name, bytes);
+      const copy: FileItem = {
+        ...source,
+        id: `file-local-${info.path}`,
+        name: info.name,
+        localPath: info.path,
+        url: localFs.assetUrl(info.path),
+        thumbnailUrl: undefined,
+        sizeBytes: info.sizeBytes,
+        updatedAt: new Date(info.modifiedMs).toISOString(),
+        addedAt: new Date().toISOString(),
+        version: 1,
+        starred: false,
+        documentBody: undefined,
+      };
+      setFiles(prev => {
+        const at = prev.findIndex(f => f.id === source.id);
+        return at < 0 ? [copy, ...prev] : [...prev.slice(0, at + 1), copy, ...prev.slice(at + 1)];
+      });
+      return `Saved “${info.name}” next to the original`;
+    }
+    if (localFs.available()) {
+      const saved = await localFs.saveFromTemp(await stageTempBytes(bytes, 'pdf'), name);
+      return saved ? `Saved “${saved.name}”` : undefined;
+    }
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: 'application/pdf' }));
+    link.download = name;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 10_000);
+    return `Saved “${name}”`;
   };
 
   /** Open HEIC/RAW/TIFF via a web-viewable raster when needed, then Photo Studio. */
@@ -1269,6 +1309,8 @@ export default function App() {
                   handleSaveDocument(updated);
                   setEditingDocumentFile(updated);
                 }}
+                onSavePdfCopy={(bytes, name) => savePdfCopy(editingDocumentFile, bytes, name)}
+                onNotify={showToast}
               />
             ) : (
               <FileBrowser

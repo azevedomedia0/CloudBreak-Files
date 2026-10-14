@@ -195,6 +195,11 @@ export async function trimAndTranscode(
 }
 
 /** Delete a finished output kept in the app's temp folder (see `trimAndTranscode`). Safe to call twice. */
+/** Put bytes in the app's temp folder (for the native Save dialog, which takes a temp file). */
+export async function stageTempBytes(bytes: Uint8Array, extension: string): Promise<string> {
+  return (await invoke('media_stage_temp', { req: { dataBase64: bytesToBase64(bytes), extension } })) as string;
+}
+
 export async function discardTempOutput(path: string | null | undefined): Promise<void> {
   if (!path || !isTauri()) return;
   try {

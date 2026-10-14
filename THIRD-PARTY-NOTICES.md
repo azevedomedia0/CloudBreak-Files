@@ -86,3 +86,15 @@ SIL Open Font License 1.1. The fonts are unmodified; they were taken from the Fo
 | Newsreader | Copyright 2020 The Newsreader Project Authors (<http://github.com/productiontype/Newsreader>) | `licenses/newsreader-OFL-1.1.txt` |
 | JetBrains Mono | Copyright 2020 The JetBrains Mono Project Authors (<https://github.com/JetBrains/JetBrainsMono>) | `licenses/jetbrains-mono-OFL-1.1.txt` |
 
+
+## PDF editing: pdf.js and pdf-lib
+
+The PDF editor draws pages with **pdf.js** (`pdfjs-dist` 6.4.299, Apache License 2.0, copyright Mozilla and
+contributors; text in `licenses/pdfjs-Apache-2.0.txt`) and writes changes with **pdf-lib** (1.17.1, MIT License,
+copyright 2019 Andrew Dillon; text in `licenses/pdf-lib-MIT.txt`). Both are unmodified and run on your computer; no
+document is sent anywhere.
+
+pdf.js's own data files ship in `public/pdfjs/`: the standard fonts (Foxit and Liberation fonts under their own
+licences, kept with the files), character maps, ICC profiles and the JBIG2 and OpenJPEG decoders as WebAssembly
+(licences `LICENSE_*` in `public/pdfjs/wasm/`). pdf-lib also uses `@pdf-lib/standard-fonts` and `@pdf-lib/upng`
+(MIT), `pako` (MIT and Zlib) and `tslib` (0BSD).
