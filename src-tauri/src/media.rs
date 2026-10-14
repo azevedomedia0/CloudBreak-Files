@@ -600,12 +600,45 @@ fn detect_h264_encoder(ffmpeg: &Path) -> Result<H264Encoder, MediaError> {
     })
 }
 
+/// The picture an H.264 encode will produce: output size and frame rate. Intel Macs take a bitrate, and the
+/// right bitrate depends on how many pixels per second there are.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct VideoShape {
+    width: u32,
+    height: u32,
+    fps: f64,
+}
+
+/// What a bitrate is worked out from when the source cannot be read: 1080p at 30 fps.
+const DEFAULT_SHAPE: VideoShape = VideoShape { width: 1920, height: 1080, fps: 30.0 };
+
+/// Bits per pixel per frame for each level, measured by VMAF against libx264 CRF 16 / 20 / 23 / 28 on a
+/// detailed 1080p30 clip (VideoToolbox in bitrate mode needs about 2-2.5x libx264's bits to score the same).
+/// Simple footage costs far less: the encoder only spends what the picture needs.
+fn videotoolbox_bits_per_pixel(level: &str) -> f64 {
+    match level {
+        "lossless" => 0.46,
+        "high" => 0.29,
+        "compact" => 0.11,
+        _ => 0.21, // balanced
+    }
+}
+
+/// Bitrate (kbit/s) for a level, scaled by pixels per second and kept within what H.264 hardware takes.
+fn videotoolbox_bitrate_kbps(quality: &str, shape: VideoShape) -> u32 {
+    let level = quality.to_ascii_lowercase();
+    let pixels_per_second = f64::from(shape.width) * f64::from(shape.height) * shape.fps.clamp(1.0, 240.0);
+    let kbps = videotoolbox_bits_per_pixel(&level) * pixels_per_second / 1000.0;
+    kbps.round().clamp(400.0, 80_000.0) as u32
+}
+
 /// VideoToolbox takes a constant quality (0-100) on Apple Silicon and only a bitrate on Intel.
 /// The Apple Silicon values were chosen by VMAF so each level scores about the same as the libx264 CRF
 /// it replaces (16, 20, 23, 28) on four 1080p clips (aerial, grainy aerial, gradients, UI): 80, 72, 66, 56.
 /// The old 90/75/60/45 made Lossless and High several times larger for no visible gain, and Compact worse.
-/// The Intel bitrates below have not been measured.
-fn videotoolbox_quality_args(quality: &str) -> [String; 2] {
+/// On Intel the bitrate scales with the output's pixels per second (`videotoolbox_bitrate_kbps`). Those
+/// bits-per-pixel figures were measured on Apple Silicon's encoder in bitrate mode, not on an Intel Mac's.
+fn videotoolbox_quality_args(quality: &str, shape: Option<VideoShape>) -> [String; 2] {
     let level = quality.to_ascii_lowercase();
     if cfg!(target_arch = "aarch64") {
         let q = match level.as_str() {
@@ -616,17 +649,43 @@ fn videotoolbox_quality_args(quality: &str) -> [String; 2] {
         };
         ["-q:v".into(), q.into()]
     } else {
-        let rate = match level.as_str() {
-            "lossless" => "20M",
-            "high" => "10M",
-            "compact" => "2500k",
-            _ => "5M",
-        };
-        ["-b:v".into(), rate.into()]
+        let kbps = videotoolbox_bitrate_kbps(&level, shape.unwrap_or(DEFAULT_SHAPE));
+        ["-b:v".into(), format!("{kbps}k")]
     }
 }
 
-fn h264_args(encoder: H264Encoder, quality: &str) -> Vec<String> {
+/// Width and height of the first video stream, read from what `ffmpeg -i` prints (no ffprobe needed).
+fn parse_video_size(ffmpeg_info: &str) -> Option<(u32, u32)> {
+    let line = ffmpeg_info.lines().find(|l| l.contains("Video:") && !l.contains("attached pic"))?;
+    line.split(|c: char| c.is_whitespace() || matches!(c, ',' | '[' | ']' | '(' | ')')).find_map(|token| {
+        let (w, h) = token.split_once('x')?;
+        if w.starts_with('0') || !w.bytes().all(|b| b.is_ascii_digit()) || !h.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+        let (w, h): (u32, u32) = (w.parse().ok()?, h.parse().ok()?);
+        ((16..=16384).contains(&w) && (16..=16384).contains(&h)).then_some((w, h))
+    })
+}
+
+fn probe_video_size(ffmpeg: &Path, input: &str) -> Option<(u32, u32)> {
+    let out = Command::new(ffmpeg).args(["-hide_banner", "-i", input]).output().ok()?;
+    parse_video_size(&String::from_utf8_lossy(&out.stderr))
+}
+
+/// The size the output will have after the requested scaling (even numbers, as the encoder needs).
+fn output_size(source: (u32, u32), target_resolution: &str) -> (u32, u32) {
+    let Some(filter) = scale_filter(target_resolution) else { return source };
+    let target_width: u32 = filter
+        .trim_start_matches("scale=")
+        .split(':')
+        .next()
+        .and_then(|w| w.parse().ok())
+        .unwrap_or(source.0);
+    let height = (u64::from(source.1) * u64::from(target_width) + u64::from(source.0) / 2) / u64::from(source.0.max(1));
+    (target_width, (height as u32 / 2 * 2).max(2))
+}
+
+fn h264_args(encoder: H264Encoder, quality: &str, shape: Option<VideoShape>) -> Vec<String> {
     match encoder {
         H264Encoder::X264 => vec![
             "-c:v".into(),
@@ -648,7 +707,7 @@ fn h264_args(encoder: H264Encoder, quality: &str) -> Vec<String> {
                 "-pix_fmt".into(),
                 "yuv420p".into(),
             ];
-            args.extend(videotoolbox_quality_args(quality));
+            args.extend(videotoolbox_quality_args(quality, shape));
             args
         }
     }
@@ -750,7 +809,17 @@ pub fn trim_video_stream(req: &VideoTrimRequest) -> Result<MediaProcessResult, M
                 }
             }
             "mkv" | "mp4" | _ => {
-                args.extend(h264_args(detect_h264_encoder(&ffmpeg)?, &req.quality));
+                let encoder = detect_h264_encoder(&ffmpeg)?;
+                // Only the bitrate-mode path (Intel VideoToolbox) needs the output's size and frame rate.
+                let shape = if encoder == H264Encoder::VideoToolbox && !cfg!(target_arch = "aarch64") {
+                    probe_video_size(&ffmpeg, &req.input_path).map(|source| {
+                        let (width, height) = output_size(source, &req.target_resolution);
+                        VideoShape { width, height, fps: f64::from(fps) }
+                    })
+                } else {
+                    None
+                };
+                args.extend(h264_args(encoder, &req.quality, shape));
                 if req.include_audio {
                     args.extend(["-c:a".into(), "aac".into(), "-b:a".into(), "192k".into()]);
                 } else {
@@ -972,10 +1041,10 @@ mod tests {
 
     #[test]
     fn h264_args_match_the_encoder() {
-        let x264 = h264_args(H264Encoder::X264, "high");
+        let x264 = h264_args(H264Encoder::X264, "high", None);
         assert!(x264.windows(2).any(|w| w == ["-crf", "20"]));
         assert!(x264.contains(&"libx264".to_string()));
-        let vt = h264_args(H264Encoder::VideoToolbox, "balanced");
+        let vt = h264_args(H264Encoder::VideoToolbox, "balanced", None);
         assert!(vt.contains(&"h264_videotoolbox".to_string()));
         assert!(vt.windows(2).any(|w| w == ["-allow_sw", "1"]));
         assert!(!vt.contains(&"-crf".to_string()), "VideoToolbox has no CRF");
@@ -983,12 +1052,174 @@ mod tests {
     }
 
     #[test]
+    fn intel_bitrates_scale_with_the_output_size_and_frame_rate() {
+        let hd30 = VideoShape { width: 1920, height: 1080, fps: 30.0 };
+        let kbps = |level: &str, shape| videotoolbox_bitrate_kbps(level, shape);
+        // 1080p30 matches what was measured: about 29M, 18M, 13M and 7M (0.46, 0.29, 0.21, 0.11 bits per pixel).
+        assert_eq!([kbps("lossless", hd30), kbps("high", hd30), kbps("balanced", hd30), kbps("compact", hd30)],
+            [28_616, 18_040, 13_064, 6_843]);
+        // Levels rise with quality, and anything unknown is Balanced.
+        assert!(kbps("lossless", hd30) > kbps("high", hd30) && kbps("high", hd30) > kbps("balanced", hd30)
+            && kbps("balanced", hd30) > kbps("compact", hd30));
+        assert_eq!(kbps("whatever", hd30), kbps("balanced", hd30));
+        // Four times the pixels, four times the bits; twice the frame rate, twice the bits.
+        let uhd30 = VideoShape { width: 3840, height: 2160, fps: 30.0 };
+        let hd60 = VideoShape { fps: 60.0, ..hd30 };
+        assert!((i64::from(kbps("high", uhd30)) - 4 * i64::from(kbps("high", hd30))).abs() <= 2);
+        assert!((i64::from(kbps("high", hd60)) - 2 * i64::from(kbps("high", hd30))).abs() <= 1);
+        // Tiny pictures keep a floor, and huge ones stay within what the hardware takes.
+        assert_eq!(kbps("compact", VideoShape { width: 160, height: 90, fps: 10.0 }), 400);
+        assert_eq!(kbps("lossless", VideoShape { width: 7680, height: 4320, fps: 60.0 }), 80_000);
+        assert_eq!(kbps("high", VideoShape { width: 1920, height: 1080, fps: 0.0 }), kbps("high", VideoShape { fps: 1.0, ..hd30 }));
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "aarch64"))]
+    fn intel_h264_args_carry_a_scaled_bitrate() {
+        let hd = VideoShape { width: 1280, height: 720, fps: 30.0 };
+        let vt = h264_args(H264Encoder::VideoToolbox, "high", Some(hd));
+        let rate = format!("{}k", videotoolbox_bitrate_kbps("high", hd));
+        assert!(vt.windows(2).any(|w| w[0] == "-b:v" && w[1] == rate), "{vt:?}");
+        // Without a probed size it falls back to 1080p30.
+        let fallback = h264_args(H264Encoder::VideoToolbox, "high", None);
+        assert!(fallback.windows(2).any(|w| w == ["-b:v", "18040k"]), "{fallback:?}");
+    }
+
+    #[test]
+    fn the_video_size_is_read_from_ffmpeg_output() {
+        let h264 = "Input #0, mov,mp4, from 'a.mp4':\n  Duration: 00:00:10.00, start: 0.000000, bitrate: 5000 kb/s\n  \
+            Stream #0:0[0x1](und): Video: h264 (High) (avc1 / 0x31637661), yuv420p(tv, bt709, progressive), 1920x1080 [SAR 1:1 DAR 16:9], 4900 kb/s, 30 fps, 30 tbr, 15360 tbn (default)\n  \
+            Stream #0:1[0x2](und): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 128 kb/s (default)\n";
+        assert_eq!(parse_video_size(h264), Some((1920, 1080)));
+        // The codec tag "0x31637661" and an audio-only file are not sizes.
+        assert_eq!(parse_video_size("  Stream #0:0: Audio: mp3, 44100 Hz, stereo, fltp, 192 kb/s\n"), None);
+        assert_eq!(parse_video_size("  Stream #0:1: Video: mjpeg (Baseline), yuvj420p, 600x600, 90k tbr (attached pic)\n"), None);
+        assert_eq!(parse_video_size("Video: vp9 (Profile 0), yuv420p(tv), 854x480, SAR 1:1 DAR 427:240, 24 fps"), Some((854, 480)));
+        assert_eq!(parse_video_size(""), None);
+    }
+
+    #[test]
+    fn the_output_size_follows_the_requested_scaling() {
+        assert_eq!(output_size((1920, 1080), "original"), (1920, 1080));
+        assert_eq!(output_size((1920, 1080), "720p"), (1280, 720));
+        assert_eq!(output_size((1920, 1080), "480p"), (854, 480));
+        assert_eq!(output_size((3840, 2160), "1080p"), (1920, 1080));
+        // A portrait or odd-shaped source keeps its shape, with an even height.
+        assert_eq!(output_size((1080, 1920), "720p"), (1280, 2276));
+        assert_eq!(output_size((1000, 333), "480p"), (854, 284));
+        // Upscaling is what the filter does, so the bitrate follows it.
+        assert_eq!(output_size((640, 360), "1080p"), (1920, 1080));
+    }
+
+    #[test]
     #[cfg(target_arch = "aarch64")]
     fn videotoolbox_quality_levels_rise_with_quality() {
-        let q = |level: &str| videotoolbox_quality_args(level)[1].parse::<u32>().unwrap();
-        assert_eq!(videotoolbox_quality_args("high")[0], "-q:v");
+        let q = |level: &str| videotoolbox_quality_args(level, None)[1].parse::<u32>().unwrap();
+        assert_eq!(videotoolbox_quality_args("high", None)[0], "-q:v");
         assert_eq!([q("lossless"), q("high"), q("balanced"), q("compact")], [80, 72, 66, 56]);
         assert!(q("lossless") > q("high") && q("high") > q("balanced") && q("balanced") > q("compact"));
         assert_eq!(q("anything else"), q("balanced"));
+    }
+
+    /// Stream lines of `ffmpeg -i`, for checking what a conversion produced without ffprobe.
+    fn describe(ffmpeg: &Path, path: &Path) -> String {
+        let out = Command::new(ffmpeg).args(["-hide_banner", "-i"]).arg(path).output().unwrap();
+        String::from_utf8_lossy(&out.stderr).into_owned()
+    }
+
+    fn has_encoder(ffmpeg: &Path, name: &str) -> bool {
+        let out = Command::new(ffmpeg).args(["-hide_banner", "-encoders"]).output().unwrap();
+        String::from_utf8_lossy(&out.stdout).lines().any(|l| l.split_whitespace().nth(1) == Some(name))
+    }
+
+    /// Every format and quality level, through the real conversion code and whichever ffmpeg is found (set
+    /// FFMPEG_PATH to try another). Skips when there is none. Checks codec, size, duration and audio.
+    #[test]
+    fn video_conversion_covers_every_format_and_level_when_ffmpeg_is_available() {
+        let Some((ffmpeg, _)) = which_ffmpeg() else {
+            eprintln!("skipping conversion matrix: ffmpeg not found");
+            return;
+        };
+        let dir = std::env::temp_dir().join(format!("cb-conv-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let input = dir.join("in.mp4");
+        // 3 s of moving test pattern (640x360) with a tone, in MPEG-4 + AAC: every ffmpeg can make it.
+        let status = Command::new(&ffmpeg)
+            .args(["-y", "-f", "lavfi", "-i", "testsrc2=s=640x360:r=30:d=3", "-f", "lavfi",
+                "-i", "sine=frequency=440:sample_rate=44100:duration=3", "-c:v", "mpeg4", "-q:v", "3", "-c:a", "aac", "-shortest"])
+            .arg(&input)
+            .status()
+            .unwrap();
+        assert!(status.success(), "could not make the test clip");
+
+        let convert = |format: &str, resolution: &str, quality: &str, audio: bool, fps: u32| -> (PathBuf, String, u64) {
+            let output = dir.join(format!("out-{format}-{resolution}-{quality}-{audio}-{fps}.{format}"));
+            let req = VideoTrimRequest {
+                input_path: input.to_string_lossy().into(),
+                output_path: output.to_string_lossy().into(),
+                start_seconds: 0.5,
+                end_seconds: 2.5,
+                target_format: format.into(),
+                target_resolution: resolution.into(),
+                include_audio: audio,
+                fps,
+                quality: quality.into(),
+            };
+            let result = trim_video_stream(&req).unwrap_or_else(|e| panic!("{format} {resolution} {quality}: {e}"));
+            assert!(result.success && (result.duration_seconds - 2.0).abs() < 0.01);
+            let info = describe(&ffmpeg, &output);
+            (output.clone(), info, std::fs::metadata(&output).unwrap().len())
+        };
+        let seconds = |info: &str| -> f64 {
+            let at = info.find("Duration: ").expect("a duration") + 10;
+            let t: Vec<f64> = info[at..at + 11].split(':').map(|p| p.parse().unwrap()).collect();
+            t[0] * 3600.0 + t[1] * 60.0 + t[2]
+        };
+
+        // H.264 in mp4 and mkv, at each level and resolution.
+        let mut sizes = Vec::new();
+        for level in ["lossless", "high", "balanced", "compact"] {
+            let (_, info, bytes) = convert("mp4", "original", level, true, 30);
+            assert!(info.contains("Video: h264"), "mp4 {level}: {info}");
+            assert!(info.contains("Audio: aac"), "mp4 {level} keeps its audio: {info}");
+            assert_eq!(parse_video_size(&info), Some((640, 360)), "{level}");
+            assert!((seconds(&info) - 2.0).abs() < 0.3, "mp4 {level} duration: {info}");
+            sizes.push((level, bytes));
+        }
+        eprintln!("mp4 sizes by level: {sizes:?}");
+        assert!(sizes[0].1 >= sizes[1].1 && sizes[1].1 >= sizes[2].1 && sizes[2].1 >= sizes[3].1,
+            "a higher level is never smaller: {sizes:?}");
+        for resolution in ["1080p", "720p", "480p"] {
+            let (_, info, _) = convert("mp4", resolution, "balanced", true, 30);
+            let expected = output_size((640, 360), resolution);
+            assert_eq!(parse_video_size(&info), Some(expected), "{resolution}: {info}");
+        }
+        let (_, info, _) = convert("mkv", "original", "high", true, 24);
+        assert!(info.contains("Video: h264") && info.contains("24 fps"), "mkv: {info}");
+        let (_, info, _) = convert("mp4", "original", "high", false, 30);
+        assert!(info.contains("Video: h264") && !info.contains("Audio:"), "no audio: {info}");
+
+        // Other containers, when this ffmpeg can encode them.
+        if has_encoder(&ffmpeg, "libvpx-vp9") {
+            let (_, info, _) = convert("webm", "480p", "balanced", true, 30);
+            assert!(info.contains("Video: vp9") && info.contains("Audio: opus"), "webm: {info}");
+        } else {
+            eprintln!("no libvpx-vp9: webm skipped");
+        }
+        let (_, info, _) = convert("avi", "original", "high", true, 30);
+        assert!(info.contains("Video: mpeg4"), "avi: {info}");
+        let (_, info, _) = convert("gif", "480p", "high", false, 10);
+        assert!(info.contains("Video: gif"), "gif: {info}");
+        for (format, codec, needs) in [("aac", "Audio: aac", "aac"), ("wav", "Audio: pcm_s16le", "pcm_s16le"),
+            ("flac", "Audio: flac", "flac"), ("mp3", "Audio: mp3", "libmp3lame")] {
+            if !has_encoder(&ffmpeg, needs) {
+                eprintln!("no {needs}: {format} skipped");
+                continue;
+            }
+            let (_, info, _) = convert(format, "original", "high", true, 30);
+            assert!(info.contains(codec) && !info.contains("Video:"), "{format}: {info}");
+            assert!((seconds(&info) - 2.0).abs() < 0.3, "{format} duration: {info}");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
