@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Image as ImageIcon, Video, FileText, Lock, 
-  Unlock, Download, Trash2, Edit3, Archive,
+  Unlock, Download, Trash2, Edit3, FilePen, Archive,
   Share2, HardDrive, Sparkles, Key,
   ChevronDown, ChevronUp, ChevronRight, Minimize2, Maximize2,
   Play, Pause, RotateCcw, Volume2, VolumeX,
@@ -23,7 +23,6 @@ import { previewBridge } from '../services/previewBridge';
 import { FileThumbnail } from './file-browser/FileThumbnail';
 import { FileInspectorIcon } from './file-browser/FileInspectorIcon';
 import { EditPhotoIcon } from './file-browser/EditPhotoIcon';
-import { OpenDocumentIcon } from './file-browser/OpenDocumentIcon';
 import { VideoTrimIcon } from './video-player/VideoTrimIcon';
 
 import { PhotoNav, PhotoNavArrows } from './PhotoNavArrows';
@@ -646,7 +645,7 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                         : 'Open'
                   }
                 >
-                  {isPdfDocument(file) ? <OpenDocumentIcon className="w-3.5 h-3.5" /> : <Edit3 className="w-3.5 h-3.5" />}
+                  <FilePen className="w-3.5 h-3.5" />
                   <span>
                     {isPdfDocument(file) ? 'Edit Document'
                       : isEditableDocument(file) ? 'Edit Document'
