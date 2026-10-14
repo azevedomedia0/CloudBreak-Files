@@ -139,9 +139,6 @@ async function fileToItem(
           audioCodec: '—',
         }
       : undefined,
-    photoExif: category === 'photo'
-      ? { camera: 'Local disk', colorSpace: 'sRGB' }
-      : undefined,
   };
 }
 
@@ -288,9 +285,6 @@ async function diskEntryToItem(entry: LocalEntry, folderId: string, folderPath: 
           bitrate: '—',
           audioCodec: '—',
         }
-      : undefined,
-    photoExif: category === 'photo'
-      ? { camera: 'Local disk', colorSpace: 'sRGB' }
       : undefined,
   };
 }

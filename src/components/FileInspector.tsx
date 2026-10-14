@@ -791,7 +791,7 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
         </div>
 
         {/* Technical EXIF or Video Info Section */}
-        {file.photoExif && (
+        {file.photoExif && (file.photoExif.camera || file.photoExif.aperture || file.photoExif.shutterSpeed || file.photoExif.iso) && (
           <div className="space-y-2">
             <div 
               onClick={() => toggleSection('specs')}
@@ -807,19 +807,19 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
               <div className="grid grid-cols-2 gap-1.5 text-xs">
                 <div className="p-2 bg-black/30 rounded-lg border border-white/5">
                   <span className="text-neutral-500 text-[9px] block">Sensor / Camera</span>
-                  <span className="text-neutral-200 text-[11px] truncate block">{file.photoExif.camera || 'RAW'}</span>
+                  <span className="text-neutral-200 text-[11px] truncate block">{file.photoExif.camera || '—'}</span>
                 </div>
                 <div className="p-2 bg-black/30 rounded-lg border border-white/5">
                   <span className="text-neutral-500 text-[9px] block">Aperture</span>
-                  <span className="text-neutral-200 text-[11px]">{file.photoExif.aperture || 'f/2.8'}</span>
+                  <span className="text-neutral-200 text-[11px]">{file.photoExif.aperture || '—'}</span>
                 </div>
                 <div className="p-2 bg-black/30 rounded-lg border border-white/5">
                   <span className="text-neutral-500 text-[9px] block">Shutter</span>
-                  <span className="text-neutral-200 text-[11px]">{file.photoExif.shutterSpeed || '1/250s'}</span>
+                  <span className="text-neutral-200 text-[11px]">{file.photoExif.shutterSpeed || '—'}</span>
                 </div>
                 <div className="p-2 bg-black/30 rounded-lg border border-white/5">
                   <span className="text-neutral-500 text-[9px] block">ISO</span>
-                  <span className="text-neutral-200 text-[11px]">{file.photoExif.iso || '100'}</span>
+                  <span className="text-neutral-200 text-[11px]">{file.photoExif.iso || '—'}</span>
                 </div>
               </div>
             )}

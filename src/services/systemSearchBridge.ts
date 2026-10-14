@@ -69,7 +69,6 @@ export function hitToFileItem(hit: SystemSearchHit): FileItem {
       zeroKnowledgeVerified: false,
     },
     version: 1,
-    photoExif: category === 'photo' ? { camera: 'This Mac', colorSpace: 'sRGB' } : undefined,
     videoMeta: category === 'video'
       ? {
           durationSeconds: 0,

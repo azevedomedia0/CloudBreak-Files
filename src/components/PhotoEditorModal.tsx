@@ -279,6 +279,8 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
   } | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
+  // The photo's own size in pixels, once it has loaded.
+  const [photoSize, setPhotoSize] = useState<{ width: number; height: number } | null>(null);
   const histogramCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const adjustmentsRef = useRef<PhotoAdjustments>(DEFAULT_ADJUSTMENTS);
   const presetRef = useRef('natural');
@@ -374,11 +376,13 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
     setDraftCrop({ x: 0, y: 0, w: 1, h: 1 });
     setDraftAspect('free');
 
+    setPhotoSize(null);
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.src = file.url;
     img.onload = () => {
       imgRef.current = img;
+      setPhotoSize({ width: img.naturalWidth, height: img.naturalHeight });
       renderImage();
     };
   }, [file.id, file.url, isOpen]);
@@ -786,7 +790,7 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
                 </h2>
               </div>
               <p className="text-xs text-neutral-500">
-                Studio Grading Suite · {file.photoExif?.dimensions?.width || '4K'}×{file.photoExif?.dimensions?.height || 'HD'} · {file.photoExif?.camera || 'Pro RAW'}
+                {['Studio Grading Suite', photoSize && `${photoSize.width}×${photoSize.height}`, file.photoExif?.camera].filter(Boolean).join(' · ')}
               </p>
             </div>
           </div>

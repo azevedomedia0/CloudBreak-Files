@@ -605,13 +605,6 @@ export function useFileActions({
               audioCodec: '—',
             }
           : undefined,
-        photoExif: isImage
-          ? {
-              camera: 'Direct Upload',
-              dimensions: { width: 3840, height: 2160 },
-              colorSpace: 'sRGB',
-            }
-          : undefined,
       };
 
       newItems.push(newItem);
