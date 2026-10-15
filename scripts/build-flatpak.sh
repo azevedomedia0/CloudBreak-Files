@@ -48,10 +48,24 @@ done
 
 echo "Ensuring Flathub + GNOME ${GNOME_RUNTIME_VERSION} runtime/SDK + Flatpak Builder…"
 flatpak remote-add --if-not-exists --user flathub https://dl.flathub.org/repo/flathub.flatpakrepo || true
-flatpak install -y --user flathub \
-  "org.gnome.Platform//${GNOME_RUNTIME_VERSION}" \
-  "org.gnome.Sdk//${GNOME_RUNTIME_VERSION}" \
-  org.flatpak.Builder
+# Flathub downloads are large and a dropped connection (for example "Error decoding the received TLS packet")
+# aborts the whole install. Objects already fetched are kept, so trying again carries on from there.
+installed=0
+for attempt in 1 2 3 4 5 6 7 8; do
+  if flatpak install -y --user flathub \
+    "org.gnome.Platform//${GNOME_RUNTIME_VERSION}" \
+    "org.gnome.Sdk//${GNOME_RUNTIME_VERSION}" \
+    org.flatpak.Builder; then
+    installed=1
+    break
+  fi
+  echo "Flathub install failed (attempt ${attempt} of 8); retrying in 10 s…" >&2
+  sleep 10
+done
+if [[ "$installed" -ne 1 ]]; then
+  echo "error: could not install the GNOME runtime and Flatpak Builder from Flathub after 8 attempts." >&2
+  exit 1
+fi
 
 run_flatpak_builder() {
   # Prefer org.flatpak.Builder — Ubuntu's apt flatpak-builder still calls

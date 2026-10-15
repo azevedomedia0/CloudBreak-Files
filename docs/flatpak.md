@@ -34,6 +34,12 @@ npm run build:flatpak:docker
 # → dist-flatpak/com.cloudbreak.files.flatpak
 ```
 
+Set `FLATPAK_OUT_DIR` to write the bundle somewhere else, for example outside a synced folder:
+
+```bash
+FLATPAK_OUT_DIR="$HOME/CloudbreakBuilds/flatpak" npm run build:flatpak:docker
+```
+
 ## Install and run
 
 ```bash
