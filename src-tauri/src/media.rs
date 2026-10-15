@@ -590,11 +590,17 @@ fn detect_h264_encoder(ffmpeg: &Path) -> Result<H264Encoder, MediaError> {
         .output()
         .map_err(|e| MediaError::Message(format!("Failed to spawn ffmpeg: {e}")))?;
     pick_h264_encoder(&String::from_utf8_lossy(&out.stdout)).ok_or_else(|| {
-        MediaError::Message(
+        MediaError::Message(if cfg!(target_os = "linux") {
+            // The ffmpeg shipped with the Linux builds is LGPL-only, so it has no libx264.
+            "This build's ffmpeg has no H.264 encoder, so MP4 and MKV are not available here. \
+             AVI, GIF and the audio formats work. To convert to MP4 or MKV, point FFMPEG_PATH at an ffmpeg \
+             that has libx264."
+                .into()
+        } else {
             "This ffmpeg has no H.264 encoder (libx264 or h264_videotoolbox). \
              Install one with Homebrew: brew install ffmpeg"
-                .into(),
-        )
+                .into()
+        })
     })
 }
 
