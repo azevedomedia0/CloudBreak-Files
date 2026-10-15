@@ -96,7 +96,7 @@ export const FileContextMenu: React.FC<FileContextMenuProps> = ({
     { id: 'audio', label: 'Audio Player', enabled: file.category === 'audio', action: () => onOpen(file) },
     {
       id: 'document',
-      label: isPdfDocument(file) ? 'Open Document' : 'Document Editor',
+      label: isPdfDocument(file) ? 'Edit Document' : 'Document Editor',
       enabled: isEditableDocument(file),
       action: () => onOpen(file),
     },
