@@ -1,0 +1,17 @@
+# Run the relay with Docker Compose:
+#   echo "CLOUDBREAK_RELAY_HOST_KEY=$(openssl rand -hex 24)" > .env
+#   docker compose up -d --build
+services:
+  relay:
+    build: .
+    image: cloudbreak-relay:local
+    restart: unless-stopped
+    ports:
+      - "7422:7422"
+    environment:
+      CLOUDBREAK_RELAY_HOST_KEY: ${CLOUDBREAK_RELAY_HOST_KEY:?set CLOUDBREAK_RELAY_HOST_KEY in .env}
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL

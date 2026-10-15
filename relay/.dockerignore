@@ -1,0 +1,5 @@
+target/
+**/target/
+README.md
+deploy/
+*.log

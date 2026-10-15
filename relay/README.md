@@ -9,33 +9,57 @@ The relay sees which IP addresses connect, the peer ids, when, and how much is t
 
 ## Run it
 
-You need a machine with a public address and one open TCP port (default 7422).
+You need a machine with a public address and one open TCP port (default 7422). Set a host key first. It is the
+password for who may host on your relay, so use a long random value:
+
+```bash
+openssl rand -hex 24
+```
+
+`CLOUDBREAK_RELAY_HOST_KEY` is optional but strongly recommended: without it anyone can use your relay to host, and
+its bandwidth is yours. Only devices that **host** need the key; people you invite never do. Keep it in the
+environment rather than on the command line, where `ps` shows it. `--max-sessions` limits how many connections are
+joined at once (default 256).
+
+### Docker
 
 ```bash
 cd relay
-cargo build --release
-./target/release/cloudbreak-relay --listen 0.0.0.0:7422 --host-key "choose-a-password"
+echo "CLOUDBREAK_RELAY_HOST_KEY=$(openssl rand -hex 24)" > .env
+docker compose up -d --build
 ```
 
-`--host-key` (or `CLOUDBREAK_RELAY_HOST_KEY`) is optional but recommended: without it anyone can use your relay
-to host, and its bandwidth is yours. Only devices that **host** need the key; people you invite never do.
-`--max-sessions` limits how many connections are joined at once (default 256).
+The image is built from `Dockerfile` (a Rust build stage, then a small Debian image that runs as a non-root user).
+`docker-compose.yml` runs it read-only with no extra Linux capabilities. Without Compose:
 
-A systemd unit:
+```bash
+docker build -t cloudbreak-relay .
+docker run -d --restart unless-stopped -p 7422:7422 -e CLOUDBREAK_RELAY_HOST_KEY="$KEY" cloudbreak-relay
+```
 
-```ini
-[Unit]
-Description=Cloudbreak relay
-After=network-online.target
+### systemd (a Linux server, no containers)
 
-[Service]
-ExecStart=/usr/local/bin/cloudbreak-relay --listen 0.0.0.0:7422
-Environment=CLOUDBREAK_RELAY_HOST_KEY=choose-a-password
-Restart=always
-DynamicUser=yes
+Build the binary, then run the installer as root:
 
-[Install]
-WantedBy=multi-user.target
+```bash
+cargo build --release --bin cloudbreak-relay
+sudo bash deploy/install-systemd.sh target/release/cloudbreak-relay
+```
+
+The first run writes `/etc/cloudbreak-relay/relay.env` (mode 0600) and stops. Set `CLOUDBREAK_RELAY_HOST_KEY` in
+that file, then run the script again. The service is `deploy/cloudbreak-relay.service`: it runs as a dynamic user
+with a read-only system, no capabilities, and only IPv4/IPv6 sockets, and restarts on failure. Check it with:
+
+```bash
+systemctl status cloudbreak-relay
+journalctl -u cloudbreak-relay -f
+```
+
+### Plain command
+
+```bash
+cargo build --release
+CLOUDBREAK_RELAY_HOST_KEY=choose-a-long-random-value ./target/release/cloudbreak-relay --listen 0.0.0.0:7422
 ```
 
 ## Use it
@@ -65,3 +89,6 @@ The device derives its secret from its identity key, so it keeps the same id bet
 ```bash
 cargo test
 ```
+
+The Docker image and the systemd unit were not run on a server while writing this (the Docker build needs
+the `rust` and `debian` base images; `systemd-analyze verify` needs a Linux machine).
