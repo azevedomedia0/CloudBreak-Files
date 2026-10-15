@@ -39,6 +39,59 @@ cleanup:
   - '*.a'
 
 modules:
+  # rclone powers "Quick sign-in (no setup)" for Google Drive. The app finds it next to its own binary (/app/bin).
+  # Official release zips (MIT), pinned by SHA-256 from https://downloads.rclone.org/v1.75.2/SHA256SUMS.
+  - name: rclone
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 rclone-v1.75.2-linux-*/rclone /app/bin/rclone
+    sources:
+      - type: archive
+        only-arches: [x86_64]
+        url: https://downloads.rclone.org/v1.75.2/rclone-v1.75.2-linux-amd64.zip
+        sha256: 349ac8fba6ff65d6247043f1750cdcb518ec5d500ef91463a10d37c0ccdf3702
+        strip-components: 0
+      - type: archive
+        only-arches: [aarch64]
+        url: https://downloads.rclone.org/v1.75.2/rclone-v1.75.2-linux-arm64.zip
+        sha256: 7e1e8d69654941b7b7df84ee74c5f7fb09cce7d5496947fb7bf16b55ff427d10
+        strip-components: 0
+
+  # ffmpeg for video trim and convert. Same pinned FFmpeg 7.1.1 source as the macOS build (scripts/build-ffmpeg-lgpl.sh)
+  # and the same rule: LGPL only, no --enable-gpl or --enable-nonfree. That rules out libx264, so this ffmpeg has no
+  # H.264 encoder: MP4 and MKV conversion are not available in the Flatpak (AVI, GIF and the audio formats are).
+  # libmp3lame, libopus and libvpx come from the Freedesktop SDK; the build fails if the result is not LGPL.
+  - name: ffmpeg
+    buildsystem: simple
+    build-commands:
+      - |
+        set -eu
+        ./configure --prefix=/app \
+          --disable-autodetect --disable-gpl --disable-nonfree \
+          --disable-shared --enable-static --enable-pic \
+          --disable-doc --disable-debug --disable-ffplay --disable-ffprobe \
+          --enable-libmp3lame --enable-libopus --enable-libvpx --enable-zlib --enable-bzlib
+        make -j"$FLATPAK_BUILDER_N_JOBS"
+        make install
+      - |
+        set -eu
+        BUILDCONF="$(/app/bin/ffmpeg -hide_banner -buildconf)"
+        if printf '%s' "$BUILDCONF" | grep -Eq -- '--enable-(gpl|nonfree|version3)'; then
+          echo "error: this ffmpeg is not LGPL-only" >&2; exit 1
+        fi
+        ENCODERS="$(/app/bin/ffmpeg -hide_banner -encoders)"
+        for enc in libvpx-vp9 libopus libmp3lame aac flac gif mpeg4; do
+          printf '%s' "$ENCODERS" | grep -q " $enc " || { echo "error: ffmpeg lacks the $enc encoder" >&2; exit 1; }
+        done
+      - install -Dm644 COPYING.LGPLv2.1 /app/share/licenses/ffmpeg/COPYING.LGPLv2.1
+    cleanup:
+      - /share/ffmpeg
+      - /lib/pkgconfig
+    sources:
+      - type: archive
+        url: https://ffmpeg.org/releases/ffmpeg-7.1.1.tar.xz
+        sha256: 733984395e0dbbe5c046abda2dc49a5544e7e0e1e2366bba849222ae9e3a03b1
+
   - name: cloudbreak-files
     buildsystem: simple
     sources:

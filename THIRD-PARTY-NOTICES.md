@@ -73,6 +73,18 @@ and include and library paths are the build machine's own folders and are left o
 If you install your own ffmpeg (for example with Homebrew), Cloudbreak Files will use it when the
 bundled one is missing. That copy is yours, under its own license.
 
+**The Linux Flatpak** ships its own `ffmpeg` and `rclone` in `/app/bin`, built by `flatpak/com.cloudbreak.files.yml`.
+The ffmpeg is the same unmodified FFmpeg 7.1.1 tarball (same pinned SHA-256), configured `--disable-gpl
+--disable-nonfree --disable-shared --enable-static --disable-autodetect --disable-doc --disable-debug
+--disable-ffplay --disable-ffprobe --enable-libmp3lame --enable-libopus --enable-libvpx --enable-zlib
+--enable-bzlib`, and the build fails if the result reports `--enable-gpl`, `--enable-nonfree` or `--enable-version3`.
+libmp3lame (LGPL 2.0), libopus (BSD 3-Clause) and libvpx (BSD 3-Clause) are the copies in the Freedesktop SDK the
+Flatpak is built against, and are used by the Flatpak at run time from its runtime. This ffmpeg has no H.264 encoder (there is no
+VideoToolbox on Linux and libx264 is GPL), so MP4 and MKV conversion are not available in the Flatpak. The rclone is the official
+`rclone-v1.75.2-linux-*.zip` from <https://downloads.rclone.org/v1.75.2/>, checked against that release's SHA256SUMS,
+with its licence terms as in the rclone section above. To replace the Flatpak's ffmpeg, rebuild the Flatpak from
+the manifest with a different ffmpeg module or point `FFMPEG_PATH` at your own.
+
 ## Interface fonts
 
 The app's interface and document fonts are bundled in `src/assets/fonts` and `licenses/`, under the

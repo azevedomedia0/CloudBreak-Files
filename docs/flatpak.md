@@ -47,6 +47,15 @@ flatpak install --user --bundle dist-flatpak/com.cloudbreak.files.flatpak
 flatpak run com.cloudbreak.files
 ```
 
+## ffmpeg and rclone
+
+The manifest builds both into `/app/bin`, where the app looks for them next to its own binary:
+
+- **rclone** (Google Drive "Quick sign-in"): the official v1.75.2 Linux zip, pinned by SHA-256, for x86_64 and aarch64.
+- **ffmpeg** (video trim and convert): FFmpeg 7.1.1 built from source, **LGPL-only** (no `--enable-gpl` or `--enable-nonfree`; the build fails otherwise), with libmp3lame, libopus and libvpx from the Freedesktop SDK. There is no libx264 and no VideoToolbox on Linux, so it has **no H.264 encoder**: MP4 and MKV conversion are unavailable in the Flatpak, while AVI, GIF and the audio formats work. The app says so when MP4 or MKV is chosen.
+
+Both are downloaded by `flatpak-builder` while it builds, so the first build needs network access.
+
 ## Manifest permissions
 
 [`flatpak/com.cloudbreak.files.yml`](../flatpak/com.cloudbreak.files.yml) grants:
