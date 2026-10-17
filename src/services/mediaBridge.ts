@@ -55,6 +55,8 @@ export interface FfmpegStatus {
   /** bundled | env | homebrew | path | missing */
   source: string;
   installHint: string;
+  /** Whether this ffmpeg can encode H.264. The Linux Flatpak's cannot, so MP4 and MKV are not offered. */
+  h264: boolean;
 }
 
 const FFMPEG_INSTALL_HINT =
@@ -78,6 +80,7 @@ export async function getFfmpegStatus(): Promise<FfmpegStatus> {
       path: null,
       source: 'missing',
       installHint: 'Open the desktop app to trim and convert video with ffmpeg.',
+      h264: false,
     };
   }
   try {
@@ -88,6 +91,7 @@ export async function getFfmpegStatus(): Promise<FfmpegStatus> {
       path: null,
       source: 'missing',
       installHint: FFMPEG_INSTALL_HINT,
+      h264: false,
     };
   }
 }

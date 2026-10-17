@@ -12,6 +12,8 @@ export interface SaveDestination {
 
 export interface ConvertPanelProps {
   file: FileItem;
+  /** False when the ffmpeg in use cannot encode H.264: MP4 and MKV are then not offered. */
+  h264Available?: boolean;
   duration: number;
   /** Height of the source in pixels, when known: sizes above it are not offered. */
   sourceHeight?: number;
@@ -44,7 +46,7 @@ const fieldClass = 'w-full bg-neutral-950 border border-neutral-800 rounded-lg p
 const labelClass = 'text-[11px] font-semibold text-neutral-400 uppercase tracking-wider block mb-2';
 
 export const ConvertPanel: React.FC<ConvertPanelProps> = ({
-  file, duration, sourceHeight, convertOptions, setConvertOptions, isTranscoding, transcodeProgress, transcodeComplete, startTranscode,
+  file, h264Available = true, duration, sourceHeight, convertOptions, setConvertOptions, isTranscoding, transcodeProgress, transcodeComplete, startTranscode,
   accounts, folders, destination, setDestination, baseName, defaultBaseName, setBaseName, isTrimmed, onEditTrim,
   savedLocalName, saveError, localFolderName, onBrowseLocal, handleSaveConvertedToCloud, handleSaveToComputer,
 }) => {
@@ -106,7 +108,7 @@ export const ConvertPanel: React.FC<ConvertPanelProps> = ({
             { id: 'aac', label: 'AAC', desc: 'Compact Audio' },
             { id: 'wav', label: 'WAV', desc: 'Uncompressed Audio' },
             { id: 'flac', label: 'FLAC', desc: 'Lossless Audio' },
-          ].map(fmt => (
+          ].filter(fmt => h264Available || (fmt.id !== 'mp4' && fmt.id !== 'mkv')).map(fmt => (
             <button
               key={fmt.id}
               onClick={() => setConvertOptions(prev => ({ ...prev, format: fmt.id as VideoConvertOptions['format'] }))}

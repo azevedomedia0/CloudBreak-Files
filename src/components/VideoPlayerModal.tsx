@@ -354,6 +354,15 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const outputName = `${customBaseName.trim() || defaultBaseName}.${convertOptions.format}`;
 
   const ffmpegMissing = isTauri() && ffmpegStatus !== null && !ffmpegStatus.available;
+  // ffmpeg is there but cannot encode H.264 (the Linux Flatpak's): MP4 and MKV are not offered.
+  const h264Available = !(isTauri() && ffmpegStatus?.available && !ffmpegStatus.h264);
+
+  // Switch an MP4 or MKV choice to AVI when that choice is not available, so the dialog never sits on one.
+  useEffect(() => {
+    if (!h264Available && (convertOptions.format === 'mp4' || convertOptions.format === 'mkv')) {
+      setConvertOptions(prev => ({ ...prev, format: 'avi' }));
+    }
+  }, [h264Available, convertOptions.format]);
 
   // Perform Transcode / Convert (ffmpeg in Tauri, MediaRecorder in browser)
   const startTranscode = async () => {
@@ -676,6 +685,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
             <div className="w-80 md:w-96 flex flex-col border-l border-neutral-800 bg-neutral-900/95 overflow-y-auto p-5">
               <ConvertPanel
                 file={file}
+                h264Available={h264Available}
                 duration={duration}
                 sourceHeight={meta.dimensions.height || undefined}
                 convertOptions={convertOptions}

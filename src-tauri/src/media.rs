@@ -461,6 +461,8 @@ pub struct FfmpegStatus {
     /// `bundled` | `env` | `homebrew` | `path` | `missing`
     pub source: String,
     pub install_hint: String,
+    /// Whether this ffmpeg can encode H.264 (libx264 or VideoToolbox). Without it MP4 and MKV are not offered.
+    pub h264: bool,
 }
 
 pub const FFMPEG_INSTALL_HINT: &str =
@@ -474,6 +476,7 @@ pub fn ffmpeg_status() -> FfmpegStatus {
     match which_ffmpeg() {
         Some((path, source)) => FfmpegStatus {
             available: true,
+            h264: ffmpeg_can_encode_h264(&path),
             path: Some(path.to_string_lossy().into_owned()),
             source: source.to_string(),
             install_hint: String::new(),
@@ -483,8 +486,18 @@ pub fn ffmpeg_status() -> FfmpegStatus {
             path: None,
             source: "missing".into(),
             install_hint: FFMPEG_INSTALL_HINT.into(),
+            h264: false,
         },
     }
+}
+
+/// Asks this ffmpeg for its encoders, so the Convert dialog offers MP4 and MKV only when they can be made.
+fn ffmpeg_can_encode_h264(ffmpeg: &Path) -> bool {
+    Command::new(ffmpeg)
+        .args(["-hide_banner", "-encoders"])
+        .output()
+        .map(|out| pick_h264_encoder(&String::from_utf8_lossy(&out.stdout)).is_some())
+        .unwrap_or(false)
 }
 
 fn ffmpeg_binary_name() -> &'static str {
@@ -1272,6 +1285,11 @@ mod tests {
 
     /// Stream lines of `ffmpeg -i`, for checking what a conversion produced without ffprobe.
     fn describe(ffmpeg: &Path, path: &Path) -> String {
+    #[test]
+    fn a_missing_ffmpeg_cannot_encode_h264() {
+        assert!(!ffmpeg_can_encode_h264(Path::new("/nonexistent/ffmpeg")));
+    }
+
         let out = Command::new(ffmpeg).args(["-hide_banner", "-i"]).arg(path).output().unwrap();
         String::from_utf8_lossy(&out.stderr).into_owned()
     }
