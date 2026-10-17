@@ -493,11 +493,14 @@ pub fn ffmpeg_status() -> FfmpegStatus {
 
 /// Asks this ffmpeg for its encoders, so the Convert dialog offers MP4 and MKV only when they can be made.
 fn ffmpeg_can_encode_h264(ffmpeg: &Path) -> bool {
-    Command::new(ffmpeg)
-        .args(["-hide_banner", "-encoders"])
-        .output()
-        .map(|out| pick_h264_encoder(&String::from_utf8_lossy(&out.stdout)).is_some())
-        .unwrap_or(false)
+    let Ok(out) = Command::new(ffmpeg).args(["-hide_banner", "-encoders"]).output() else {
+        return false;
+    };
+    match pick_h264_encoder(&String::from_utf8_lossy(&out.stdout)) {
+        Some(H264Encoder::VaApi) => vaapi_device(ffmpeg).is_some(),
+        Some(_) => true,
+        None => false,
+    }
 }
 
 fn ffmpeg_binary_name() -> &'static str {
@@ -583,6 +586,8 @@ fn crf_for_quality(quality: &str) -> &'static str {
 enum H264Encoder {
     X264,
     VideoToolbox,
+    /// Intel and AMD graphics through VA-API (Linux). Frames are uploaded to the GPU, so it needs a device.
+    VaApi,
 }
 
 /// Pick from `ffmpeg -encoders` output, where each encoder line reads `<flags> <name> <description>`.
@@ -592,6 +597,8 @@ fn pick_h264_encoder(listing: &str) -> Option<H264Encoder> {
         Some(H264Encoder::X264)
     } else if has("h264_videotoolbox") {
         Some(H264Encoder::VideoToolbox)
+    } else if has("h264_vaapi") {
+        Some(H264Encoder::VaApi)
     } else {
         None
     }
@@ -602,7 +609,7 @@ fn detect_h264_encoder(ffmpeg: &Path) -> Result<H264Encoder, MediaError> {
         .args(["-hide_banner", "-encoders"])
         .output()
         .map_err(|e| MediaError::Message(format!("Failed to spawn ffmpeg: {e}")))?;
-    pick_h264_encoder(&String::from_utf8_lossy(&out.stdout)).ok_or_else(|| {
+    let encoder = pick_h264_encoder(&String::from_utf8_lossy(&out.stdout)).ok_or_else(|| {
         MediaError::Message(if cfg!(target_os = "linux") {
             // The ffmpeg shipped with the Linux builds is LGPL-only, so it has no libx264.
             "This build's ffmpeg has no H.264 encoder, so MP4 and MKV are not available here. \
@@ -614,7 +621,73 @@ fn detect_h264_encoder(ffmpeg: &Path) -> Result<H264Encoder, MediaError> {
              Install one with Homebrew: brew install ffmpeg"
                 .into()
         })
-    })
+    })?;
+    if encoder == H264Encoder::VaApi && vaapi_device(ffmpeg).is_none() {
+        return Err(MediaError::Message(
+            "This computer's graphics card cannot encode H.264 through VA-API, so MP4 and MKV are not available. \
+             AVI, GIF and the audio formats work."
+                .into(),
+        ));
+    }
+    Ok(encoder)
+}
+
+/// The render device a VA-API encode can use, found once per run: the first `/dev/dri/renderD*` node where a
+/// one-frame H.264 encode succeeds. `None` off Linux, or when no graphics device can encode (no driver, no GPU).
+fn vaapi_device(ffmpeg: &Path) -> Option<String> {
+    #[cfg(target_os = "linux")]
+    {
+        static DEVICE: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+        DEVICE
+            .get_or_init(|| {
+                let mut nodes: Vec<String> = std::fs::read_dir("/dev/dri")
+                    .ok()?
+                    .filter_map(|e| e.ok())
+                    .map(|e| e.path().to_string_lossy().into_owned())
+                    .filter(|p| p.rsplit('/').next().is_some_and(|n| n.starts_with("renderD")))
+                    .collect();
+                nodes.sort();
+                nodes.into_iter().find(|device| vaapi_test_encode(ffmpeg, device))
+            })
+            .clone()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = ffmpeg;
+        None
+    }
+}
+
+/// Encodes one small frame on `device` with h264_vaapi. Success means the driver and the GPU really work,
+/// which listing the encoder does not show.
+#[cfg(target_os = "linux")]
+fn vaapi_test_encode(ffmpeg: &Path, device: &str) -> bool {
+    Command::new(ffmpeg)
+        .args([
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-init_hw_device",
+            &format!("vaapi=va:{device}"),
+            "-filter_hw_device",
+            "va",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc=size=256x256:rate=1",
+            "-frames:v",
+            "1",
+            "-vf",
+            "format=nv12,hwupload",
+            "-c:v",
+            "h264_vaapi",
+            "-f",
+            "null",
+            "-",
+        ])
+        .output()
+        .map(|out| out.status.success())
+        .unwrap_or(false)
 }
 
 /// The picture an H.264 encode will produce: output size and frame rate. Intel Macs take a bitrate, and the
@@ -813,6 +886,14 @@ fn output_size(source: (u32, u32), target_resolution: &str) -> (u32, u32) {
 
 fn h264_args(encoder: H264Encoder, quality: &str, shape: Option<VideoShape>) -> Vec<String> {
     match encoder {
+        // The frames already sit on the GPU (see the `hwupload` filter), so only the encoder is named here. The
+        // quality scale is the same as libx264's CRF: a constant quantizer, lower is better.
+        H264Encoder::VaApi => vec![
+            "-c:v".into(),
+            "h264_vaapi".into(),
+            "-qp".into(),
+            crf_for_quality(quality).into(),
+        ],
         H264Encoder::X264 => vec![
             "-c:v".into(),
             "libx264".into(),
@@ -904,12 +985,23 @@ pub fn trim_video_stream(req: &VideoTrimRequest) -> Result<MediaProcessResult, M
         );
         args.extend(["-vf".into(), vf, "-loop".into(), "0".into()]);
     } else {
+        // H.264 is picked first: a VA-API encode needs its frames uploaded to the GPU at the end of the filter chain.
+        let encoder = if matches!(fmt.as_str(), "webm" | "avi") {
+            None
+        } else {
+            Some(detect_h264_encoder(&ffmpeg)?)
+        };
+        let vaapi = encoder == Some(H264Encoder::VaApi);
         let mut vf_parts: Vec<String> = Vec::new();
         if let Some(scale) = scale_filter(&req.target_resolution) {
             vf_parts.push(scale.to_string());
         }
         if fps > 0 {
             vf_parts.push(format!("fps={fps}"));
+        }
+        if vaapi {
+            vf_parts.push("format=nv12".into());
+            vf_parts.push("hwupload".into());
         }
         if !vf_parts.is_empty() {
             args.extend(["-vf".into(), vf_parts.join(",")]);
@@ -941,7 +1033,7 @@ pub fn trim_video_stream(req: &VideoTrimRequest) -> Result<MediaProcessResult, M
                 }
             }
             "mkv" | "mp4" | _ => {
-                let encoder = detect_h264_encoder(&ffmpeg)?;
+                let encoder = encoder.ok_or_else(|| MediaError::Message("No H.264 encoder was chosen.".into()))?;
                 // Only the bitrate-mode path (Intel VideoToolbox) needs the output's size and frame rate.
                 let shape = if encoder == H264Encoder::VideoToolbox && !cfg!(target_arch = "aarch64") {
                     let probe = probe_input(&ffmpeg, &req.input_path);
@@ -964,6 +1056,14 @@ pub fn trim_video_stream(req: &VideoTrimRequest) -> Result<MediaProcessResult, M
                 }
             }
         }
+    }
+
+    // VA-API opens its device before the input is read, so the device is named ahead of everything else.
+    if matches!(fmt.as_str(), "webm" | "avi" | "gif") {
+        // No hardware upload for these.
+    } else if let Some(device) = vaapi_device(&ffmpeg).filter(|_| detect_h264_encoder(&ffmpeg).ok() == Some(H264Encoder::VaApi)) {
+        let init = ["-init_hw_device".to_string(), format!("vaapi=va:{device}"), "-filter_hw_device".to_string(), "va".to_string()];
+        args.splice(0..0, init);
     }
 
     args.push(req.output_path.clone());
@@ -1186,6 +1286,34 @@ mod tests {
     }
 
     #[test]
+    fn vaapi_is_picked_only_when_no_software_or_videotoolbox_encoder_is() {
+        let vaapi_only = "V....D h264_vaapi           H.264 (VAAPI) (codec h264)\n";
+        assert_eq!(pick_h264_encoder(vaapi_only), Some(H264Encoder::VaApi));
+        let with_x264 = "V....D libx264              libx264 H.264\n V....D h264_vaapi  H.264 (VAAPI)\n";
+        assert_eq!(pick_h264_encoder(with_x264), Some(H264Encoder::X264));
+        assert_eq!(pick_h264_encoder("V....D mpeg4  MPEG-4\n"), None);
+    }
+
+    #[test]
+    fn vaapi_arguments_name_the_gpu_encoder_and_keep_the_quality_scale() {
+        let args = h264_args(H264Encoder::VaApi, "high", None);
+        assert!(args.windows(2).any(|w| w == ["-c:v", "h264_vaapi"]));
+        assert!(args.windows(2).any(|w| w == ["-qp", "20"]), "{args:?}");
+        assert!(!args.contains(&"-crf".to_string()) && !args.contains(&"-pix_fmt".to_string()), "frames arrive as nv12 on the GPU: {args:?}");
+    }
+
+    #[test]
+    fn a_missing_ffmpeg_cannot_encode_h264() {
+        assert!(!ffmpeg_can_encode_h264(Path::new("/nonexistent/ffmpeg")));
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    #[test]
+    fn there_is_no_vaapi_device_off_linux() {
+        assert_eq!(vaapi_device(Path::new("/nonexistent/ffmpeg")), None);
+    }
+
+    #[test]
     fn intel_bitrates_scale_with_the_output_size_and_frame_rate() {
         let hd30 = VideoShape { width: 1920, height: 1080, fps: 30.0 };
         let kbps = |level: &str, shape| videotoolbox_bitrate_kbps(level, shape);
@@ -1285,11 +1413,6 @@ mod tests {
 
     /// Stream lines of `ffmpeg -i`, for checking what a conversion produced without ffprobe.
     fn describe(ffmpeg: &Path, path: &Path) -> String {
-    #[test]
-    fn a_missing_ffmpeg_cannot_encode_h264() {
-        assert!(!ffmpeg_can_encode_h264(Path::new("/nonexistent/ffmpeg")));
-    }
-
         let out = Command::new(ffmpeg).args(["-hide_banner", "-i"]).arg(path).output().unwrap();
         String::from_utf8_lossy(&out.stderr).into_owned()
     }
@@ -1343,33 +1466,54 @@ mod tests {
             t[0] * 3600.0 + t[1] * 60.0 + t[2]
         };
 
-        // H.264 in mp4 and mkv, at each level and resolution.
-        let mut sizes = Vec::new();
-        for level in ["lossless", "high", "balanced", "compact"] {
-            let (_, info, bytes) = convert("mp4", "original", level, true, 30);
-            assert!(info.contains("Video: h264"), "mp4 {level}: {info}");
-            assert!(info.contains("Audio: aac"), "mp4 {level} keeps its audio: {info}");
-            assert_eq!(parse_video_size(&info), Some((640, 360)), "{level}");
-            assert!((seconds(&info) - 2.0).abs() < 0.3, "mp4 {level} duration: {info}");
-            sizes.push((level, bytes));
+        // H.264 in mp4 and mkv, at each level and resolution, when this ffmpeg can encode it (libx264, VideoToolbox, or a
+        // working VA-API GPU). A Linux machine without one must say so plainly instead of failing obscurely.
+        if ffmpeg_can_encode_h264(&ffmpeg) {
+            // H.264 in mp4 and mkv, at each level and resolution.
+            let mut sizes = Vec::new();
+            for level in ["lossless", "high", "balanced", "compact"] {
+                let (_, info, bytes) = convert("mp4", "original", level, true, 30);
+                assert!(info.contains("Video: h264"), "mp4 {level}: {info}");
+                assert!(info.contains("Audio: aac"), "mp4 {level} keeps its audio: {info}");
+                assert_eq!(parse_video_size(&info), Some((640, 360)), "{level}");
+                assert!((seconds(&info) - 2.0).abs() < 0.3, "mp4 {level} duration: {info}");
+                sizes.push((level, bytes));
+            }
+            eprintln!("mp4 sizes by level: {sizes:?}");
+            assert!(sizes[0].1 >= sizes[1].1 && sizes[1].1 >= sizes[2].1 && sizes[2].1 >= sizes[3].1,
+                "a higher level is never smaller: {sizes:?}");
+            // 0 keeps the source's 30 fps; a number changes it.
+            let (_, info, _) = convert("mp4", "original", "balanced", true, 0);
+            assert_eq!(parse_probe(&info).fps, Some(30.0), "same frame rate: {info}");
+            let (_, info, _) = convert("mp4", "original", "balanced", true, 15);
+            assert_eq!(parse_probe(&info).fps, Some(15.0), "fixed frame rate: {info}");
+            for resolution in ["1080p", "720p", "480p"] {
+                let (_, info, _) = convert("mp4", resolution, "balanced", true, 30);
+                let expected = output_size((640, 360), resolution);
+                assert_eq!(parse_video_size(&info), Some(expected), "{resolution}: {info}");
+            }
+            let (_, info, _) = convert("mkv", "original", "high", true, 24);
+            assert!(info.contains("Video: h264") && info.contains("24 fps"), "mkv: {info}");
+            let (_, info, _) = convert("mp4", "original", "high", false, 30);
+            assert!(info.contains("Video: h264") && !info.contains("Audio:"), "no audio: {info}");
+        } else {
+            for format in ["mp4", "mkv"] {
+                let req = VideoTrimRequest {
+                    input_path: input.to_string_lossy().into(),
+                    output_path: dir.join(format!("no-h264.{format}")).to_string_lossy().into(),
+                    start_seconds: 0.5,
+                    end_seconds: 2.5,
+                    target_format: format.into(),
+                    target_resolution: "original".into(),
+                    include_audio: true,
+                    fps: 30,
+                    quality: "high".into(),
+                };
+                let err = trim_video_stream(&req).expect_err("no H.264 encoder: the conversion must be refused").to_string();
+                assert!(err.contains("MP4 and MKV are not available"), "{format}: {err}");
+            }
+            eprintln!("no H.264 encoder on this machine: mp4 and mkv refused with a clear message");
         }
-        eprintln!("mp4 sizes by level: {sizes:?}");
-        assert!(sizes[0].1 >= sizes[1].1 && sizes[1].1 >= sizes[2].1 && sizes[2].1 >= sizes[3].1,
-            "a higher level is never smaller: {sizes:?}");
-        // 0 keeps the source's 30 fps; a number changes it.
-        let (_, info, _) = convert("mp4", "original", "balanced", true, 0);
-        assert_eq!(parse_probe(&info).fps, Some(30.0), "same frame rate: {info}");
-        let (_, info, _) = convert("mp4", "original", "balanced", true, 15);
-        assert_eq!(parse_probe(&info).fps, Some(15.0), "fixed frame rate: {info}");
-        for resolution in ["1080p", "720p", "480p"] {
-            let (_, info, _) = convert("mp4", resolution, "balanced", true, 30);
-            let expected = output_size((640, 360), resolution);
-            assert_eq!(parse_video_size(&info), Some(expected), "{resolution}: {info}");
-        }
-        let (_, info, _) = convert("mkv", "original", "high", true, 24);
-        assert!(info.contains("Video: h264") && info.contains("24 fps"), "mkv: {info}");
-        let (_, info, _) = convert("mp4", "original", "high", false, 30);
-        assert!(info.contains("Video: h264") && !info.contains("Audio:"), "no audio: {info}");
 
         // Other containers, when this ffmpeg can encode them.
         if has_encoder(&ffmpeg, "libvpx-vp9") {
