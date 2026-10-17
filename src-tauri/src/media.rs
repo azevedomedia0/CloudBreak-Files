@@ -1215,7 +1215,13 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("cb-vid-test-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         let input = dir.join("in.mp4");
-        let output = dir.join("out.mp4");
+        // MP4 needs an H.264 encoder; where there is none (a Linux machine without a working GPU) the trim goes to AVI,
+        // which every ffmpeg can write, so the trim itself is still tested.
+        let (format, output) = if ffmpeg_can_encode_h264(&ffmpeg) {
+            ("mp4", dir.join("out.mp4"))
+        } else {
+            ("avi", dir.join("out.avi"))
+        };
 
         // 1s color bars with silent audio (MPEG-4 video: every ffmpeg has that encoder, not every one has H.264)
         let status = Command::new(&ffmpeg)
@@ -1247,7 +1253,7 @@ mod tests {
             output_path: output.to_string_lossy().into(),
             start_seconds: 0.1,
             end_seconds: 0.6,
-            target_format: "mp4".into(),
+            target_format: format.into(),
             target_resolution: "480p".into(),
             include_audio: true,
             fps: 24,
