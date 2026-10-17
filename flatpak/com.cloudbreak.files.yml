@@ -61,6 +61,7 @@ modules:
   # and the same rule: LGPL only, no --enable-gpl or --enable-nonfree. That rules out libx264, so this ffmpeg has no
   # H.264 encoder: MP4 and MKV conversion are not available in the Flatpak (AVI, GIF and the audio formats are).
   # libmp3lame, libopus and libvpx come from the Freedesktop SDK; the build fails if the result is not LGPL.
+  # --enable-vaapi builds the h264_vaapi encoder (libva, MIT). It only works where the GPU's VA-API driver is present.
   - name: ffmpeg
     buildsystem: simple
     build-commands:
@@ -70,7 +71,8 @@ modules:
           --disable-autodetect --disable-gpl --disable-nonfree \
           --disable-shared --enable-static --enable-pic \
           --disable-doc --disable-debug --disable-ffplay --disable-ffprobe \
-          --enable-libmp3lame --enable-libopus --enable-libvpx --enable-zlib --enable-bzlib
+          --enable-libmp3lame --enable-libopus --enable-libvpx --enable-zlib --enable-bzlib \
+          --enable-vaapi
         make -j"$FLATPAK_BUILDER_N_JOBS"
         make install
       - |
@@ -80,7 +82,7 @@ modules:
           echo "error: this ffmpeg is not LGPL-only" >&2; exit 1
         fi
         ENCODERS="$(/app/bin/ffmpeg -hide_banner -encoders)"
-        for enc in libvpx-vp9 libopus libmp3lame aac flac gif mpeg4; do
+        for enc in libvpx-vp9 libopus libmp3lame aac flac gif mpeg4 h264_vaapi; do
           printf '%s' "$ENCODERS" | grep -q " $enc " || { echo "error: ffmpeg lacks the $enc encoder" >&2; exit 1; }
         done
       - install -Dm644 COPYING.LGPLv2.1 /app/share/licenses/ffmpeg/COPYING.LGPLv2.1
