@@ -79,3 +79,14 @@ The current manifest wraps a prebuilt `.deb` (fine for direct distribution). Fla
 - `src-tauri/tauri.linux.conf.json` — Linux `deb`/`appimage`, `mainBinaryName`, metainfo path
 - `scripts/build-flatpak.sh` — end-to-end deb → flatpak
 - `scripts/build-flatpak-docker.sh` — same build via Docker
+
+## Screenshots and screen recording
+
+The File menu's **Take Screenshot…** (Ctrl+Shift+6) works inside the Flatpak sandbox through the desktop portal
+(`org.freedesktop.portal.Screenshot`), which shows its own region picker. The picture is saved in `~/Pictures`.
+It needs `gdbus`, which the GNOME runtime provides.
+
+**Start/Stop Screen Recording** (Ctrl+Shift+7) is not available in the Flatpak build: recording needs the
+ScreenCast portal and PipeWire, and the sandbox cannot reach a screen recorder. It shows a message saying so.
+Outside the sandbox (a `.deb` or AppImage install) both shortcuts use `grim`/`slurp`, `gnome-screenshot`,
+`spectacle`, `scrot`, `wf-recorder` or `ffmpeg`, whichever is installed.

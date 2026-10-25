@@ -57,6 +57,14 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="0.1.6" date="2026-10-25">
+      <description>
+        <p>
+          Usernames for shared folders, screenshots, a right-click menu on empty folder space,
+          scrollable photo zoom, a volume control for video, and a new app icon.
+        </p>
+      </description>
+    </release>
     <release version="0.1.5" date="2026-10-10">
       <description>
         <p>

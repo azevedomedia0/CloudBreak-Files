@@ -70,20 +70,98 @@ mod platform {
     }
 
     #[cfg(target_os = "linux")]
-    fn in_flatpak() -> bool {
+    pub fn in_flatpak() -> bool {
         std::env::var_os("FLATPAK").is_some() || std::path::Path::new("/.flatpak-info").exists()
     }
 
     #[cfg(target_os = "linux")]
-    const FLATPAK_UNSUPPORTED: &str =
-        "Screenshots and screen recording are not available in the Flatpak build yet: the sandbox cannot reach the capture tools.";
+    const FLATPAK_RECORDING_UNSUPPORTED: &str =
+        "Screen recording is not available in the Flatpak build yet: the sandbox cannot reach a screen recorder.";
+
+    /// `%XX` escapes in a `file://` URI back to bytes.
+    #[cfg(target_os = "linux")]
+    fn uri_to_path(uri: &str) -> String {
+        let raw = uri.strip_prefix("file://").unwrap_or(uri).as_bytes();
+        let mut out = Vec::with_capacity(raw.len());
+        let mut i = 0;
+        while i < raw.len() {
+            if raw[i] == b'%' && i + 2 < raw.len() {
+                if let Ok(byte) = u8::from_str_radix(&String::from_utf8_lossy(&raw[i + 1..i + 3]), 16) {
+                    out.push(byte);
+                    i += 3;
+                    continue;
+                }
+            }
+            out.push(raw[i]);
+            i += 1;
+        }
+        String::from_utf8_lossy(&out).into_owned()
+    }
+
+    /// Screenshot through the desktop portal, which works inside the Flatpak sandbox: the portal shows its own
+    /// region picker and hands back a file, which is copied to `dest`. `Ok(false)` when the user cancelled.
+    #[cfg(target_os = "linux")]
+    pub fn portal_screenshot(dest: &str) -> Result<bool, String> {
+        use std::io::{BufRead, BufReader};
+        use std::process::Stdio;
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        let token = format!("cloudbreak{}", std::process::id());
+        let mut monitor = Command::new("gdbus")
+            .args(["monitor", "--session", "--dest", "org.freedesktop.portal.Desktop"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|e| format!("Could not reach the screenshot portal (gdbus): {e}"))?;
+        let stdout = monitor.stdout.take().ok_or("The screenshot portal gave no output.")?;
+        let (tx, rx) = mpsc::channel::<String>();
+        std::thread::spawn(move || {
+            for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+                if line.contains("Request.Response") && tx.send(line).is_err() {
+                    break;
+                }
+            }
+        });
+        // Let the monitor subscribe before the request, so the answer is not missed.
+        std::thread::sleep(Duration::from_millis(300));
+
+        let options = format!("{{'interactive': <true>, 'handle_token': <'{token}'>}}");
+        let call = Command::new("gdbus")
+            .args([
+                "call", "--session",
+                "--dest", "org.freedesktop.portal.Desktop",
+                "--object-path", "/org/freedesktop/portal/desktop",
+                "--method", "org.freedesktop.portal.Screenshot.Screenshot",
+                "", options.as_str(),
+            ])
+            .output();
+        let outcome = match call {
+            Ok(out) if out.status.success() => rx
+                .recv_timeout(Duration::from_secs(300))
+                .map_err(|_| "The screenshot portal did not answer.".to_string()),
+            Ok(out) => Err(format!("The screenshot portal refused: {}", String::from_utf8_lossy(&out.stderr).trim())),
+            Err(e) => Err(format!("Could not call the screenshot portal: {e}")),
+        };
+        let _ = monitor.kill();
+        let _ = monitor.wait();
+
+        let line = outcome?;
+        // Response (0, {'uri': <'file:///…'>}): 0 means a picture was taken; 1 or 2 means cancelled or failed.
+        if !line.contains("(uint32 0,") && !line.contains("(0,") {
+            return Ok(false);
+        }
+        let uri = line
+            .split("'uri': <'")
+            .nth(1)
+            .and_then(|rest| rest.split('\'').next())
+            .ok_or("The screenshot portal did not return a file.")?;
+        std::fs::copy(uri_to_path(uri), dest).map_err(|e| format!("Could not save the screenshot: {e}"))?;
+        Ok(true)
+    }
 
     #[cfg(target_os = "linux")]
-    pub fn screenshot_command(path: &str) -> Result<Command, String> {
-        if in_flatpak() {
-            return Err(FLATPAK_UNSUPPORTED.into());
-        }
-        let has = |name: &str| find_tool(name).is_some();
+    pub fn screenshot_command(path: &str) -> Result<Command, String> {        let has = |name: &str| find_tool(name).is_some();
         let mut cmd;
         if is_wayland() && has("grim") && has("slurp") {
             // grim needs the region from slurp; run both through a shell so Esc in slurp cancels.
@@ -107,7 +185,7 @@ mod platform {
     #[cfg(target_os = "linux")]
     pub fn recording_command(path: &str) -> Result<Command, String> {
         if in_flatpak() {
-            return Err(FLATPAK_UNSUPPORTED.into());
+            return Err(FLATPAK_RECORDING_UNSUPPORTED.into());
         }
         let has = |name: &str| find_tool(name).is_some();
         let mut cmd;
@@ -136,6 +214,15 @@ pub async fn capture_screenshot(app: AppHandle) -> Result<Option<String>, String
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
         let path = platform::capture_path(&app, "Cloudbreak Screenshot", "png")?;
+        // Inside the Flatpak sandbox the portal is the way to take a screenshot.
+        #[cfg(target_os = "linux")]
+        if platform::in_flatpak() {
+            let target = path.clone();
+            let taken = tauri::async_runtime::spawn_blocking(move || platform::portal_screenshot(&target))
+                .await
+                .map_err(|e| e.to_string())??;
+            return Ok(taken.then_some(path));
+        }
         let mut cmd = platform::screenshot_command(&path)?;
         let status = tauri::async_runtime::spawn_blocking(move || cmd.status())
             .await
