@@ -20,6 +20,7 @@ pub struct Fixtures {
     pub png: String,
     pub video: String,
     pub audio: String,
+    pub pdf: String,
 }
 
 #[derive(Serialize)]
@@ -67,6 +68,34 @@ mod imp {
         out
     }
 
+    /// A one-page PDF with a line of text (offsets in the cross-reference table are computed).
+    fn pdf_bytes() -> Vec<u8> {
+        let stream = "BT /F1 24 Tf 72 700 Td (Cloudbreak self-test PDF) Tj ET";
+        let objects = [
+            "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_string(),
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>".to_string(),
+            format!("<< /Length {} >>\nstream\n{}\nendstream", stream.len(), stream),
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_string(),
+        ];
+        let mut out = String::from("%PDF-1.4\n");
+        let mut offsets = Vec::new();
+        for (i, body) in objects.iter().enumerate() {
+            offsets.push(out.len());
+            out.push_str(&format!("{} 0 obj\n{}\nendobj\n", i + 1, body));
+        }
+        let xref = out.len();
+        out.push_str(&format!("xref\n0 {}\n0000000000 65535 f \n", objects.len() + 1));
+        for offset in offsets {
+            out.push_str(&format!("{offset:010} 00000 n \n"));
+        }
+        out.push_str(&format!(
+            "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF",
+            objects.len() + 1
+        ));
+        out.into_bytes()
+    }
+
     pub fn make_fixtures(dir: &Path) -> Result<Fixtures, String> {
         let _ = fs::remove_dir_all(dir);
         fs::create_dir_all(dir.join("sub")).map_err(|e| e.to_string())?;
@@ -77,6 +106,7 @@ mod imp {
         fs::write(dir.join("sub/inner.md"), "# Inner\n").map_err(|e| e.to_string())?;
         fs::write(dir.join("report.docx"), b"PK-not-really-a-docx").map_err(|e| e.to_string())?;
         fs::write(dir.join("song.wav"), wav_bytes()).map_err(|e| e.to_string())?;
+        fs::write(dir.join("doc.pdf"), pdf_bytes()).map_err(|e| e.to_string())?;
 
         let img = image::RgbaImage::from_fn(64, 48, |x, y| image::Rgba([(x * 4) as u8, (y * 5) as u8, 128, 255]));
         img.save(dir.join("photo.png")).map_err(|e| e.to_string())?;
@@ -100,6 +130,7 @@ mod imp {
             png: p("photo.png"),
             video: p("clip.mp4"),
             audio: p("song.wav"),
+            pdf: p("doc.pdf"),
         })
     }
 

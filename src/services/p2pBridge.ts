@@ -5,6 +5,7 @@
  */
 
 import { invoke, isTauri } from '@tauri-apps/api/core';
+import type { IncomingRefresh } from '../utils/incomingRefresh';
 
 export interface P2pIdentity {
   peerId: string;
@@ -34,6 +35,32 @@ export interface P2pLibraryRecord {
   privateMode?: boolean;
   expiresAt?: string | null;
   allowDownloads?: boolean;
+}
+
+/** "Allow connections from other networks": router port mapping, desktop only. */
+export interface RemoteAccessStatus {
+  enabled: boolean;
+  /** `ip:port` peers on other networks can dial, when the router opened a port on a public address. */
+  publicAddress?: string | null;
+  method?: string | null;
+  message: string;
+}
+
+export interface UsernameCheck {
+  /** The name as stored (lower case). */
+  name: string;
+  /** Nobody else holds it (it may already be this device's). */
+  available: boolean;
+  mine: boolean;
+}
+
+/** This device's registration with a relay server (`relay/`), desktop only. */
+export interface RelayStatus {
+  enabled: boolean;
+  connected: boolean;
+  /** The `relay://` address invites carry while connected. */
+  address?: string | null;
+  message: string;
 }
 
 export interface CreateLibraryFileInput {
@@ -293,6 +320,12 @@ export const p2pBridge = {
     return [...browserLibs.values()].map(({ files: _f, invite: _i, ...rec }) => rec);
   },
 
+  /** Finish incoming libraries whose files are not all here yet, by dialling their senders again. */
+  async refreshIncoming(): Promise<IncomingRefresh[]> {
+    if (!(await isTauri())) return [];
+    return invoke<IncomingRefresh[]>('p2p_refresh_incoming');
+  },
+
   async startSeeding(libraryId: string): Promise<SwarmStatus> {
     if (await isTauri()) {
       return invoke<SwarmStatus>('p2p_start_seeding', { libraryId });
@@ -308,6 +341,48 @@ export const p2pBridge = {
       bytesReceived: 0,
       privateMode: true,
     };
+  },
+
+  /** Open or close a router port for peers on other networks. Desktop only. */
+  async setRemoteAccess(enabled: boolean): Promise<RemoteAccessStatus> {
+    if (!isTauri()) {
+      return { enabled: false, message: 'Only the desktop app can accept connections from other networks.' };
+    }
+    return invoke<RemoteAccessStatus>('p2p_set_remote_access', { enabled });
+  },
+
+  /** Register with a relay server so invites work from any network; an empty address stops. Desktop only. */
+  async setRelay(address: string, hostKey: string): Promise<RelayStatus> {
+    if (!isTauri()) {
+      return { enabled: false, connected: false, message: 'Only the desktop app can use a relay server.' };
+    }
+    return invoke<RelayStatus>('p2p_set_relay', { address: address.trim() || null, hostKey: hostKey.trim() || null });
+  },
+
+  /** Ask the relay whether a username is free. Desktop only: the relay is where usernames live. */
+  async usernameCheck(address: string, name: string): Promise<UsernameCheck> {
+    if (!isTauri()) throw new Error('Usernames can be set in the desktop app.');
+    return invoke<UsernameCheck>('p2p_username_check', { address: address.trim() || null, name });
+  },
+
+  /** Claim a username on the relay; it becomes the name shown on this device's shared folders. Returns the stored name. */
+  async usernameClaim(address: string, hostKey: string, name: string): Promise<string> {
+    if (!isTauri()) throw new Error('Usernames can be set in the desktop app.');
+    return invoke<string>('p2p_username_claim', {
+      address: address.trim() || null,
+      hostKey: hostKey.trim() || null,
+      name,
+    });
+  },
+
+  async relayStatus(): Promise<RelayStatus | null> {
+    if (!isTauri()) return null;
+    return invoke<RelayStatus>('p2p_relay_status');
+  },
+
+  async remoteAccessStatus(): Promise<RemoteAccessStatus | null> {
+    if (!isTauri()) return null;
+    return invoke<RemoteAccessStatus>('p2p_remote_access_status');
   },
 
   async swarmStatus(): Promise<SwarmStatus> {
@@ -467,7 +542,7 @@ export function recordToSharedLibrary(rec: P2pLibraryRecord): import('../types')
     isSeeding: rec.isSeeding,
     seedingStatus: (rec.seedingStatus as 'active' | 'paused') || undefined,
     p2pProtocol: 'Cloudbreak private · invite-dial only',
-    p2pEncryptionCipher: 'AES-256-GCM E2EE',
+    p2pEncryptionCipher: 'AES-256-GCM',
     senderPeerNodeId: rec.ownerPeerId,
     seedingBandwidthCap: rec.bandwidthCap ?? undefined,
     expiresAt: rec.expiresAt ?? undefined,

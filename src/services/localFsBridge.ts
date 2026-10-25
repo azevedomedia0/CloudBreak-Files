@@ -61,6 +61,11 @@ export const localFs = {
     return invoke<LocalFolder | null>('local_pick_folder');
   },
 
+  /** Folder picker for choosing a folder to share. Allowed for this session only, never remembered. */
+  pickShareFolder(): Promise<LocalFolder | null> {
+    return invoke<LocalFolder | null>('local_pick_share_folder');
+  },
+
   /** Folder picker for choosing where to save something. Allowed for this session only, never remembered. */
   pickSaveFolder(): Promise<LocalFolder | null> {
     return invoke<LocalFolder | null>('local_pick_save_folder');
@@ -94,6 +99,11 @@ export const localFs = {
     return invoke<LocalFolder>('local_remember_folder', { path });
   },
 
+  /** Allow a removable drive for this session only. It is not saved and never joins Local Files. */
+  allowSessionFolder(path: string): Promise<LocalFolder> {
+    return invoke<LocalFolder>('local_allow_session_folder', { path });
+  },
+
   /** Stop tracking a folder. Nothing on disk is changed. */
   forgetFolder(path: string): Promise<void> {
     return invoke<void>('local_forget_folder', { path });
@@ -114,6 +124,11 @@ export const localFs = {
 
   async readText(path: string): Promise<string> {
     return new TextDecoder().decode(await localFs.readBytes(path));
+  },
+
+  /** Save a new file in `dir`. A taken name gets a number ("a 2.zip"); nothing is overwritten. */
+  saveNewFile(dir: string, name: string, bytes: Uint8Array): Promise<LocalFileInfo> {
+    return invoke<LocalFileInfo>('local_save_new_file', { dir, name, contentBase64: toBase64(bytes) });
   },
 
   writeBytes(path: string, bytes: Uint8Array): Promise<LocalFileInfo> {

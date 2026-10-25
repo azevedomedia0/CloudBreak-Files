@@ -403,6 +403,19 @@ class RustBridgeService {
     }
   }
 
+  /** True once a vault passphrase exists, so the UI can offer "create" or "unlock". */
+  public async isVaultConfigured(): Promise<boolean> {
+    const invokeFn = this.getInvoke();
+    if (invokeFn) {
+      try {
+        return (await invokeFn('vault_is_configured')) as boolean;
+      } catch {
+        return true; // an unreadable vault file still means one was set up
+      }
+    }
+    return this.hasVaultConfigured();
+  }
+
   /** Unlock the vault. The first unlock after launch sets the passphrase. Later unlocks must match it. */
   public async unlockVault(passphrase: string): Promise<void> {
     assertPassphrase(passphrase);

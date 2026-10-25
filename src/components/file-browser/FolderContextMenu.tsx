@@ -19,12 +19,13 @@ export interface FolderContextMenuProps {
   y: number;
   onClose: () => void;
   onOpen: (folder: FolderItem) => void;
-  onQuickLook: (folder: FolderItem) => void;
   onGetInfo: (folder: FolderItem) => void;
   onRename: (folder: FolderItem) => void;
   onDuplicate: (folders: FolderItem[]) => void;
   onCopy: (folders: FolderItem[]) => void;
   onShare: (folder: FolderItem) => void;
+  /** Turn the selected folders (and any selected files) into an outgoing P2P library. */
+  onShareLibrary?: (folders: FolderItem[]) => void;
   onTrash: (folders: FolderItem[]) => void;
   onToggleTag: (folders: FolderItem[], tag: string) => void;
 }
@@ -36,12 +37,12 @@ export const FolderContextMenu: React.FC<FolderContextMenuProps> = ({
   y,
   onClose,
   onOpen,
-  onQuickLook,
   onGetInfo,
   onRename,
   onDuplicate,
   onCopy,
   onShare,
+  onShareLibrary,
   onTrash,
   onToggleTag,
 }) => {
@@ -85,7 +86,6 @@ export const FolderContextMenu: React.FC<FolderContextMenuProps> = ({
   };
 
   const openWith = [
-    { id: 'quick-look', label: 'Quick Look', action: () => onQuickLook(folder) },
     { id: 'folder', label: 'Open Folder', action: () => onOpen(folder) },
   ];
 
@@ -123,10 +123,13 @@ export const FolderContextMenu: React.FC<FolderContextMenuProps> = ({
       <MenuItem label="Get Info" shortcut="⌘I" onClick={() => run(() => onGetInfo(folder))} />
       <MenuItem label="Rename" disabled={multiple} onClick={() => run(() => onRename(folder))} />
       <MenuItem label="Duplicate" shortcut="⌘D" onClick={() => run(() => onDuplicate(targets))} />
-      <MenuItem label="Quick Look" shortcut="Space" onClick={() => run(() => onQuickLook(folder))} />
       <Separator />
       <MenuItem label="Copy" shortcut="⌘C" onClick={() => run(() => onCopy(targets))} />
-      <MenuItem label="Share…" onClick={() => run(() => onShare(folder))} />
+      {onShareLibrary ? (
+        <MenuItem label="Share as Library…" onClick={() => run(() => onShareLibrary(targets))} />
+      ) : (
+        <MenuItem label="Share…" onClick={() => run(() => onShare(folder))} />
+      )}
       <Separator />
       <SubmenuItem
         label="Tags"
@@ -260,9 +263,9 @@ export const FolderGetInfo: React.FC<{
   );
 };
 
-const Separator = () => <div className="my-1 h-px bg-white/10" />;
+export const Separator = () => <div className="my-1 h-px bg-white/10" />;
 
-const MenuItem: React.FC<{
+export const MenuItem: React.FC<{
   label: string;
   shortcut?: string;
   disabled?: boolean;

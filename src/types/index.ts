@@ -9,7 +9,7 @@ export interface CloudAccount {
   usedBytes: number;
   totalBytes: number;
   status: 'connected' | 'syncing' | 'offline';
-  encryptionLevel: 'Standard TLS' | 'Client E2EE AES-256' | 'Zero-Knowledge Vault';
+  encryptionLevel: 'Standard TLS' | 'Client-side AES-256';
   isVault?: boolean;
   /** True when credentials were verified against the live provider API. */
   liveConnected?: boolean;
@@ -88,6 +88,12 @@ export interface FileItem {
   documentBody?: string;
   /** Absolute path on disk, for files added from a local folder in the desktop app. Edits are saved here. */
   localPath?: string;
+  /** Set for cloud files that have no download link: they are downloaded on demand, then `url` is filled in. */
+  remoteFetch?: { kind: 'rclone'; path: string };
+  /** The downloaded copy in the app's temp folder (what Save copies out). Not a place edits are written. */
+  stagedPath?: string;
+  /** Names of outgoing libraries this file is currently seeded in (set for display only). */
+  seedingLibraries?: string[];
   /**
    * Trust metadata for data extracted from the file.
    * All extracted content is untrusted external data; suspicious payloads need a user verdict.
@@ -115,6 +121,8 @@ export interface FolderItem {
   itemCount: number;
   /** Finder-style tags (same palette as files). */
   tags?: string[];
+  /** Set for folders that belong to a removable drive or share. They are browsed from that source and never listed under Local Files. */
+  sourceId?: string;
 }
 
 export interface P2PPeer {
@@ -207,12 +215,12 @@ export type VideoConvertFormat =
   | 'mkv'
   | 'avi'
   | 'gif'
+  | 'mov'
   | 'mp3'
-  | 'aac'
   | 'wav'
   | 'flac';
 
-const AUDIO_CONVERT_FORMATS: readonly VideoConvertFormat[] = ['mp3', 'aac', 'wav', 'flac'];
+const AUDIO_CONVERT_FORMATS: readonly VideoConvertFormat[] = ['mp3', 'wav', 'flac'];
 
 export function isAudioConvertFormat(format: VideoConvertFormat): boolean {
   return AUDIO_CONVERT_FORMATS.includes(format);
@@ -222,7 +230,7 @@ export function convertFormatMime(format: VideoConvertFormat): string {
   switch (format) {
     case 'gif': return 'image/gif';
     case 'mp3': return 'audio/mpeg';
-    case 'aac': return 'audio/aac';
+    case 'mov': return 'video/quicktime';
     case 'wav': return 'audio/wav';
     case 'flac': return 'audio/flac';
     case 'mkv': return 'video/x-matroska';
@@ -235,7 +243,8 @@ export interface VideoConvertOptions {
   format: VideoConvertFormat;
   resolution: 'original' | '4k' | '2k' | '1080p' | '720p' | '480p';
   quality: 'lossless' | 'high' | 'balanced' | 'compact';
-  fps: 24 | 30 | 60;
+  /** 0 keeps the video's own frame rate. */
+  fps: 0 | 24 | 30 | 60;
   trimStart: number;
   trimEnd: number;
   includeAudio: boolean;
@@ -265,6 +274,8 @@ export interface AppNotification {
     itemCount: number;
   };
   status?: 'pending' | 'accepted' | 'declined';
+  /** The aetherlib:1:… invite this notification offers to join (joining checks its signature). */
+  invite?: string;
 }
 
 export interface RemovableDevice {

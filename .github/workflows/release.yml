@@ -64,12 +64,26 @@ jobs:
           pkill -x ibtoold 2>/dev/null || true
           pkill -x actool 2>/dev/null || true
 
+      # ffmpeg is built from source without any GPL or nonfree options (scripts/build-ffmpeg-lgpl.sh).
+      # That takes a while, so the finished binaries are cached until the script changes.
+      - name: Cache the LGPL ffmpeg build (macOS)
+        if: matrix.os == 'macos-latest'
+        uses: actions/cache@v4
+        with:
+          path: |
+            src-tauri/binaries/ffmpeg-aarch64-apple-darwin
+            src-tauri/binaries/ffmpeg-x86_64-apple-darwin
+          key: ffmpeg-lgpl-${{ hashFiles('scripts/build-ffmpeg-lgpl.sh') }}
+
       - name: Fetch ffmpeg sidecars (macOS)
         if: matrix.os == 'macos-latest'
+        env:
+          FFMPEG_BUILD_DIR: ${{ runner.temp }}/cloudbreak-ffmpeg-build
         run: |
           bash scripts/fetch-ffmpeg.sh
+          bash scripts/fetch-rclone.sh
           # Enable Tauri externalBin only when the binaries are present.
-          printf '%s\n' '{"bundle":{"externalBin":["binaries/ffmpeg"]}}' > src-tauri/tauri.ffmpeg.conf.json
+          printf '%s\n' '{"bundle":{"externalBin":["binaries/ffmpeg","binaries/rclone"]}}' > src-tauri/tauri.ffmpeg.conf.json
 
       # macOS only: import the Developer ID certificate into a temporary keychain
       # and write the App Store Connect API key to a file outside the repo.

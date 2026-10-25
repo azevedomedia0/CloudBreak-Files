@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { looksLikeInvite } from './utils/invitePreview';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { MacFinderToolbar, MacViewMode } from './components/MacFinderToolbar';
 import { Sidebar } from './components/Sidebar';
@@ -23,10 +24,13 @@ import { localPathFromFolderId } from './components/file-browser/FolderContextMe
 import { FILE_MENU_ACTION_EVENT, type FileMenuActionDetail } from './utils/fileMenuBus';
 import { mergeSystemSearchResults, systemSearchBridge } from './services/systemSearchBridge';
 import { AppModals } from './components/AppModals';
+import { PhotoEditorModal } from './components/PhotoEditorModal';
+import { VideoPlayerModal } from './components/VideoPlayerModal';
 import { PhotoNav } from './components/PhotoNavArrows';
 import { UserProfile } from './components/ProfileSettingsModal';
-import { DropOverlay } from './components/DropOverlay';
 import { Toast } from './components/Toast';
+import { UploadConfirmModal } from './components/UploadConfirmModal';
+import { PanelModeSwitch, type RightPanelMode } from './components/PanelModeSwitch';
 import { FileBrowser } from './components/FileBrowser';
 import { FileInspector } from './components/FileInspector';
 import { SystemTerminal } from './components/SystemTerminal';
@@ -37,14 +41,23 @@ import {
   CloudProviderId, FileCategory,
 } from './types';
 import { createDefaultLocalFolders, DEFAULT_LOCAL_FOLDER_DEFS } from './utils/defaultLocalFolders';
-import { getFfmpegStatus } from './services/mediaBridge';
+import { getFfmpegStatus, stageTempBytes } from './services/mediaBridge';
 import {
   checkForAppUpdate,
   currentAppVersion,
-  downloadAndInstallUpdate,
+  describeUpdateError,
   updaterAvailable,
+  updatesSupportedHere,
 } from './services/updaterBridge';
+import { UpdateModal, type UpdateOffer } from './components/UpdateModal';
+import { useWindowControlsHidden } from './hooks/useWindowControlsHidden';
+import { PlayingNextPanel } from './components/PlayingNextPanel';
+import { VideoSidePanel } from './components/VideoSidePanel';
+import { isMacLike } from './components/WindowControls';
+import { upcomingAfter } from './utils/playingNext';
+import { buildLibraryDraft, type LibraryDraft, type LibrarySelection } from './utils/libraryItems';
 import { isTauri } from '@tauri-apps/api/core';
+import { takeScreenshot, toggleScreenRecording } from './services/captureBridge';
 import { whenIdle } from './utils/deferWork';
 import { desktopScanReady } from './utils/startupGate';
 import {
@@ -57,7 +70,8 @@ import {
 } from './utils/appPreferences';
 import { p2pBridge } from './services/p2pBridge';
 import { localFs } from './services/localFsBridge';
-import { withNativeRaster } from './services/previewBridge';
+import { previewBridge, withNativeRaster } from './services/previewBridge';
+import { downloadRemoteFile } from './services/cloud/remoteFiles';
 import {
   isEditableDocument,
   isPlainTextDocument,
@@ -88,7 +102,10 @@ export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [isNewFolderOpen, setIsNewFolderOpen] = useState<boolean>(false);
   const [isNewLibraryOpen, setIsNewLibraryOpen] = useState<boolean>(false);
+  const [libraryDraft, setLibraryDraft] = useState<LibraryDraft | null>(null);
   const [isJoinIncomingOpen, setIsJoinIncomingOpen] = useState<boolean>(false);
+  /** An invite to fill in when the join dialog opens (from a notification that needs a passphrase). */
+  const [joinInitialInvite, setJoinInitialInvite] = useState<string>('');
   const [isAddFavoriteOpen, setIsAddFavoriteOpen] = useState<boolean>(false);
   const [isConnectServerOpen, setIsConnectServerOpen] = useState<boolean>(false);
 
@@ -105,8 +122,9 @@ export default function App() {
   const [viewMode, setViewMode] = useState<MacViewMode>(() => loadPreferences().defaultView);
 
   // Modals & Panels
-  const [isQuickLookOpen, setIsQuickLookOpen] = useState<boolean>(false);
   const [editingPhotoFile, setEditingPhotoFile] = useState<FileItem | null>(null);
+  // The adjustments panel of the photo editor: the inspector's Edit Photo button shows and hides it.
+  const [photoPanelOpen, setPhotoPanelOpen] = useState(false);
   const [editingDocumentFile, setEditingDocumentFile] = useState<FileItem | null>(null);
   /** Staged file open waiting on Confirm / Deny — body must not enter the editor until confirmed. */
   const [pendingUntrustedOpen, setPendingUntrustedOpen] = useState<{
@@ -117,16 +135,20 @@ export default function App() {
   const [playingVideoFile, setPlayingVideoFile] = useState<FileItem | null>(null);
   const [playingAudioFile, setPlayingAudioFile] = useState<FileItem | null>(null);
   const [videoPlayerInitialTab, setVideoPlayerInitialTab] = useState<'player' | 'trim' | 'convert'>('player');
+  // Videos play in the right-hand panel by default; the full player window is for trimming, converting and a bigger picture.
+  const [videoPlacement, setVideoPlacement] = useState<'panel' | 'window'>('panel');
+  const [videoStartAt, setVideoStartAt] = useState(0);
   const [sharingLibrary, setSharingLibrary] = useState<SharedLibrary | null>(null);
   const [isVaultSecurityOpen, setIsVaultSecurityOpen] = useState<boolean>(false);
   const [isProfileSettingsOpen, setIsProfileSettingsOpen] = useState<boolean>(false);
   const [updateChecking, setUpdateChecking] = useState(false);
+  const [updateOffer, setUpdateOffer] = useState<UpdateOffer | null>(null);
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const [userProfile, setUserProfileState] = useState<UserProfile>(() => loadProfile());
   const [isAddAccountOpen, setIsAddAccountOpen] = useState<boolean>(false);
   const [integratingAccount, setIntegratingAccount] = useState<CloudAccount | null>(null);
   const [isInspectorOpen, setIsInspectorOpen] = useState(true);
-  const [sidePanelMode, setSidePanelMode] = useState<'inspector' | 'terminal'>('inspector');
+  const [sidePanelMode, setSidePanelMode] = useState<'inspector' | 'queue' | 'terminal'>(() => (appPreferences.openTerminalAtLaunch ? 'terminal' : 'inspector'));
 
   const setUserProfile = (profile: UserProfile) => {
     setUserProfileState(profile);
@@ -145,16 +167,14 @@ export default function App() {
     useResizablePanel({ initial: 240, min: 180, max: 380, grow: 'right' });
   const { width: inspectorWidth, isResizing: isResizingInspector, startResize: startResizeInspector, reset: resetInspectorWidth } =
     useResizablePanel({ initial: 320, min: 260, max: () => Math.max(480, Math.round(window.innerWidth * 0.65)), grow: 'left' });
-  /** Columns view: equal-width columns hug content; inspector stays on the right (resizable). */
-  const columnsInspectorLayout =
-    viewMode === 'columns' && isInspectorOpen && sidePanelMode === 'inspector' && !editingDocumentFile;
 
   const { toast: toastNotification, showToast } = useToast();
 
   const { isVaultUnlocked, handleToggleVaultLock } = useVault(appPreferences, showToast);
   const {
-    sharedLibraries, setSharedLibraries, swarmStatus,
+    sharedLibraries, setSharedLibraries, swarmStatus, markSeeding,
     refreshSwarm, copyLibraryInvite, handleCreateLibrary, handleJoinIncomingLibrary,
+    refreshIncomingLibraries, isRefreshingIncoming,
   } = useP2pLibraries({
     userName: userProfile.name,
     files, selectedFileId, selectedLibraryId,
@@ -170,19 +190,83 @@ export default function App() {
     showToast,
   });
   const {
-    notifications, isNotificationOpen, setIsNotificationOpen,
+    notifications, isNotificationOpen, setIsNotificationOpen, addInviteNotification,
     handleAcceptLibraryNotification, handleDeclineLibraryNotification,
     handleMarkAllNotificationsRead, handleClearNotification,
-  } = useNotifications({ setSharedLibraries, setSelectedLibraryId, setSelectedFolderId, showToast });
+  } = useNotifications({
+    setSharedLibraries, setSelectedLibraryId, setSelectedFolderId, showToast,
+    joinLibrary: handleJoinIncomingLibrary,
+    existingLibraryIds: sharedLibraries.map(l => l.id),
+    openJoinDialog: invite => { setJoinInitialInvite(invite); setIsJoinIncomingOpen(true); },
+  });
 
-  // Apply theme + reduce-motion preferences to the document root
+  // An invite pasted into the app (outside a text field) shows up as a notification that offers to join.
+  const addInviteRef = useRef(addInviteNotification);
+  addInviteRef.current = addInviteNotification;
+  useEffect(() => {
+    const onPaste = (event: ClipboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('input, textarea, select, [contenteditable="true"], .xterm')) return;
+      const text = event.clipboardData?.getData('text/plain') ?? '';
+      if (!looksLikeInvite(text)) return;
+      event.preventDefault();
+      const result = addInviteRef.current(text);
+      if (result === 'added' || result === 'duplicate') setIsNotificationOpen(true);
+      if (result === 'already-joined') showToast('You already have that library.');
+      if (result === 'invalid') showToast('That does not look like a valid library invite.');
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, [setIsNotificationOpen, showToast]);
+
+  // Apply the theme to the document root
   useEffect(() => {
     applyTheme(appPreferences.theme);
   }, [appPreferences.theme]);
 
+  // "Allow connections from other networks": open or close the router port when the setting
+  // changes, and at launch when it was left on. Off at launch does nothing (no swarm, no router).
+  const remoteAccessApplied = useRef<boolean | null>(null);
   useEffect(() => {
-    document.documentElement.classList.toggle('reduce-motion', appPreferences.reduceMotion);
-  }, [appPreferences.reduceMotion]);
+    if (!isTauri()) return;
+    const want = appPreferences.p2pRemoteAccess;
+    const atLaunch = remoteAccessApplied.current === null;
+    if (remoteAccessApplied.current === want || (atLaunch && !want)) {
+      remoteAccessApplied.current = want;
+      return;
+    }
+    remoteAccessApplied.current = want;
+    p2pBridge
+      .setRemoteAccess(want)
+      .then(status => {
+        // At launch, only speak up when the router said no.
+        if (!atLaunch || (want && !status.publicAddress)) showToast(status.message);
+      })
+      .catch(err => showToast(`Could not change remote access: ${err instanceof Error ? err.message : String(err)}`));
+  }, [appPreferences.p2pRemoteAccess, showToast]);
+
+  // Relay server: connect out to it (and stop) when the address or key changes, and at launch when one is
+  // set. Nothing happens, and no swarm starts, while there is none.
+  const relayApplied = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isTauri()) return;
+    const address = appPreferences.p2pRelayAddress.trim();
+    const key = appPreferences.p2pRelayKey.trim();
+    const signature = `${address}\n${key}`;
+    const atLaunch = relayApplied.current === null;
+    if (relayApplied.current === signature || (atLaunch && !address)) {
+      relayApplied.current = signature;
+      return;
+    }
+    relayApplied.current = signature;
+    p2pBridge
+      .setRelay(address, key)
+      .then(status => {
+        if (!atLaunch || (address && !status.connected)) showToast(status.message);
+      })
+      .catch(err => showToast(`Could not use the relay server: ${err instanceof Error ? err.message : String(err)}`));
+  }, [appPreferences.p2pRelayAddress, appPreferences.p2pRelayKey, showToast]);
+
 
   // One-time notice when the desktop app has no ffmpeg (dev builds / incomplete release).
   useEffect(() => {
@@ -278,6 +362,11 @@ export default function App() {
       showToast('Updates are available in the desktop app');
       return;
     }
+    if (!updatesSupportedHere()) {
+      showToast('Automatic updates are available on macOS. On Linux, update through Flatpak or your package manager.');
+      return;
+    }
+    if (updateChecking) return;
     setUpdateChecking(true);
     try {
       const result = await checkForAppUpdate();
@@ -285,21 +374,32 @@ export default function App() {
         showToast(`You’re on the latest version (${result.currentVersion})`);
         return;
       }
-      const note = result.notes ? ` — ${result.notes.slice(0, 80)}` : '';
-      showToast(`Downloading update ${result.version}${note}…`);
-      await downloadAndInstallUpdate(result.update);
-      // relaunch is called inside downloadAndInstallUpdate
+      setUpdateOffer(result);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : String(err));
+      showToast(describeUpdateError(err));
     } finally {
       setUpdateChecking(false);
     }
   };
 
+  const toggleTerminalPanel = () => {
+    if (playingVideoFile && videoPlacement === 'panel') {
+      setPlayingVideoFile(null);
+      setSidePanelMode('terminal');
+      setIsInspectorOpen(true);
+    } else if (isInspectorOpen && sidePanelMode === 'terminal') {
+      setIsInspectorOpen(false);
+    } else {
+      setSidePanelMode('terminal');
+      setIsInspectorOpen(true);
+    }
+  };
+
+  // The header draws its own window buttons (WindowControls), so the native ones are hidden on macOS.
+  useWindowControlsHidden(isMacLike);
+
   useGlobalShortcuts({
-    canQuickLook: !!selectedFileId && !editingPhotoFile && !editingDocumentFile && !playingVideoFile && !playingAudioFile && !sharingLibrary,
     onToggleSidebar: () => setIsSidebarCollapsed(prev => !prev),
-    onToggleQuickLook: () => setIsQuickLookOpen(prev => !prev),
   });
 
   const uploadInputRef = useRef<HTMLInputElement>(null);
@@ -317,6 +417,25 @@ export default function App() {
       const action = (event as CustomEvent<FileMenuActionDetail>).detail?.action;
       if (action === 'new-folder') setIsNewFolderOpen(true);
       if (action === 'upload') uploadInputRef.current?.click();
+      if (action === 'join-library') {
+        setJoinInitialInvite('');
+        setIsJoinIncomingOpen(true);
+      }
+      if (action === 'screenshot' || action === 'screen-recording') {
+        const savedIn = (path: string) => {
+          const parts = path.split('/');
+          return `${parts[parts.length - 2] ?? ''}: ${parts[parts.length - 1]}`;
+        };
+        if (!isTauri()) {
+          showToast('Screenshots and screen recording are only available in the desktop app.');
+          return;
+        }
+        const capture = action === 'screenshot'
+          ? takeScreenshot().then(path => path && showToast(`Screenshot saved to ${savedIn(path)}`))
+          : toggleScreenRecording().then(({ recording, path }) =>
+              showToast(recording ? `Screen recording started. Press ${isMacLike ? '⇧⌘7' : 'Ctrl+Shift+7'} to stop.` : `Recording saved to ${savedIn(path ?? '')}`));
+        capture.catch(err => showToast(String(err)));
+      }
     };
     window.addEventListener(FILE_MENU_ACTION_EVENT, onFileMenu);
     return () => window.removeEventListener(FILE_MENU_ACTION_EVENT, onFileMenu);
@@ -350,9 +469,101 @@ export default function App() {
     markFileOpened(file.id);
   };
 
+  // Google Drive files signed in through rclone have no URL until they are downloaded. One download per
+  // file at a time: a double-click or a queue advance while it runs waits for the same download.
+  const remoteDownloads = useRef(new Map<string, Promise<FileItem | null>>());
+  const needsDownload = (file: FileItem) => !!file.remoteFetch && !file.url;
+  const downloadRemote = (file: FileItem): Promise<FileItem | null> => {
+    const running = remoteDownloads.current.get(file.id);
+    if (running) return running;
+    showToast(`Downloading “${file.name}”…`);
+    const job = downloadRemoteFile(file)
+      .then(got => {
+        const patch = { url: got.url, stagedPath: got.stagedPath, sizeBytes: got.sizeBytes || file.sizeBytes };
+        setFiles(prev => prev.map(f => (f.id === file.id ? { ...f, ...patch } : f)));
+        return { ...file, ...patch };
+      })
+      .catch(err => {
+        showToast(err instanceof Error ? err.message : String(err));
+        return null;
+      })
+      .finally(() => remoteDownloads.current.delete(file.id));
+    remoteDownloads.current.set(file.id, job);
+    return job;
+  };
+  /** Run `open` with the file, downloading it first when it has to be. */
+  const whenDownloaded = (file: FileItem, open: (ready: FileItem) => void) => {
+    if (!needsDownload(file)) {
+      open(file);
+      return;
+    }
+    void downloadRemote(file).then(ready => {
+      if (ready) open(ready);
+    });
+  };
+  /** Download a cloud file if needed, then copy it out with the save dialog. */
+  const saveRemoteFile = async (file: FileItem) => {
+    const ready = needsDownload(file) ? await downloadRemote(file) : file;
+    if (!ready) return;
+    if (!ready.stagedPath || !localFs.available()) {
+      showToast('Saving needs the Cloudbreak desktop app.');
+      return;
+    }
+    try {
+      const saved = await localFs.saveFromTemp(ready.stagedPath, ready.name);
+      if (saved) showToast(`Saved “${saved.name}”`);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  /**
+   * Save an edited PDF as a new file: beside the original when it is a local file (never overwriting it), otherwise
+   * through the native Save dialog, or the browser's download in the web preview.
+   */
+  const savePdfCopy = async (source: FileItem, bytes: Uint8Array, name: string): Promise<string | void> => {
+    const dir = source.localPath ? source.localPath.slice(0, source.localPath.lastIndexOf('/')) : '';
+    if (dir && localFs.available()) {
+      const info = await localFs.saveNewFile(dir, name, bytes);
+      const copy: FileItem = {
+        ...source,
+        id: `file-local-${info.path}`,
+        name: info.name,
+        localPath: info.path,
+        url: localFs.assetUrl(info.path),
+        thumbnailUrl: undefined,
+        sizeBytes: info.sizeBytes,
+        updatedAt: new Date(info.modifiedMs).toISOString(),
+        addedAt: new Date().toISOString(),
+        version: 1,
+        starred: false,
+        documentBody: undefined,
+      };
+      setFiles(prev => {
+        const at = prev.findIndex(f => f.id === source.id);
+        return at < 0 ? [copy, ...prev] : [...prev.slice(0, at + 1), copy, ...prev.slice(at + 1)];
+      });
+      return `Saved “${info.name}” next to the original`;
+    }
+    if (localFs.available()) {
+      const saved = await localFs.saveFromTemp(await stageTempBytes(bytes, 'pdf'), name);
+      return saved ? `Saved “${saved.name}”` : undefined;
+    }
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: 'application/pdf' }));
+    link.download = name;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 10_000);
+    return `Saved “${name}”`;
+  };
+
   /** Open HEIC/RAW/TIFF via a web-viewable raster when needed, then Photo Studio. */
   const openPhotoFile = async (file: FileItem) => {
     openFileSelection(file);
+    if (needsDownload(file)) {
+      whenDownloaded(file, downloaded => { void openPhotoFile(downloaded); });
+      return;
+    }
     const ready = await withNativeRaster(file);
     if (ready.thumbnailUrl && ready.thumbnailUrl !== file.thumbnailUrl) {
       setFiles(prev => prev.map(f => (f.id === file.id ? { ...f, thumbnailUrl: ready.thumbnailUrl, url: ready.url } : f)));
@@ -360,11 +571,45 @@ export default function App() {
     setEditingPhotoFile(ready);
   };
 
+  /** A photo chosen in the browser opens on its own, without the adjustments panel. */
+  const viewPhotoFile = (file: FileItem) => {
+    if (editingPhotoFile?.id !== file.id) setPhotoPanelOpen(false);
+    void openPhotoFile(file);
+  };
+
+  /** Edit Photo: shows the adjustments panel (opening the photo first if needed); pressing it again hides the panel. */
+  const toggleEditPhoto = (file: FileItem) => {
+    if (file.category !== 'photo') {
+      void openPhotoFile(file);
+      return;
+    }
+    if (editingPhotoFile?.id === file.id) {
+      setPhotoPanelOpen(open => !open);
+      return;
+    }
+    setPhotoPanelOpen(true);
+    void openPhotoFile(file);
+  };
+
+  /** Files with no viewer in the app (Office, Pages, unknown types) open in the system's default app. */
+  const openOtherFile = (file: FileItem) => {
+    openFileSelection(file);
+    if (file.localPath && previewBridge.available()) {
+      void previewBridge.openWithDefault(file.localPath).catch(() => showToast('Could not open this file'));
+    } else {
+      showToast('Cloudbreak has no viewer for this file type');
+    }
+  };
+
   /** Load local text; every extracted body is untrusted external content (strict boundaries). */
   const openDocumentFile = async (file: FileItem) => {
     openFileSelection(file);
+    if (needsDownload(file)) {
+      whenDownloaded(file, downloaded => { void openDocumentFile(downloaded); });
+      return;
+    }
     if (isSystemPreviewDocument(file)) {
-      setIsQuickLookOpen(true);
+      openOtherFile(file);
       return;
     }
 
@@ -530,6 +775,21 @@ export default function App() {
       }
     : null;
 
+  /** Files with a "seeding" badge when they are in an active outgoing library. */
+  const browserFiles = useMemo(() => markSeeding(filteredFiles), [markSeeding, filteredFiles]);
+
+  /** Open the new-library dialog for the picked files and folders. */
+  const openLibraryShare = (selection: LibrarySelection) => {
+    if (!selection.files.length && !selection.folders.length) return;
+    const draft = buildLibraryDraft(selection, files, folders);
+    if (!draft.sources.length) {
+      showToast('There are no files in that selection to share');
+      return;
+    }
+    setLibraryDraft(draft);
+    setIsNewLibraryOpen(true);
+  };
+
   // Video navigation for playback controls
   const videoFiles = useMemo(
     () => filteredFiles.filter(f => f.category === 'video'),
@@ -537,22 +797,187 @@ export default function App() {
   );
   const videoIndex = playingVideoFile ? videoFiles.findIndex(f => f.id === playingVideoFile.id) : -1;
   const canPreviousMedia = videoIndex > 0;
-  const canNextMedia = videoIndex >= 0 && videoIndex < videoFiles.length - 1;
+  const videoInPanel = !!playingVideoFile && videoPlacement === 'panel';
+  const showTerminal = !videoInPanel && isInspectorOpen && sidePanelMode === 'terminal';
+  const [terminalMounted, setTerminalMounted] = useState(false);
+  useEffect(() => {
+    if (showTerminal) setTerminalMounted(true);
+  }, [showTerminal]);
   const playVideoAt = (index: number) => {
     const next = videoFiles[index];
     if (!next) return;
     setSelectedFileId(next.id);
     setPlayingVideoFile(next);
   };
+
+  // The "play next" queue holds songs and videos the user dragged into the Playing Next panel, in the order they
+  // were added. The first one plays right after whatever is playing, ahead of the normal list order.
+  const audioQueue = useMemo(() => files.filter(f => f.category === 'audio'), [files]);
+  const [playNextIds, setPlayNextIds] = useState<string[]>([]);
+  const queuedItems = useMemo(
+    () => playNextIds
+      .map(id => files.find(f => f.id === id))
+      .filter((f): f is FileItem => (
+        !!f && (f.category === 'audio' || f.category === 'video')
+        && f.id !== playingAudioFile?.id && f.id !== playingVideoFile?.id
+      )),
+    [playNextIds, files, playingAudioFile, playingVideoFile],
+  );
+  const queuedFirst = queuedItems[0] ?? null;
+  // Queued songs also go first in the audio player's own list (its Up Next popover).
+  const audioPlayOrder = useMemo(() => {
+    const queued = queuedItems.filter(f => f.category === 'audio');
+    if (!queued.length) return audioQueue;
+    const queuedSet = new Set(queued.map(f => f.id));
+    const rest = audioQueue.filter(f => !queuedSet.has(f.id));
+    const at = playingAudioFile ? rest.findIndex(f => f.id === playingAudioFile.id) : -1;
+    return at < 0 ? [...rest, ...queued] : [...rest.slice(0, at + 1), ...queued, ...rest.slice(at + 1)];
+  }, [audioQueue, queuedItems, playingAudioFile]);
+
+  // A queued item leaves the queue as soon as it starts playing.
+  useEffect(() => {
+    const ids = [playingAudioFile?.id, playingVideoFile?.id].filter((x): x is string => !!x);
+    if (ids.length) setPlayNextIds(prev => (prev.some(id => ids.includes(id)) ? prev.filter(id => !ids.includes(id)) : prev));
+  }, [playingAudioFile?.id, playingVideoFile?.id]);
+
+  // What the Playing Next panel lists: the queued items first, then the normal order (audio wraps around like the
+  // audio player; video follows the folder order).
+  const playingNextItems = useMemo(() => {
+    const natural = playingAudioFile
+      ? upcomingAfter(audioQueue, playingAudioFile.id, true)
+      : playingVideoFile
+        ? upcomingAfter(videoFiles, playingVideoFile.id, false)
+        : [];
+    const queuedSet = new Set(queuedItems.map(f => f.id));
+    return [...queuedItems, ...natural.filter(f => !queuedSet.has(f.id))];
+  }, [playingAudioFile, playingVideoFile, audioQueue, videoFiles, queuedItems]);
+
+  /**
+   * Opening a song or video queues the other songs or videos in its folder: the ones after it first, then the ones
+   * before it, so autoplay carries on through the folder. They go behind anything the user already queued.
+   */
+  const queueFolderMedia = (file: FileItem) => {
+    const viewFiles = file.category === 'video' ? videoFiles : filteredFiles.filter(f => f.category === 'audio');
+    const sameFolder = (f: FileItem) => (
+      f.category === file.category && f.id !== file.id
+      && f.accountId === file.accountId && f.sourceId === file.sourceId
+      && (file.folderId ? f.folderId === file.folderId : !f.folderId && f.folderPath === file.folderPath)
+    );
+    const viewOrder = new Map(viewFiles.map((f, i) => [f.id, i]));
+    const at = viewOrder.get(file.id) ?? -1;
+    const mates = files.filter(sameFolder).sort((a, b) => (
+      (viewOrder.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (viewOrder.get(b.id) ?? Number.MAX_SAFE_INTEGER)
+      || a.name.localeCompare(b.name, undefined, { numeric: true })
+    ));
+    const after = at >= 0 ? mates.filter(f => (viewOrder.get(f.id) ?? -1) > at) : [];
+    const rest = mates.filter(f => !after.includes(f));
+    const ids = [...after, ...rest].slice(0, 200).map(f => f.id);
+    if (!ids.length) return;
+    setPlayNextIds(prev => [...prev, ...ids.filter(id => !prev.includes(id))]);
+  };
+
+  /**
+   * Start a video. It plays in the right-hand panel; trim and convert open the full player window.
+   * A video that follows another one stays wherever the first was playing.
+   */
+  const startVideo = (file: FileItem, tab?: 'player' | 'trim' | 'convert', opts?: { queueFolder?: boolean; placement?: 'panel' | 'window' }) => {
+    if (needsDownload(file)) {
+      whenDownloaded(file, downloaded => startVideo(downloaded, tab, opts));
+      return;
+    }
+    if (opts?.queueFolder) queueFolderMedia(file);
+    setPlayingAudioFile(null);
+    setVideoStartAt(0);
+    setVideoPlayerInitialTab(tab ?? 'player');
+    setVideoPlacement(prev => opts?.placement ?? (tab && tab !== 'player' ? 'window' : playingVideoFile ? prev : 'panel'));
+    setPlayingVideoFile(file);
+  };
+
+  /**
+   * A video chosen in the file browser. A double-click plays it in the side panel; a single click
+   * opens the full player in the browser's center area. P2P videos are decrypted first.
+   */
+  const openVideoFromBrowser = async (file: FileItem, placement: 'panel' | 'window') => {
+    openFileSelection(file);
+    if (file.tags.includes('P2P') && file.encryption?.algorithm === 'AES-256-GCM') {
+      const lib = sharedLibraries.find(l => l.fileIds.includes(file.id));
+      if (lib) {
+        try {
+          showToast('Decrypting P2P stream…');
+          const blob = await p2pBridge.assembleFileBlob(lib.id, file.id, file.mimeType);
+          const url = URL.createObjectURL(blob);
+          startVideo({ ...file, url }, undefined, { queueFolder: true, placement });
+          return;
+        } catch (err) {
+          showToast(err instanceof Error ? err.message : String(err));
+        }
+      }
+    }
+    startVideo(file, undefined, { queueFolder: true, placement });
+  };
+
+  /** Show a right-panel mode from the header switch. A video in the side panel gives way, as the toolbar does. */
+  const showRightPanel = (mode: RightPanelMode) => {
+    if (videoInPanel) setPlayingVideoFile(null);
+    setSidePanelMode(mode);
+    setIsInspectorOpen(true);
+  };
+
+  /** Start a song or video, closing the other player. */
+  const playQueueItem = (file: FileItem) => {
+    openFileSelection(file);
+    // A video waits for its download inside startVideo; a song waits here.
+    if (file.category !== 'video' && needsDownload(file)) {
+      whenDownloaded(file, playQueueItem);
+      return;
+    }
+    if (file.category === 'video') {
+      startVideo(file);
+      return;
+    }
+    setPlayingVideoFile(null);
+    setPlayingAudioFile(file);
+  };
+
+  /** Thumbnails dropped on the Playing Next panel: queue the songs and videos to play next (or start them if nothing is playing). */
+  const queueFilesToPlayNext = (ids: string[]) => {
+    const dropped = ids
+      .map(id => files.find(f => f.id === id))
+      .filter((f): f is FileItem => !!f);
+    const isMedia = (f: FileItem) => f.category === 'audio' || f.category === 'video';
+    const media = dropped.filter(f => isMedia(f) && f.id !== playingAudioFile?.id && f.id !== playingVideoFile?.id);
+    const skipped = dropped.filter(f => !isMedia(f)).length;
+    if (!media.length) {
+      showToast(dropped.length ? 'Only songs and videos can be queued. Drag media into the panel.' : 'Nothing to queue');
+      return;
+    }
+    const skippedNote = skipped ? ` (${skipped} that aren’t songs or videos left out)` : '';
+    if (!playingAudioFile && !playingVideoFile) {
+      const [first, ...rest] = media;
+      playQueueItem(first);
+      if (rest.length) setPlayNextIds(prev => [...prev, ...rest.map(f => f.id).filter(id => !prev.includes(id))]);
+      showToast(`Playing “${first.name}”${rest.length ? ` · ${rest.length} more queued` : ''}${skippedNote}`);
+      return;
+    }
+    setPlayNextIds(prev => [...prev, ...media.map(f => f.id).filter(id => !prev.includes(id))]);
+    showToast(media.length === 1 ? `“${media[0].name}” plays next${skippedNote}` : `${media.length} items queued to play next${skippedNote}`);
+  };
+
+  // The video player's next button and end-of-video autoplay: a queued item first, else the next video in the list.
+  const canNextMedia = !!queuedFirst || (videoIndex >= 0 && videoIndex < videoFiles.length - 1);
+  const nextVideoFile = queuedFirst ?? (videoIndex >= 0 ? videoFiles[videoIndex + 1] ?? null : null);
   const onPreviousMedia = () => playVideoAt(videoIndex - 1);
-  const onNextMedia = () => playVideoAt(videoIndex + 1);
+  const onNextMedia = () => {
+    if (queuedFirst) playQueueItem(queuedFirst);
+    else playVideoAt(videoIndex + 1);
+  };
 
   const {
-    isDraggingOver,
     handleSavePhotoVersion, handleSaveDocument, handleSaveTrimmedVideo, handleToggleEncrypt, handleDeleteFile,
     handleRenameFile, handleDuplicateFiles, handleCopyFileNames, handlePasteFiles,
-    handleMoveFile, handleCompressFile, clipboardFileIds, handleToggleTag,
-    handleBatchRestore, handleBatchDelete, handleUploadFiles, handleUnzipFile, handleDragOver, handleDragLeave, handleDrop,
+    handleMoveFile, handleCompressFile, handleCompressFiles, clipboardFileIds, handleToggleTag,
+    handleBatchRestore, handleBatchDelete, handleUploadFiles, handleUnzipFile, handleDragOver, handleDrop,
+    pendingDrop, confirmPendingDrop, cancelPendingDrop,
   } = useFileActions({
     files,
     setFiles,
@@ -580,6 +1005,9 @@ export default function App() {
     : selectedAccountId === 'vault'
     ? 'Private Vault'
     : activeAccount?.name || 'Cloud Bucket';
+
+  // A Local Files folder (not a library, drive or server) shows its sidebar icon in the toolbar title.
+  const activeFolderName = !activeSourceName && !selectedLibrary ? selectedFolder?.name : undefined;
 
   const navLocation = useMemo<NavLocation>(() => ({
     accountId: selectedAccountId,
@@ -729,11 +1157,43 @@ export default function App() {
     }));
   }, []);
 
+  // The photo and video editors open in the browser's center pane. FileBrowser stays mounted under them,
+  // so the audio bar and whatever is playing in it keep going.
+  const centerEditor = editingPhotoFile ? (
+    <PhotoEditorModal
+      key={editingPhotoFile.id}
+      file={editingPhotoFile}
+      isOpen={true}
+      embedded
+      showAdjustments={photoPanelOpen}
+      onClose={() => { setEditingPhotoFile(null); setPhotoPanelOpen(false); }}
+      onSaveAsVersion={handleSavePhotoVersion}
+      photoNav={editorPhotoNav}
+    />
+  ) : playingVideoFile && videoPlacement === 'window' ? (
+    <VideoPlayerModal
+      key={playingVideoFile.id}
+      file={playingVideoFile}
+      isOpen={true}
+      embedded
+      onClose={() => setPlayingVideoFile(null)}
+      onSaveTrimmedVideo={handleSaveTrimmedVideo}
+      initialTab={videoPlayerInitialTab}
+      startAt={videoStartAt}
+      accounts={accounts}
+      folders={folders}
+      canPreviousMedia={canPreviousMedia}
+      canNextMedia={canNextMedia}
+      nextMedia={nextVideoFile}
+      onPreviousMedia={onPreviousMedia}
+      onNextMedia={onNextMedia}
+    />
+  ) : null;
+
   return (
     <div 
       className="relative flex flex-col h-screen w-screen overflow-hidden select-none"
       onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       style={{
         background: 'radial-gradient(circle at 15% 15%, #3b3c40 0%, #242426 45%, #171719 100%)',
@@ -745,9 +1205,17 @@ export default function App() {
       <div className="absolute bottom-1/4 right-1/4 w-[30rem] h-[30rem] rounded-full bg-white/[0.035] blur-[140px] pointer-events-none" />
       <div className="absolute top-2/3 left-1/3 w-80 h-80 rounded-full bg-white/[0.03] blur-[100px] pointer-events-none" />
 
-      {isDraggingOver && <DropOverlay />}
 
       {toastNotification && <Toast message={toastNotification} />}
+
+      {pendingDrop && (
+        <UploadConfirmModal
+          files={pendingDrop}
+          vaultUnlocked={isVaultUnlocked}
+          onConfirm={confirmPendingDrop}
+          onCancel={cancelPendingDrop}
+        />
+      )}
 
       <input
         ref={uploadInputRef}
@@ -755,7 +1223,9 @@ export default function App() {
         multiple
         className="hidden"
         onChange={e => {
-          if (e.target.files?.length) handleUploadFiles(e.target.files);
+          // Copy the list first: clearing the input below empties the live FileList before the async upload reads it.
+          const picked = Array.from(e.target.files ?? []);
+          if (picked.length) void handleUploadFiles(picked);
           e.target.value = '';
         }}
       />
@@ -790,15 +1260,15 @@ export default function App() {
             onSortKeyChange={setSortKey}
             sortDirection={sortDirection}
             onSortDirectionChange={setSortDirection}
-            onQuickLook={() => setIsQuickLookOpen(true)}
             hasSelectedFile={selectedFile !== null}
             onShare={() => {
-              const firstLib = sharedLibraries[0];
-              if (firstLib) setSharingLibrary(firstLib);
+              if (selectedFile) openLibraryShare({ files: [selectedFile], folders: [] });
+              else showToast('Select a file or folder to share');
             }}
             onUploadFiles={handleUploadFiles}
             onOpenAddAccount={() => setIsAddAccountOpen(true)}
             activePathTitle={activePathTitle}
+            activeFolderName={activeFolderName}
             activeAccount={activeAccount}
             canGoBack={canGoBack}
             canGoForward={canGoForward}
@@ -806,21 +1276,12 @@ export default function App() {
             onGoForward={goForward}
             isSidebarCollapsed={isSidebarCollapsed}
             onToggleSidebar={() => setIsSidebarCollapsed(prev => !prev)}
-            isInspectorOpen={isInspectorOpen}
-            sidePanelMode={sidePanelMode}
-            onToggleInspector={() => {
-              if (isInspectorOpen && sidePanelMode === 'inspector') {
+            isRightPanelOpen={isInspectorOpen || videoInPanel}
+            onToggleRightPanel={() => {
+              if (isInspectorOpen || videoInPanel) {
                 setIsInspectorOpen(false);
+                if (videoInPanel) setPlayingVideoFile(null);
               } else {
-                setSidePanelMode('inspector');
-                setIsInspectorOpen(true);
-              }
-            }}
-            onShowTerminal={() => {
-              if (isInspectorOpen && sidePanelMode === 'terminal') {
-                setIsInspectorOpen(false);
-              } else {
-                setSidePanelMode('terminal');
                 setIsInspectorOpen(true);
               }
             }}
@@ -869,8 +1330,10 @@ export default function App() {
               onRescanLocalFolders={handleRescanLocalFolders}
               isRescanningLocal={isRescanningLocal}
               onAddNewIncomingLibrary={() => setIsJoinIncomingOpen(true)}
-              onAddNewOutgoingLibrary={() => setIsNewLibraryOpen(true)}
-              onAddNewSharedLibrary={() => setIsNewLibraryOpen(true)}
+              onRefreshIncoming={() => { void refreshIncomingLibraries(); }}
+              isRefreshingIncoming={isRefreshingIncoming}
+              onAddNewOutgoingLibrary={() => { setLibraryDraft(null); setIsNewLibraryOpen(true); }}
+              onAddNewSharedLibrary={() => { setLibraryDraft(null); setIsNewLibraryOpen(true); }}
               onAddNetworkServer={() => setIsConnectServerOpen(true)}
               customFavorites={customFavorites}
               networkServers={networkServers}
@@ -895,7 +1358,7 @@ export default function App() {
                 }`}
                 title="Drag to resize sidebar (Double-click to reset)"
               >
-                <div className="w-0.5 h-6 mx-auto mt-2 rounded bg-white/20 group-hover:bg-sky-300 transition-colors" />
+                <div className="w-0.5 h-6 mx-auto mt-2 rounded bg-transparent" />
               </div>
             )}
 
@@ -911,10 +1374,15 @@ export default function App() {
                   handleSaveDocument(updated);
                   setEditingDocumentFile(updated);
                 }}
+                onSavePdfCopy={(bytes, name) => savePdfCopy(editingDocumentFile, bytes, name)}
+                onNotify={showToast}
               />
             ) : (
               <FileBrowser
-                files={filteredFiles}
+                centerOverride={centerEditor}
+                files={browserFiles}
+                terminalOpen={isInspectorOpen && sidePanelMode === 'terminal'}
+                onShowTerminal={toggleTerminalPanel}
                 selectedSourceId={selectedSourceId}
                 accounts={accounts}
                 selectedAccountId={selectedAccountId}
@@ -924,39 +1392,21 @@ export default function App() {
                 selectedFileId={selectedFileId}
                 viewMode={viewMode}
                 playingAudioFile={playingAudioFile}
-                audioPlaylist={files.filter(f => f.category === 'audio')}
+                audioPlaylist={audioPlayOrder}
+                audioQueuedNext={queuedFirst}
                 onSelectFile={file => openFileSelection(file)}
-                onEditPhoto={file => { void openPhotoFile(file); }}
+                onEditPhoto={viewPhotoFile}
                 onOpenDocument={file => { void openDocumentFile(file); }}
-                onOpenVideo={async file => {
-                  openFileSelection(file);
-                  setPlayingAudioFile(null);
-                  if (file.tags.includes('P2P') && file.encryption?.algorithm === 'AES-256-GCM') {
-                    const lib = sharedLibraries.find(l => l.fileIds.includes(file.id));
-                    if (lib) {
-                      try {
-                        showToast('Decrypting P2P stream…');
-                        const blob = await p2pBridge.assembleFileBlob(lib.id, file.id, file.mimeType);
-                        const url = URL.createObjectURL(blob);
-                        setPlayingVideoFile({ ...file, url });
-                        return;
-                      } catch (err) {
-                        showToast(err instanceof Error ? err.message : String(err));
-                      }
-                    }
-                  }
-                  setPlayingVideoFile(file);
-                }}
+                onOpenVideo={file => { void openVideoFromBrowser(file, 'panel'); }}
+                onOpenVideoWindow={file => { void openVideoFromBrowser(file, 'window'); }}
                 onOpenAudio={file => {
-                  setPlayingVideoFile(null);
-                  openFileSelection(file);
-                  setPlayingAudioFile(file);
+                  queueFolderMedia(file);
+                  playQueueItem(file);
                 }}
+                onAudioTrackChange={playQueueItem}
                 onCloseAudio={() => setPlayingAudioFile(null)}
-                onShareFile={file => {
-                  const firstLib = sharedLibraries[0];
-                  if (firstLib) setSharingLibrary(firstLib);
-                }}
+                onShareFile={file => openLibraryShare({ files: [file], folders: [] })}
+                onShareAsLibrary={openLibraryShare}
                 onToggleEncrypt={handleToggleEncrypt}
                 onDeleteFile={handleDeleteFile}
                 onBatchRestore={handleBatchRestore}
@@ -966,7 +1416,9 @@ export default function App() {
                 onCopyFiles={handleCopyFileNames}
                 onToggleTag={handleToggleTag}
                 onUnzipFile={file => { void handleUnzipFile(file); }}
-                onOpenQuickLook={() => setIsQuickLookOpen(true)}
+                onCompressFiles={items => { void handleCompressFiles(items); }}
+                onAddToPlayingNext={items => queueFilesToPlayNext(items.map(item => item.id))}
+                onOpenOther={openOtherFile}
                 folders={folders}
                 onSelectFolder={id => {
                   if (selectedCategory === 'files' || selectedCategory === 'photo' || selectedCategory === 'video') {
@@ -979,26 +1431,18 @@ export default function App() {
                 onCopyFolders={foldersToCopy => { void handleCopyFolders(foldersToCopy); }}
                 onDeleteFolders={foldersToDelete => { void handleDeleteFolders(foldersToDelete); }}
                 onToggleFolderTag={handleToggleFolderTag}
-                onShareFolder={() => {
-                  const firstLib = sharedLibraries[0];
-                  if (firstLib) setSharingLibrary(firstLib);
-                  else showToast('Create a P2P library to share');
-                }}
+                onShareFolder={folder => openLibraryShare({ files: [], folders: [folder] })}
                 swarmStatus={swarmStatus}
                 onCopyLibraryInvite={() => { void copyLibraryInvite(); }}
                 onRefreshSwarm={() => { void refreshSwarm(); }}
-                hugContent={columnsInspectorLayout}
                 systemSearchActive={searchQuery.trim().length >= 2 && systemSearchBridge.available()}
                 systemSearching={systemSearching}
                 systemHitCount={systemResults.length}
               />
             )}
 
-            {/* Spacer so Columns view keeps equal-width panes while the inspector sits on the right. */}
-            {columnsInspectorLayout && <div className="flex-1 min-w-4" aria-hidden="true" />}
-
             {/* Right panel stays visible on every file screen (browser + document editor) */}
-            {isInspectorOpen && (
+            {(isInspectorOpen || videoInPanel) && (
               <div
                 onMouseDown={startResizeInspector}
                 onDoubleClick={resetInspectorWidth}
@@ -1007,12 +1451,38 @@ export default function App() {
                 }`}
                 title="Drag to resize side panel (Double-click to reset)"
               >
-                <div className="w-0.5 h-6 mx-auto mt-2 rounded bg-white/20 group-hover:bg-sky-300 transition-colors" />
+                <div className="w-0.5 h-6 mx-auto mt-2 rounded bg-transparent" />
               </div>
             )}
 
-            {isInspectorOpen && sidePanelMode === 'terminal' && (
+            {videoInPanel && playingVideoFile && (
+              <VideoSidePanel
+                width={inspectorWidth}
+                file={playingVideoFile}
+                nextMedia={nextVideoFile}
+                upcoming={playingNextItems}
+                queuedIds={playNextIds}
+                canPrevious={canPreviousMedia}
+                canNext={canNextMedia}
+                onPrevious={onPreviousMedia}
+                onNext={onNextMedia}
+                onClose={() => setPlayingVideoFile(null)}
+                onExpand={at => {
+                  setVideoStartAt(at);
+                  setVideoPlacement('window');
+                }}
+                onPlay={playQueueItem}
+                onOpenFull={file => { void openVideoFromBrowser(file, 'window'); }}
+                onQueueDrop={queueFilesToPlayNext}
+                onRemoveQueued={file => setPlayNextIds(prev => prev.filter(id => id !== file.id))}
+              />
+            )}
+
+            {/* Once opened, the terminal stays mounted (hidden) so its shells keep running while other panels show. */}
+            {terminalMounted && (
               <SystemTerminal
+                visible={showTerminal}
+                restoreSessions={appPreferences.restoreTerminalSessions}
                 width={inspectorWidth}
                 context={{
                   cwdLabel: activePathTitle || 'All Files',
@@ -1022,33 +1492,45 @@ export default function App() {
                   fileNames: filteredFiles.map(f => sanitizeContextLabel(f.name)),
                   libraryNames: sharedLibraries.map(l => sanitizeContextLabel(l.name)),
                 }}
+                onClose={() => setIsInspectorOpen(false)}
               />
             )}
 
-            {isInspectorOpen && sidePanelMode === 'inspector' && (
+            {!videoInPanel && isInspectorOpen && sidePanelMode === 'queue' && (
+              <PlayingNextPanel
+                width={inspectorWidth}
+                nowPlaying={playingAudioFile ?? playingVideoFile}
+                upcoming={playingNextItems}
+                onPlay={playQueueItem}
+                onOpenFull={file => { void openVideoFromBrowser(file, 'window'); }}
+                queuedIds={playNextIds}
+                onQueueDrop={queueFilesToPlayNext}
+                onRemoveQueued={file => setPlayNextIds(prev => prev.filter(id => id !== file.id))}
+                onClose={() => setIsInspectorOpen(false)}
+                modeSwitch={<PanelModeSwitch mode="queue" onChange={showRightPanel} />}
+              />
+            )}
+
+            {!videoInPanel && isInspectorOpen && sidePanelMode === 'inspector' && (
               <FileInspector
                 file={selectedFile ?? editingDocumentFile}
+                pauseVideo={!!playingVideoFile && videoPlacement === 'window'}
+                modeSwitch={<PanelModeSwitch mode="inspector" onChange={showRightPanel} />}
                 photoNav={photoNav}
                 accounts={accounts}
                 folders={folders}
                 isOpen={true}
-                onEditPhoto={file => { void openPhotoFile(file); }}
+                onEditPhoto={toggleEditPhoto}
                 onOpenDocument={file => { void openDocumentFile(file); }}
                 onOpenVideo={(file, tab) => {
                   openFileSelection(file);
-                  setPlayingAudioFile(null);
-                  setPlayingVideoFile(file);
-                  if (tab) setVideoPlayerInitialTab(tab);
+                  startVideo(file, tab, { queueFolder: !tab || tab === 'player' });
                 }}
-                onOpenAudio={file => {
-                  setPlayingVideoFile(null);
-                  openFileSelection(file);
-                  setPlayingAudioFile(file);
-                }}
-                onShare={file => {
-                  const firstLib = sharedLibraries[0];
-                  if (firstLib) setSharingLibrary(firstLib);
-                }}
+                onOpenVideoWindow={file => { void openVideoFromBrowser(file, 'window'); }}
+                onOpenAudio={playQueueItem}
+                onShare={file => openLibraryShare({ files: [file], folders: [] })}
+                onDownloadRemote={file => { void saveRemoteFile(file); }}
+                onClose={() => setIsInspectorOpen(false)}
                 onToggleEncrypt={handleToggleEncrypt}
                 onDeleteFile={handleDeleteFile}
                 onUnzipFile={file => { void handleUnzipFile(file); }}
@@ -1085,29 +1567,13 @@ export default function App() {
         />
       )}
 
+      {updateOffer && <UpdateModal offer={updateOffer} onClose={() => setUpdateOffer(null)} />}
+
       <AppModals
-        selectedFile={selectedFile}
-        photoNav={photoNav}
-        editorPhotoNav={editorPhotoNav}
         accounts={accounts}
         folders={folders}
-        isQuickLookOpen={isQuickLookOpen}
-        setIsQuickLookOpen={setIsQuickLookOpen}
-        setEditingPhotoFile={setEditingPhotoFile}
-        onEditPhoto={file => { void openPhotoFile(file); }}
-        setPlayingVideoFile={setPlayingVideoFile}
         sharedLibraries={sharedLibraries}
         setSharingLibrary={setSharingLibrary}
-        editingPhotoFile={editingPhotoFile}
-        onOpenDocument={file => { void openDocumentFile(file); }}
-        handleSavePhotoVersion={handleSavePhotoVersion}
-        playingVideoFile={playingVideoFile}
-        handleSaveTrimmedVideo={handleSaveTrimmedVideo}
-        videoPlayerInitialTab={videoPlayerInitialTab}
-        canPreviousMedia={canPreviousMedia}
-        canNextMedia={canNextMedia}
-        onPreviousMedia={onPreviousMedia}
-        onNextMedia={onNextMedia}
         sharingLibrary={sharingLibrary}
         setSharedLibraries={setSharedLibraries}
         selectedLibraryId={selectedLibraryId}
@@ -1142,9 +1608,12 @@ export default function App() {
         handleCreateFolder={handleCreateFolder}
         isNewLibraryOpen={isNewLibraryOpen}
         setIsNewLibraryOpen={setIsNewLibraryOpen}
+        libraryDraft={libraryDraft}
+        setLibraryDraft={setLibraryDraft}
         handleCreateLibrary={handleCreateLibrary}
         isJoinIncomingOpen={isJoinIncomingOpen}
         setIsJoinIncomingOpen={setIsJoinIncomingOpen}
+        joinInitialInvite={joinInitialInvite}
         handleJoinIncomingLibrary={handleJoinIncomingLibrary}
         isAddFavoriteOpen={isAddFavoriteOpen}
         setIsAddFavoriteOpen={setIsAddFavoriteOpen}

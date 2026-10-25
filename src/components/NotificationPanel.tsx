@@ -198,7 +198,41 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
                       {notification.message}
                     </p>
 
-                    {isInvite && lib && (
+                    {isInvite && notification.invite && (
+                      <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                        {isPending && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => onAcceptLibrary(notification.id)}
+                              className="ml-auto h-6 px-2 rounded-md text-[10px] font-semibold bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-1"
+                              title="Join this library with its invite"
+                            >
+                              <FolderDown className="w-3 h-3" />
+                              Join
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onDeclineLibrary(notification.id)}
+                              className="h-6 px-2 rounded-md text-[10px] font-medium bg-neutral-900 border border-neutral-700 text-neutral-300 hover:text-red-400 hover:border-red-500/30"
+                            >
+                              Decline
+                            </button>
+                          </>
+                        )}
+                        {isAccepted && (
+                          <span className="ml-auto flex items-center gap-1 text-[10px] text-emerald-400">
+                            <Check className="w-3 h-3" />
+                            Joined. It is in Shared By Others.
+                          </span>
+                        )}
+                        {isDeclined && (
+                          <span className="ml-auto text-[10px] text-neutral-500">Declined</span>
+                        )}
+                      </div>
+                    )}
+
+                    {isInvite && lib && !notification.invite && (
                       <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
                         <span className="text-[10px] text-neutral-200 font-medium truncate max-w-[9rem]">
                           {lib.name}

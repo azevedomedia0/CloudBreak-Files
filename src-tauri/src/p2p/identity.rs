@@ -55,8 +55,23 @@ impl PeerIdentity {
         }
     }
 
+    /// Change the name peers see for this device and save it.
+    pub fn rename(&mut self, display_name: &str, path: &Path) -> Result<(), IdentityError> {
+        self.display_name = display_name.to_string();
+        self.save(path)
+    }
+
     pub fn verifying_key(&self) -> VerifyingKey {
         self.signing.verifying_key()
+    }
+
+    /// A secret only this identity can compute, separate for each `label`, so one key never serves two
+    /// jobs. (The relay uses it to prove a host is who it says without a second file to keep.)
+    pub fn derive_secret(&self, label: &str) -> [u8; 32] {
+        let hk = hkdf::Hkdf::<Sha256>::new(Some(b"cloudbreak-derived-secret-v1"), &self.signing.to_bytes());
+        let mut out = [0u8; 32];
+        hk.expand(label.as_bytes(), &mut out).expect("32 bytes is a valid HKDF output length");
+        out
     }
 
     pub fn sign(&self, message: &[u8]) -> String {

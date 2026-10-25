@@ -13,22 +13,22 @@ interface Guide {
 
 const GUIDES: Record<TokenProvider, Guide> = {
   'Google Drive': {
-    title: 'Get a Google Drive access token',
+    title: 'Advanced: paste a Google Drive access token',
     steps: [
-      'Open Google OAuth 2.0 Playground (link below).',
-      'Click the gear icon → check “Use your own OAuth credentials” (optional) or use the default playground client.',
-      'In step 1, find Drive API v3 and select https://www.googleapis.com/auth/drive.readonly (or drive for full access).',
-      'Click Authorize APIs, sign in with the Google account you want to mount, and allow access.',
-      'In step 2, click Exchange authorization code for tokens.',
-      'Copy the Access token and paste it above. Tokens from the Playground expire in about an hour.',
+      'Prefer Sign in with Google in this dialog — it uses official OAuth with a refresh token.',
+      'Only use a pasted token for debugging. Open Google OAuth 2.0 Playground (link below).',
+      'In step 1, select Drive API v3 → https://www.googleapis.com/auth/drive (or drive.readonly).',
+      'Authorize, then Exchange authorization code for tokens.',
+      'Copy the Access token and paste it above. Playground tokens expire in about an hour and will not auto-refresh.',
     ],
     href: 'https://developers.google.com/oauthplayground/',
     linkLabel: 'Open Google OAuth Playground',
-    tip: 'For longer-lived access, create an OAuth client in Google Cloud Console and use a refresh-token flow; this app currently accepts a bearer access token.',
+    tip: 'Official Sign in with Google needs a Desktop OAuth client ID (VITE_GOOGLE_OAUTH_CLIENT_ID). See docs/google-drive-oauth.md.',
   },
   Dropbox: {
-    title: 'Get a Dropbox access token',
+    title: 'Advanced: paste a Dropbox access token',
     steps: [
+      'Prefer Sign in with Dropbox in this dialog — it uses official OAuth with a refresh token.',
       'Open the Dropbox App Console and sign in.',
       'Create an app (Scoped access → Full Dropbox) or open an existing one.',
       'Under Permissions, enable files.metadata.read and files.content.read (add write scopes if you need uploads).',
@@ -38,11 +38,12 @@ const GUIDES: Record<TokenProvider, Guide> = {
     ],
     href: 'https://www.dropbox.com/developers/apps',
     linkLabel: 'Open Dropbox App Console',
-    tip: 'Generated tokens last until you revoke them in the App Console.',
+    tip: 'Generated tokens do not refresh. Official sign-in needs VITE_DROPBOX_OAUTH_CLIENT_ID (docs/cloud-oauth.md).',
   },
   OneDrive: {
-    title: 'Get a OneDrive (Microsoft Graph) access token',
+    title: 'Advanced: paste a OneDrive (Microsoft Graph) access token',
     steps: [
+      'Prefer Sign in with Microsoft in this dialog — it uses official OAuth with a refresh token.',
       'Open Microsoft Graph Explorer and sign in with your Microsoft account.',
       'Click your profile / modify permissions and consent to Files.Read (or Files.ReadWrite).',
       'Run any simple call such as GET https://graph.microsoft.com/v1.0/me/drive to confirm access.',
@@ -51,7 +52,7 @@ const GUIDES: Record<TokenProvider, Guide> = {
     ],
     href: 'https://developer.microsoft.com/en-us/graph/graph-explorer',
     linkLabel: 'Open Microsoft Graph Explorer',
-    tip: 'For production apps, register an app in Microsoft Entra ID and use OAuth with offline_access for refresh tokens. This panel accepts a Graph bearer token.',
+    tip: 'Official sign-in needs VITE_MICROSOFT_OAUTH_CLIENT_ID (docs/cloud-oauth.md). Pasted Graph tokens do not refresh.',
   },
 };
 

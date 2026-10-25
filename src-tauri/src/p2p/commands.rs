@@ -10,6 +10,8 @@ use crate::p2p::keys::{
 };
 use crate::p2p::library_store::{LibraryIndex, LibraryRecord};
 use crate::p2p::manifest::{LibraryManifest, ManifestFileEntry};
+use crate::p2p::port_mapping::{self, Mapping, RemoteAccessStatus};
+use crate::p2p::relay::{self, RelayEndpoint, RelayStatus};
 use crate::p2p::swarm::{SwarmHandle, SwarmStatus};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
@@ -22,6 +24,31 @@ pub struct P2pState {
     pub identity: Mutex<Option<PeerIdentity>>,
     pub swarm: Mutex<Option<Arc<SwarmHandle>>>,
     pub app_data: Mutex<Option<PathBuf>>,
+    /// Router port mapping for "Allow connections from other networks" (off unless turned on).
+    pub remote: Mutex<RemoteAccess>,
+    /// Turning remote access on or off talks to the router; one change at a time.
+    remote_change: tokio::sync::Mutex<()>,
+    /// This Mac's registration with a relay server, for peers on other networks when no port can be opened.
+    pub relay: Mutex<RelayRuntime>,
+    relay_change: tokio::sync::Mutex<()>,
+}
+
+pub struct RelayRuntime {
+    task: Option<tokio::task::JoinHandle<()>>,
+    status: Arc<parking_lot::RwLock<RelayStatus>>,
+}
+
+impl Default for RelayRuntime {
+    fn default() -> Self {
+        Self { task: None, status: Arc::new(parking_lot::RwLock::new(RelayStatus::off())) }
+    }
+}
+
+#[derive(Default)]
+pub struct RemoteAccess {
+    mapping: Option<Mapping>,
+    status: RemoteAccessStatus,
+    renewer: Option<tauri::async_runtime::JoinHandle<()>>,
 }
 
 impl Default for P2pState {
@@ -30,6 +57,10 @@ impl Default for P2pState {
             identity: Mutex::new(None),
             swarm: Mutex::new(None),
             app_data: Mutex::new(None),
+            remote: Mutex::new(RemoteAccess::default()),
+            remote_change: tokio::sync::Mutex::new(()),
+            relay: Mutex::new(RelayRuntime::default()),
+            relay_change: tokio::sync::Mutex::new(()),
         }
     }
 }
@@ -207,6 +238,8 @@ pub async fn p2p_create_library(
         wrap_with_passphrase(&root_key, "aetherlib-default-invite-key").map_err(|e| e.to_string())?
     };
 
+    let access_token = new_access_token();
+
     let expires_days = req.expires_in_days.unwrap_or(30);
     let expires_at_ts = if expires_days <= 0 {
         0 // never (invite verify treats 0 as no expiry)
@@ -236,6 +269,7 @@ pub async fn p2p_create_library(
         epoch: 1,
         manifest_nonce_hex: blob.nonce_hex.clone(),
         private_mode: true,
+        access_token: access_token.clone(),
     }
     .sign_with(&identity);
     let invite_str = invite.encode().map_err(|e| e.to_string())?;
@@ -267,6 +301,7 @@ pub async fn p2p_create_library(
         private_mode: true,
         expires_at: expires_at_iso,
         allow_downloads,
+        access_token: Some(access_token.clone()),
     };
 
     let mut index = LibraryIndex::load(&data).map_err(|e| e.to_string())?;
@@ -274,7 +309,7 @@ pub async fn p2p_create_library(
     index.save(&data).map_err(|e| e.to_string())?;
 
     // Private mode: seed locally only — peers must dial via the invite, never DHT announce.
-    swarm.seed_library(blob.root_cid.clone(), library_id.clone());
+    swarm.seed_library(blob.root_cid.clone(), library_id.clone(), access_token);
     tray::refresh_tray_status(&app);
 
     Ok(CreateLibraryResult {
@@ -309,6 +344,10 @@ pub async fn p2p_accept_invite(
     let identity = ensure_identity(&app, &state, "Cloudbreak User")?;
     let data = app_data_dir(&app)?;
     let invite = LibraryInvite::decode(&req.invite).map_err(|e| e.to_string())?;
+    if invite.access_token.is_empty() {
+        return Err(crate::p2p::invite::InviteError::Outdated.to_string());
+    }
+    let token = invite.access_token.clone();
 
     let root_key = if let Some(pass) = req.invite_passphrase.as_ref().filter(|s| !s.is_empty()) {
         unwrap_with_passphrase(&invite.wrapped_library_key, pass).map_err(|e| e.to_string())?
@@ -322,7 +361,7 @@ pub async fn p2p_accept_invite(
 
     let swarm = ensure_swarm(&app, &state).await?;
     // Private mode: dial only multiaddrs embedded in the signed invite.
-    swarm.dial_invite(invite.root_cid.clone(), invite.seeder_addrs.clone());
+    swarm.dial_invite(invite.root_cid.clone(), invite.seeder_addrs.clone(), token.clone());
 
     let dir = library_dir(&data, &invite.library_id);
     let store = ChunkStore::open(dir.clone()).map_err(|e| e.to_string())?;
@@ -335,17 +374,10 @@ pub async fn p2p_accept_invite(
                 invite.root_cid.clone(),
                 vec![invite.root_cid.clone()],
                 invite.library_id.clone(),
+                token.clone(),
             )
             .await
-            .unwrap_or(0);
-        // Also try copying from inbox
-        let inbox = data.join("chunk_inbox").join(&invite.root_cid);
-        if inbox.exists() && !store.has(&invite.root_cid) {
-            if let Ok(bytes) = std::fs::read(&inbox) {
-                let _ = store.put_raw(&bytes);
-                fetched += 1;
-            }
-        }
+            .map_err(|e| format!("Could not reach the library's seeder: {e}"))?;
     }
 
     let ct = store
@@ -369,7 +401,7 @@ pub async fn p2p_accept_invite(
     }
     if !want.is_empty() {
         fetched += swarm
-            .fetch_missing(invite.root_cid.clone(), want, invite.library_id.clone())
+            .fetch_missing(invite.root_cid.clone(), want, invite.library_id.clone(), token.clone())
             .await
             .unwrap_or(0);
     }
@@ -409,6 +441,7 @@ pub async fn p2p_accept_invite(
             None
         },
         allow_downloads: true,
+        access_token: Some(token.clone()),
     };
 
     let mut index = LibraryIndex::load(&data).map_err(|e| e.to_string())?;
@@ -416,7 +449,7 @@ pub async fn p2p_accept_invite(
     index.save(&data).map_err(|e| e.to_string())?;
 
     // Serve chunks we have to invite-dialed peers only (no announce / DHT).
-    swarm.seed_library(invite.root_cid.clone(), invite.library_id);
+    swarm.seed_library(invite.root_cid.clone(), invite.library_id, token);
 
     Ok(AcceptInviteResult {
         record,
@@ -424,21 +457,58 @@ pub async fn p2p_accept_invite(
     })
 }
 
+/// A fresh access token: 32 random bytes, hex. The listener serves a library only to peers that
+/// present its token, and only the library's invite carries it.
+fn new_access_token() -> String {
+    use rand::RngCore;
+    let mut bytes = [0u8; 32];
+    rand::rngs::OsRng.fill_bytes(&mut bytes);
+    hex::encode(bytes)
+}
+
+/// The library's invite with this Mac's addresses as of now. The saved copy carries the addresses
+/// from when it was made, which are stale if Wi-Fi was not up yet or the network changed since.
 #[tauri::command]
-pub fn p2p_export_invite(
+pub async fn p2p_export_invite(
     app: AppHandle,
     state: State<'_, P2pState>,
     library_id: String,
 ) -> Result<String, String> {
     let data = app_data_dir(&app)?;
-    let _ = ensure_identity(&app, &state, "Cloudbreak User")?;
+    let identity = ensure_identity(&app, &state, "Cloudbreak User")?;
     let index = LibraryIndex::load(&data).map_err(|e| e.to_string())?;
     let rec = index
         .get(&library_id)
         .ok_or_else(|| "library not found".to_string())?;
-    rec.last_invite
+    let saved = rec
+        .last_invite
         .clone()
-        .ok_or_else(|| "no invite for this library".to_string())
+        .ok_or_else(|| "no invite for this library".to_string())?;
+    // Only this Mac's own invites can be refreshed: the addresses are signed, and a library received
+    // from someone else carries its sender's signature and addresses.
+    let mut own = LibraryInvite::decode_unverified(&saved).map_err(|e| e.to_string())?;
+    if own.seeder_peer_id != identity.peer_id {
+        return Ok(saved);
+    }
+    let swarm = ensure_swarm(&app, &state).await?;
+    // Libraries made before access tokens get one now; it is saved and the listener learns it.
+    let token = match rec.access_token.clone() {
+        Some(token) => token,
+        None => {
+            let token = new_access_token();
+            let mut index = LibraryIndex::load(&data).map_err(|e| e.to_string())?;
+            if let Some(r) = index.get_mut(&library_id) {
+                r.access_token = Some(token.clone());
+            }
+            index.save(&data).map_err(|e| e.to_string())?;
+            swarm.seed_library(rec.root_cid.clone(), library_id.clone(), token.clone());
+            token
+        }
+    };
+    own.access_token = token;
+    own.with_seeder_addrs(swarm.listen_addrs(), &identity)
+        .encode()
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -446,6 +516,120 @@ pub fn p2p_list_libraries(app: AppHandle) -> Result<Vec<LibraryRecord>, String> 
     let data = app_data_dir(&app)?;
     let index = LibraryIndex::load(&data).map_err(|e| e.to_string())?;
     Ok(index.libraries)
+}
+
+/// How one incoming library fared in a refresh.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct IncomingRefresh {
+    pub library_id: String,
+    pub name: String,
+    /// `synced` (everything is here), `partial` (some files arrived, some are still missing), `offline`
+    /// (the sender could not be reached and files are missing) or `expired` (its invite has lapsed).
+    pub status: String,
+    pub missing_chunks: usize,
+    pub fetched_chunks: usize,
+    pub message: Option<String>,
+}
+
+/// The chunks a manifest lists that this Mac does not have yet.
+fn missing_chunks(manifest: &LibraryManifest, store: &ChunkStore) -> Vec<String> {
+    manifest
+        .files
+        .iter()
+        .flat_map(|f| f.chunks.iter())
+        .map(|c| c.cid.clone())
+        .filter(|cid| !store.has(cid))
+        .collect()
+}
+
+fn refresh_status(missing_after: usize, fetched: usize) -> &'static str {
+    if missing_after == 0 {
+        "synced"
+    } else if fetched > 0 {
+        "partial"
+    } else {
+        "offline"
+    }
+}
+
+/// "Refresh" for Shared By Others: for each library whose files are not all here, dial its sender again
+/// with the invite that was used to join and fetch what is missing. A library that is complete costs no
+/// network traffic. This cannot find libraries nobody has sent an invite for: there is no server or
+/// announce to ask (invite-dial only), so a new library still arrives as an invite.
+#[tauri::command]
+pub async fn p2p_refresh_incoming(
+    app: AppHandle,
+    state: State<'_, P2pState>,
+) -> Result<Vec<IncomingRefresh>, String> {
+    let data = app_data_dir(&app)?;
+    let index = LibraryIndex::load(&data).map_err(|e| e.to_string())?;
+    let incoming: Vec<LibraryRecord> = index.libraries.into_iter().filter(|l| l.direction == "incoming").collect();
+    let mut results = Vec::new();
+    let mut statuses: Vec<(String, &'static str)> = Vec::new();
+
+    for rec in incoming {
+        let dir = library_dir(&data, &rec.library_id);
+        let report = |status: &str, missing: usize, fetched: usize, message: Option<String>| IncomingRefresh {
+            library_id: rec.library_id.clone(),
+            name: rec.name.clone(),
+            status: status.into(),
+            missing_chunks: missing,
+            fetched_chunks: fetched,
+            message,
+        };
+        let Ok(store) = ChunkStore::open(dir.clone()) else {
+            results.push(report("offline", 0, 0, Some("The library's folder could not be opened.".into())));
+            continue;
+        };
+        let Ok((manifest, _)) = LibraryManifest::load_local(&dir) else {
+            results.push(report("offline", 0, 0, Some("The library's file list could not be read.".into())));
+            continue;
+        };
+        let missing = missing_chunks(&manifest, &store);
+        if missing.is_empty() {
+            statuses.push((rec.library_id.clone(), "synced"));
+            results.push(report("synced", 0, 0, None));
+            continue;
+        }
+        // The saved invite says where the sender is and holds the token. It was checked when it was
+        // accepted; a lapsed one is not used again, as its sender meant it to end.
+        let Some(invite) = rec.last_invite.as_deref().and_then(|text| LibraryInvite::decode_unverified(text).ok()) else {
+            results.push(report("offline", missing.len(), 0, Some("The invite this library came from was not kept.".into())));
+            continue;
+        };
+        if invite.expires_at > 0 && chrono::Utc::now().timestamp() > invite.expires_at {
+            results.push(report("expired", missing.len(), 0, Some("The invite for this library has expired.".into())));
+            continue;
+        }
+        let swarm = ensure_swarm(&app, &state).await?;
+        swarm.dial_invite(invite.root_cid.clone(), invite.seeder_addrs.clone(), invite.access_token.clone());
+        let outcome = swarm
+            .fetch_missing(invite.root_cid.clone(), missing.clone(), invite.library_id.clone(), invite.access_token.clone())
+            .await;
+        let (fetched, message) = match outcome {
+            Ok(n) => (n, None),
+            Err(e) => (0, Some(e)),
+        };
+        let still = missing_chunks(&manifest, &store).len();
+        let status = refresh_status(still, fetched);
+        statuses.push((rec.library_id.clone(), status));
+        results.push(report(status, still, fetched, message));
+        // What arrived can be served on to the next person who is invited.
+        swarm.seed_library(invite.root_cid.clone(), invite.library_id.clone(), invite.access_token.clone());
+    }
+
+    // Remember how each library stands, so its status survives a restart.
+    if !statuses.is_empty() {
+        let mut index = LibraryIndex::load(&data).map_err(|e| e.to_string())?;
+        for (id, status) in statuses {
+            if let Some(r) = index.get_mut(&id) {
+                r.seeding_status = Some(status.into());
+            }
+        }
+        index.save(&data).map_err(|e| e.to_string())?;
+    }
+    Ok(results)
 }
 
 #[tauri::command]
@@ -461,8 +645,22 @@ pub async fn p2p_start_seeding(
         .ok_or_else(|| "library not found".to_string())?
         .clone();
     let swarm = ensure_swarm(&app, &state).await?;
-    // Private mode: listen + seed only; peers find us via invite seederAddrs.
-    swarm.seed_library(rec.root_cid.clone(), library_id);
+    // Private mode: listen + seed only; peers find us via invite seederAddrs, presenting its token.
+    // A library from before tokens gets one (copy its invite again to hand it out); until then
+    // no peer can be served, which is the safe way round.
+    let token = match rec.access_token.clone() {
+        Some(token) => token,
+        None => {
+            let token = new_access_token();
+            let mut index = LibraryIndex::load(&data).map_err(|e| e.to_string())?;
+            if let Some(r) = index.get_mut(&library_id) {
+                r.access_token = Some(token.clone());
+            }
+            index.save(&data).map_err(|e| e.to_string())?;
+            token
+        }
+    };
+    swarm.seed_library(rec.root_cid.clone(), library_id, token);
     tray::refresh_tray_status(&app);
     Ok(swarm.status())
 }
@@ -663,4 +861,274 @@ async fn ensure_swarm(app: &AppHandle, state: &P2pState) -> Result<Arc<SwarmHand
     let arc = Arc::new(handle);
     *state.swarm.lock() = Some(arc.clone());
     Ok(arc)
+}
+
+/// Turn "Allow connections from other networks" on or off. On asks the router to forward the
+/// listener's port and, when the router's address is public, puts that address into invites copied
+/// from then on. Off (and quitting) takes the mapping back down.
+#[tauri::command]
+pub async fn p2p_set_remote_access(
+    app: AppHandle,
+    state: State<'_, P2pState>,
+    enabled: bool,
+) -> Result<RemoteAccessStatus, String> {
+    let _one_at_a_time = state.remote_change.lock().await;
+    let swarm = ensure_swarm(&app, &state).await?;
+    let old = {
+        let mut remote = state.remote.lock();
+        if let Some(task) = remote.renewer.take() {
+            task.abort();
+        }
+        remote.mapping.take()
+    };
+    swarm.set_public_addr(None);
+    if let Some(mapping) = old {
+        port_mapping::unmap(&mapping).await;
+    }
+    if !enabled {
+        let status = RemoteAccessStatus {
+            enabled: false,
+            message: "Only devices on your own network can connect.".into(),
+            ..Default::default()
+        };
+        state.remote.lock().status = status.clone();
+        return Ok(status);
+    }
+
+    let result = port_mapping::map(swarm.port()).await;
+    let status = port_mapping::describe(&result);
+    let usable = match result {
+        Ok(m) if status.public_address.is_some() => Some(m),
+        // Forwarding a port nobody outside can reach only adds exposure: take it back down.
+        Ok(m) => {
+            port_mapping::unmap(&m).await;
+            None
+        }
+        Err(_) => None,
+    };
+    let mut remote = state.remote.lock();
+    remote.status = status.clone();
+    if let Some(mapping) = usable {
+        swarm.set_public_addr(Some((mapping.external_ip, mapping.external_port)));
+        remote.mapping = Some(mapping);
+        remote.renewer = Some(tauri::async_runtime::spawn(renew_mapping(app.clone(), swarm.clone())));
+    }
+    Ok(status)
+}
+
+/// Register this Mac with a relay server (or stop, when `address` is empty), so invites carry a `relay://`
+/// address that works from any network. The Mac only connects out; no router setting is needed. `host_key` is
+/// the relay operator's password for who may host, if they set one.
+#[tauri::command]
+pub async fn p2p_set_relay(
+    app: AppHandle,
+    state: State<'_, P2pState>,
+    address: Option<String>,
+    host_key: Option<String>,
+) -> Result<RelayStatus, String> {
+    let _one_at_a_time = state.relay_change.lock().await;
+    let wanted = address.as_deref().map(str::trim).filter(|a| !a.is_empty());
+    // Check the address before touching anything that is running.
+    let endpoint = match wanted {
+        Some(text) => Some(RelayEndpoint::parse(text)?),
+        None => None,
+    };
+    let swarm = ensure_swarm(&app, &state).await?;
+    let identity = ensure_identity(&app, &state, "Cloudbreak User")?;
+    let status = {
+        let mut runtime = state.relay.lock();
+        if let Some(task) = runtime.task.take() {
+            task.abort();
+        }
+        runtime.status.clone()
+    };
+    swarm.set_relay_addr(None);
+    let Some(endpoint) = endpoint else {
+        *status.write() = RelayStatus::off();
+        return Ok(RelayStatus::off());
+    };
+    let task = relay::start_hosting(endpoint, host_key.filter(|k| !k.trim().is_empty()), &identity, swarm, status.clone());
+    state.relay.lock().task = Some(task);
+    // Give it a moment, so the first answer says whether the relay took this Mac.
+    for _ in 0..60 {
+        let current = status.read().clone();
+        if current.connected || current.message.starts_with("Not connected") {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    let current = status.read().clone();
+    Ok(current)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsernameCheck {
+    /// The name as it will be stored (lower case).
+    pub name: String,
+    /// True when nobody else holds it (it may already be this device's).
+    pub available: bool,
+    pub mine: bool,
+}
+
+fn relay_endpoint(address: Option<String>) -> Result<RelayEndpoint, String> {
+    match address.as_deref().map(str::trim).filter(|a| !a.is_empty()) {
+        Some(text) => RelayEndpoint::parse(text),
+        None => Err("Set a relay server in Preferences → Network first: usernames are checked there.".into()),
+    }
+}
+
+/// Ask the relay whether a username is free.
+#[tauri::command]
+pub async fn p2p_username_check(
+    app: AppHandle,
+    state: State<'_, P2pState>,
+    address: Option<String>,
+    name: String,
+) -> Result<UsernameCheck, String> {
+    let normalized = relay::normalize_username(&name)?;
+    let endpoint = relay_endpoint(address)?;
+    let identity = ensure_identity(&app, &state, "Cloudbreak User")?;
+    let id = relay::relay_id(&relay::host_secret(&identity));
+    let check = relay::check_name(&endpoint, &normalized, &id).await?;
+    Ok(UsernameCheck {
+        name: normalized,
+        available: check != relay::NameCheck::Taken,
+        mine: check == relay::NameCheck::Mine,
+    })
+}
+
+/// Claim a username on the relay and make it the name peers see for this device's shared folders.
+#[tauri::command]
+pub async fn p2p_username_claim(
+    app: AppHandle,
+    state: State<'_, P2pState>,
+    address: Option<String>,
+    host_key: Option<String>,
+    name: String,
+) -> Result<String, String> {
+    let normalized = relay::normalize_username(&name)?;
+    let endpoint = relay_endpoint(address)?;
+    let identity = ensure_identity(&app, &state, "Cloudbreak User")?;
+    let secret = relay::host_secret(&identity);
+    let id = relay::relay_id(&secret);
+    relay::claim_name(&endpoint, &host_key.filter(|k| !k.trim().is_empty()), &secret, &id, &normalized).await?;
+    let data = app_data_dir(&app)?;
+    let mut guard = state.identity.lock();
+    if let Some(current) = guard.as_mut() {
+        current.rename(&normalized, &identity_path(&data)).map_err(|e| e.to_string())?;
+    }
+    Ok(normalized)
+}
+
+#[tauri::command]
+pub fn p2p_relay_status(state: State<'_, P2pState>) -> RelayStatus {
+    let status = state.relay.lock().status.clone();
+    let current = status.read().clone();
+    current
+}
+
+#[tauri::command]
+pub fn p2p_remote_access_status(state: State<'_, P2pState>) -> RemoteAccessStatus {
+    state.remote.lock().status.clone()
+}
+
+/// Keep the mapping alive at half its lease. The router may hand out a new address (a new lease
+/// from the provider); invites copied afterwards carry the new one.
+async fn renew_mapping(app: AppHandle, swarm: Arc<SwarmHandle>) {
+    loop {
+        tokio::time::sleep(std::time::Duration::from_secs(u64::from(port_mapping::LEASE_SECS / 2))).await;
+        let state = app.state::<P2pState>();
+        let Some(current) = state.remote.lock().mapping else { return };
+        let result = port_mapping::renew(&current).await;
+        let status = port_mapping::describe(&result);
+        let mut remote = state.remote.lock();
+        match result {
+            Ok(m) if status.public_address.is_some() => {
+                swarm.set_public_addr(Some((m.external_ip, m.external_port)));
+                remote.mapping = Some(m);
+            }
+            // Keep trying: a router that restarted answers again a few minutes later.
+            _ => swarm.set_public_addr(None),
+        }
+        remote.status = status;
+    }
+}
+
+/// On quit: remove the router mapping so the port does not stay open while the app is closed.
+pub fn release_remote_access(app: &AppHandle) {
+    let state = app.state::<P2pState>();
+    // Leaving the relay needs no goodbye: the connection closes and the relay forgets this Mac.
+    if let Some(task) = state.relay.lock().task.take() {
+        task.abort();
+    }
+    let mapping = {
+        let mut remote = state.remote.lock();
+        if let Some(task) = remote.renewer.take() {
+            task.abort();
+        }
+        remote.mapping.take()
+    };
+    if let Some(mapping) = mapping {
+        tauri::async_runtime::block_on(async {
+            let _ = tokio::time::timeout(std::time::Duration::from_secs(2), port_mapping::unmap(&mapping)).await;
+        });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::p2p::chunk_store::EncryptedChunkMeta;
+    use crate::p2p::manifest::ManifestFileEntry;
+
+    fn manifest_with(chunks: &[&str]) -> LibraryManifest {
+        LibraryManifest {
+            version: 1,
+            library_id: "lib".into(),
+            name: "Test".into(),
+            description: String::new(),
+            epoch: 1,
+            owner_peer_id: "peer".into(),
+            created_at: "2026-01-01T00:00:00Z".into(),
+            files: vec![ManifestFileEntry {
+                file_id: "f1".into(),
+                name: "a.bin".into(),
+                mime_type: "application/octet-stream".into(),
+                size_bytes: 0,
+                plaintext_sha256: String::new(),
+                chunks: chunks
+                    .iter()
+                    .enumerate()
+                    .map(|(i, cid)| EncryptedChunkMeta {
+                        index: i as u32,
+                        cid: (*cid).into(),
+                        nonce_hex: String::new(),
+                        size: 0,
+                    })
+                    .collect(),
+            }],
+        }
+    }
+
+    #[test]
+    fn a_refresh_asks_only_for_the_chunks_that_are_missing() {
+        let dir = std::env::temp_dir().join(format!("cb-refresh-{}", uuid::Uuid::new_v4()));
+        let store = ChunkStore::open(dir.clone()).unwrap();
+        let have = store.put_raw(b"already here").unwrap();
+        let want = "ab".repeat(32);
+        let manifest = manifest_with(&[&have, &want]);
+        assert_eq!(missing_chunks(&manifest, &store), vec![want.clone()]);
+        store.put_raw(b"already here").unwrap();
+        assert!(missing_chunks(&manifest_with(&[&have]), &store).is_empty(), "complete: nothing to fetch");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_refresh_status_says_how_far_it_got() {
+        assert_eq!(refresh_status(0, 0), "synced");
+        assert_eq!(refresh_status(0, 5), "synced");
+        assert_eq!(refresh_status(2, 3), "partial");
+        assert_eq!(refresh_status(4, 0), "offline");
+    }
 }

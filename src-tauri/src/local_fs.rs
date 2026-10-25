@@ -606,10 +606,47 @@ pub async fn local_pick_save_folder(app: AppHandle, state: State<'_, LocalRoots>
     add_root(&app, &state, path, false).map(Some)
 }
 
+/// Folder picker for choosing a folder to share. The folder is allowed for this session only, so sharing it does
+/// not add it to Local Files.
+#[tauri::command]
+pub async fn local_pick_share_folder(app: AppHandle, state: State<'_, LocalRoots>) -> Result<Option<LocalFolder>, String> {
+    let dialog_app = app.clone();
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        dialog_app
+            .dialog()
+            .file()
+            .set_title("Choose a folder to share")
+            .blocking_pick_folder()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    let Some(picked) = picked else { return Ok(None) };
+    let path = picked.into_path().map_err(|e| e.to_string())?;
+    add_root(&app, &state, path, false).map(Some)
+}
+
 /// Allow a folder path (e.g. a mounted volume) for browsing without using the picker.
 #[tauri::command]
 pub fn local_remember_folder(path: String, app: AppHandle, state: State<'_, LocalRoots>) -> Result<LocalFolder, String> {
     add_root(&app, &state, PathBuf::from(path), true)
+}
+
+/// Allow a mounted removable drive for browsing until the app quits. It is not saved, so the drive
+/// never comes back in Local Files at the next launch.
+#[tauri::command]
+pub fn local_allow_session_folder(path: String, app: AppHandle, state: State<'_, LocalRoots>) -> Result<LocalFolder, String> {
+    let root = fs::canonicalize(&path).map_err(|e| format!("Could not open that folder: {e}"))?;
+    if !root.is_dir() {
+        return Err("That is not a folder".into());
+    }
+    app.asset_protocol_scope()
+        .allow_directory(&root, true)
+        .map_err(|e| format!("Could not allow that folder: {e}"))?;
+    let mut guard = state.session_only.lock().map_err(|_| "Local folder list is unavailable".to_string())?;
+    if !guard.contains(&root) {
+        guard.push(root.clone());
+    }
+    Ok(folder_of(&root))
 }
 
 /// Folders picked in earlier sessions that still exist.
@@ -634,7 +671,10 @@ fn standard_folder_candidates() -> Vec<(String, PathBuf)> {
             out.push((name.to_string(), home.join(relative)));
         }
     }
-    out.push(("Applications".to_string(), PathBuf::from("/Applications")));
+    // /Applications is a macOS folder; other systems do not get an Applications entry.
+    if cfg!(target_os = "macos") {
+        out.push(("Applications".to_string(), PathBuf::from("/Applications")));
+    }
     out
 }
 
@@ -759,6 +799,27 @@ pub fn local_write_file(path: String, content_base64: String, state: State<'_, L
     info_for(&resolved)
 }
 
+/// Save `bytes` as a new file in `dir`. A taken name becomes `name 2.ext`; an existing file is never replaced.
+fn save_new_in(dir: &Path, name: &str, bytes: &[u8]) -> Result<PathBuf, String> {
+    let dest = unique_destination(dir, valid_file_name(name)?);
+    write_atomic(&dest, bytes)?;
+    Ok(dest)
+}
+
+#[tauri::command]
+pub fn local_save_new_file(dir: String, name: String, content_base64: String, state: State<'_, LocalRoots>) -> Result<LocalFileInfo, String> {
+    let dir = resolve_in_roots(&snapshot(&state), Path::new(&dir))?;
+    if !dir.is_dir() {
+        return Err("That is not a folder".into());
+    }
+    let bytes = B64.decode(content_base64.as_bytes()).map_err(|_| "Invalid file data".to_string())?;
+    if bytes.len() as u64 > MAX_READ_BYTES {
+        return Err(format!("The archive is larger than {} MB", MAX_READ_BYTES / (1024 * 1024)));
+    }
+    let dest = save_new_in(&dir, &name, &bytes)?;
+    info_for(&dest)
+}
+
 #[tauri::command]
 pub fn local_write_text(path: String, text: String, state: State<'_, LocalRoots>) -> Result<LocalFileInfo, String> {
     let resolved = resolve_in_roots(&snapshot(&state), Path::new(&path))?;
@@ -836,6 +897,13 @@ pub async fn local_save_from_temp(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn only_macos_offers_an_applications_folder() {
+        let names: Vec<String> = standard_folder_candidates().into_iter().map(|(n, _)| n).collect();
+        assert_eq!(names.iter().any(|n| n == "Applications"), cfg!(target_os = "macos"), "{names:?}");
+        assert!(names.iter().any(|n| n == "Desktop"), "the other standard folders stay");
+    }
+
     use super::*;
 
     struct Tmp(PathBuf);
@@ -1137,6 +1205,17 @@ mod tests {
         save_roots(&file, &[keep.clone(), gone.clone()]).unwrap();
         fs::remove_dir_all(&gone).unwrap();
         assert_eq!(load_roots(&file), vec![keep]);
+    }
+
+    #[test]
+    fn save_new_never_overwrites_an_existing_file() {
+        let tmp = Tmp::new();
+        let first = save_new_in(&tmp.0, "a.zip", b"one").unwrap();
+        let second = save_new_in(&tmp.0, "a.zip", b"two").unwrap();
+        assert_ne!(first, second);
+        assert!(second.ends_with("a 2.zip"));
+        assert_eq!(fs::read(&first).unwrap(), b"one");
+        assert!(save_new_in(&tmp.0, "../escape.zip", b"x").is_err());
     }
 
     #[test]

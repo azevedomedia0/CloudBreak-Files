@@ -1,5 +1,5 @@
 import React from 'react';
-import { RefreshCw, Check, Sparkles, HardDrive, Monitor, FolderOpen } from '@/src/icons';
+import { RefreshCw, Check, HardDrive, Monitor, FolderOpen } from '@/src/icons';
 import { VideoTrimIcon } from './VideoTrimIcon';
 import { VideoConvertOptions, FileItem, CloudAccount, CloudProviderId, FolderItem, isAudioConvertFormat } from '../../types';
 import { formatTimecode } from '../../utils/format';
@@ -12,7 +12,11 @@ export interface SaveDestination {
 
 export interface ConvertPanelProps {
   file: FileItem;
+  /** False when the ffmpeg in use cannot encode H.264: MP4 and MKV are then not offered. */
+  h264Available?: boolean;
   duration: number;
+  /** Height of the source in pixels, when known: sizes above it are not offered. */
+  sourceHeight?: number;
   convertOptions: VideoConvertOptions;
   setConvertOptions: React.Dispatch<React.SetStateAction<VideoConvertOptions>>;
   isTranscoding: boolean;
@@ -42,7 +46,7 @@ const fieldClass = 'w-full bg-neutral-950 border border-neutral-800 rounded-lg p
 const labelClass = 'text-[11px] font-semibold text-neutral-400 uppercase tracking-wider block mb-2';
 
 export const ConvertPanel: React.FC<ConvertPanelProps> = ({
-  file, duration, convertOptions, setConvertOptions, isTranscoding, transcodeProgress, transcodeComplete, startTranscode,
+  file, h264Available = true, duration, sourceHeight, convertOptions, setConvertOptions, isTranscoding, transcodeProgress, transcodeComplete, startTranscode,
   accounts, folders, destination, setDestination, baseName, defaultBaseName, setBaseName, isTrimmed, onEditTrim,
   savedLocalName, saveError, localFolderName, onBrowseLocal, handleSaveConvertedToCloud, handleSaveToComputer,
 }) => {
@@ -98,13 +102,13 @@ export const ConvertPanel: React.FC<ConvertPanelProps> = ({
           {[
             { id: 'mp4', label: 'MP4 (H.264 / AAC)', desc: 'Universal Cinema' },
             { id: 'mkv', label: 'MKV (H.264)', desc: 'Archive' },
+            { id: 'mov', label: 'MOV (H.264 / AAC)', desc: 'QuickTime' },
             { id: 'avi', label: 'AVI (MPEG-4)', desc: 'Legacy Playback' },
             { id: 'gif', label: 'Animated GIF', desc: 'Loop Preview' },
             { id: 'mp3', label: 'MP3 / Audio Only', desc: 'Audio Track' },
-            { id: 'aac', label: 'AAC', desc: 'Compact Audio' },
             { id: 'wav', label: 'WAV', desc: 'Uncompressed Audio' },
             { id: 'flac', label: 'FLAC', desc: 'Lossless Audio' },
-          ].map(fmt => (
+          ].filter(fmt => h264Available || (fmt.id !== 'mp4' && fmt.id !== 'mkv' && fmt.id !== 'mov')).map(fmt => (
             <button
               key={fmt.id}
               onClick={() => setConvertOptions(prev => ({ ...prev, format: fmt.id as VideoConvertOptions['format'] }))}
@@ -127,36 +131,46 @@ export const ConvertPanel: React.FC<ConvertPanelProps> = ({
           <label className={labelClass}>Resolution</label>
           <div className="grid grid-cols-2 gap-2">
             {[
-              { id: '720p', label: '720p (HD)' },
-              { id: '1080p', label: '1080p (FHD)' },
-              { id: '2k', label: '2K (1440p)' },
-              { id: '4k', label: '4K UHD (2160p)' },
-            ].map(res => (
-              <button
-                key={res.id}
-                onClick={() => setConvertOptions(prev => ({ ...prev, resolution: res.id as VideoConvertOptions['resolution'] }))}
-                className={`py-2 px-2 text-xs rounded-lg border text-center transition-colors ${
-                  convertOptions.resolution === res.id
-                    ? 'bg-amber-500/15 border-amber-500/50 text-amber-200 font-medium'
-                    : 'bg-neutral-850 border-neutral-800 text-neutral-400 hover:text-neutral-200'
-                }`}
-              >
-                {res.label}
-              </button>
-            ))}
+              { id: 'original', label: convertOptions.format === 'gif' ? 'Default (480 px wide)' : sourceHeight ? `Same as video (${sourceHeight}p)` : 'Same as video', height: 0, wide: true },
+              { id: '720p', label: '720p (HD)', height: 720 },
+              { id: '1080p', label: '1080p (FHD)', height: 1080 },
+              { id: '2k', label: '2K (1440p)', height: 1440 },
+              { id: '4k', label: '4K UHD (2160p)', height: 2160 },
+            ].map(res => {
+              // Scaling up adds no detail, so a size taller than the source is not offered.
+              const tooBig = !!sourceHeight && res.height > sourceHeight;
+              return (
+                <button
+                  key={res.id}
+                  disabled={tooBig}
+                  title={tooBig ? 'Larger than the original video' : undefined}
+                  onClick={() => setConvertOptions(prev => ({ ...prev, resolution: res.id as VideoConvertOptions['resolution'] }))}
+                  className={`py-2 px-2 text-xs rounded-lg border text-center transition-colors ${res.wide ? 'col-span-2' : ''} ${
+                    convertOptions.resolution === res.id
+                      ? 'bg-amber-500/15 border-amber-500/50 text-amber-200 font-medium'
+                      : tooBig
+                        ? 'bg-neutral-850 border-neutral-800 text-neutral-600 cursor-not-allowed'
+                        : 'bg-neutral-850 border-neutral-800 text-neutral-400 hover:text-neutral-200'
+                  }`}
+                >
+                  {res.label}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
 
-      {/* Quality & Bitrate */}
+      {/* Quality: only the H.264 formats have levels (AVI, GIF and audio ignore it) */}
+      {(convertOptions.format === 'mp4' || convertOptions.format === 'mkv' || convertOptions.format === 'mov') && (
       <div>
-        <label className={labelClass}>Encoding Profile</label>
+        <label className={labelClass}>Quality</label>
         <div className="grid grid-cols-2 gap-2 text-xs">
           {[
-            { id: 'lossless', label: 'Master / Lossless' },
-            { id: 'high', label: 'High (CRF 18)' },
-            { id: 'balanced', label: 'Balanced (CRF 23)' },
-            { id: 'compact', label: 'Compact Web' },
+            { id: 'lossless', label: 'Highest' },
+            { id: 'high', label: 'High' },
+            { id: 'balanced', label: 'Balanced' },
+            { id: 'compact', label: 'Compact' },
           ].map(q => (
             <button
               key={q.id}
@@ -171,7 +185,9 @@ export const ConvertPanel: React.FC<ConvertPanelProps> = ({
             </button>
           ))}
         </div>
+        <p className="mt-1.5 text-[10px] text-neutral-500">Higher quality makes a larger file.</p>
       </div>
+      )}
 
       {/* Save destination */}
       <div>
@@ -281,10 +297,7 @@ export const ConvertPanel: React.FC<ConvertPanelProps> = ({
       {isTranscoding ? (
         <div className="p-4 bg-neutral-950/80 rounded-xl border border-neutral-800 space-y-3">
           <div className="flex items-center justify-between text-xs text-neutral-300">
-            <span className="flex items-center gap-1.5">
-              <Sparkles className="w-4 h-4 text-amber-400 animate-spin" />
-              <span>Converting...</span>
-            </span>
+            <span>Converting...</span>
             <span className="font-mono text-amber-400 font-semibold">{transcodeProgress}%</span>
           </div>
           <div className="w-full bg-neutral-800 h-2 rounded-full overflow-hidden">

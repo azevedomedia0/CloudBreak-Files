@@ -18,12 +18,56 @@ import {
   savePreferences,
   saveProfile,
 } from '../utils/appPreferences';
-import { fullDiskAccessGranted, requestFullDiskAccess } from '../services/permissionsBridge';
+import {
+  fullDiskAccessGranted, requestFullDiskAccess, screenRecordingGranted, requestScreenRecording,
+} from '../services/permissionsBridge';
+import { DEFAULT_AVATAR_URL } from '../utils/defaultAvatar';
+import { isMacLike } from './WindowControls';
+import { p2pBridge, type RelayStatus, type RemoteAccessStatus } from '../services/p2pBridge';
 
 export interface UserProfile {
   name: string;
-  email: string;
+  /** Unique name on the relay server; shown on shared folders. */
+  username?: string;
   avatarUrl?: string;
+}
+
+type UsernameState =
+  | { kind: 'idle' }
+  | { kind: 'checking' }
+  | { kind: 'free' }
+  | { kind: 'taken' }
+  | { kind: 'invalid'; message: string }
+  | { kind: 'error'; message: string };
+
+/** Same rule the relay applies: 3 to 24 letters, digits, dots, dashes or underscores, starting with a letter or digit. */
+function usernameProblem(name: string): string | null {
+  const value = name.trim();
+  if (value.length < 3 || value.length > 24) return 'A username is 3 to 24 characters.';
+  if (!/^[a-zA-Z0-9]/.test(value)) return 'A username starts with a letter or digit.';
+  if (!/^[a-zA-Z0-9._-]+$/.test(value)) return 'Use only letters, digits, dots, dashes and underscores.';
+  return null;
+}
+
+function usernameStatusText(state: UsernameState, saved?: string): string {
+  switch (state.kind) {
+    case 'checking': return 'Checking whether it is available…';
+    case 'free': return 'Available. Save to claim it.';
+    case 'taken': return 'Already used by someone else. Pick another.';
+    case 'invalid':
+    case 'error': return state.message;
+    default: return saved ? `Your username is @${saved}.` : 'Pick a username. People use it to find you when you share a folder.';
+  }
+}
+
+function usernameStatusClass(state: UsernameState): string {
+  switch (state.kind) {
+    case 'free': return 'text-emerald-400';
+    case 'taken':
+    case 'invalid':
+    case 'error': return 'text-amber-400';
+    default: return 'text-neutral-500';
+  }
 }
 
 const AVATAR_MAX_EDGE = 256;
@@ -64,7 +108,7 @@ interface ProfileSettingsModalProps {
   onUpdatePreferences?: (prefs: AppPreferences) => void;
   accounts: CloudAccount[];
   isVaultUnlocked: boolean;
-  onToggleVaultLock: (unlocked: boolean, passphrase?: string) => void | Promise<void>;
+  onToggleVaultLock: (unlocked: boolean, passphrase?: string) => void | boolean | Promise<boolean | void>;
   onShowToast?: (msg: string) => void;
   peerId?: string | null;
   swarmListening?: boolean;
@@ -142,7 +186,6 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
   onClose,
   userProfile = {
     name: 'User',
-    email: 'you@example.com',
   },
   onUpdateProfile,
   preferences: preferencesProp,
@@ -160,7 +203,9 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
   const [name, setName] = useState(userProfile.name);
-  const [email, setEmail] = useState(userProfile.email);
+  const [username, setUsername] = useState(userProfile.username ?? '');
+  const [usernameState, setUsernameState] = useState<UsernameState>({ kind: 'idle' });
+  const [savingProfile, setSavingProfile] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>(userProfile.avatarUrl);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -171,11 +216,16 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
   const [vaultBusy, setVaultBusy] = useState(false);
   const [fdaGranted, setFdaGranted] = useState<boolean | null>(null);
   const [fdaBusy, setFdaBusy] = useState(false);
+  const [screenGranted, setScreenGranted] = useState<boolean | null>(null);
+  const [screenBusy, setScreenBusy] = useState(false);
+  const [remoteStatus, setRemoteStatus] = useState<RemoteAccessStatus | null>(null);
+  const [relayStatus, setRelayStatus] = useState<RelayStatus | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
     setName(userProfile.name);
-    setEmail(userProfile.email);
+    setUsername(userProfile.username ?? '');
+    setUsernameState({ kind: 'idle' });
     setAvatarUrl(userProfile.avatarUrl);
     setPrefs(preferencesProp ?? loadPreferences());
     setPassphrase('');
@@ -184,10 +234,52 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     setFdaBusy(false);
     if (isTauri()) {
       void fullDiskAccessGranted().then(setFdaGranted);
+      void screenRecordingGranted().then(setScreenGranted);
+      void p2pBridge.remoteAccessStatus().then(setRemoteStatus).catch(() => setRemoteStatus(null));
+      void p2pBridge.relayStatus().then(setRelayStatus).catch(() => setRelayStatus(null));
     } else {
       setFdaGranted(null);
+      setScreenGranted(null);
     }
   }, [isOpen, userProfile, preferencesProp]);
+
+  const usernameChanged = username.trim().toLowerCase() !== (userProfile.username ?? '');
+
+  // Ask the relay whether the typed username is free, shortly after typing stops.
+  useEffect(() => {
+    if (!isOpen || !usernameChanged || !username.trim()) {
+      setUsernameState({ kind: 'idle' });
+      return;
+    }
+    if (!isTauri()) {
+      setUsernameState({ kind: 'error', message: 'Usernames can be set in the desktop app.' });
+      return;
+    }
+    if (!prefs.p2pRelayAddress.trim()) {
+      setUsernameState({ kind: 'error', message: 'Set a relay server under Preferences → Network first. Usernames are checked there.' });
+      return;
+    }
+    const invalid = usernameProblem(username);
+    if (invalid) {
+      setUsernameState({ kind: 'invalid', message: invalid });
+      return;
+    }
+    setUsernameState({ kind: 'checking' });
+    let stale = false;
+    const timer = window.setTimeout(() => {
+      p2pBridge.usernameCheck(prefs.p2pRelayAddress, username)
+        .then(result => {
+          if (!stale) setUsernameState(result.available ? { kind: 'free' } : { kind: 'taken' });
+        })
+        .catch(err => {
+          if (!stale) setUsernameState({ kind: 'error', message: err instanceof Error ? err.message : String(err) });
+        });
+    }, 500);
+    return () => {
+      stale = true;
+      window.clearTimeout(timer);
+    };
+  }, [isOpen, username, usernameChanged, prefs.p2pRelayAddress, userProfile.username]);
 
   if (!isOpen) return null;
 
@@ -205,11 +297,31 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     onClose();
   };
 
-  const handleSave = (e?: React.FormEvent) => {
+  const handleSave = async (e?: React.FormEvent) => {
     e?.preventDefault();
+    let claimed = userProfile.username;
+    if (usernameChanged && username.trim()) {
+      if (usernameState.kind === 'taken') {
+        onShowToast?.('That username is already used by someone else. Pick another.');
+        return;
+      }
+      setSavingProfile(true);
+      try {
+        claimed = await p2pBridge.usernameClaim(prefs.p2pRelayAddress, prefs.p2pRelayKey, username);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        setUsernameState(/taken/i.test(message) ? { kind: 'taken' } : { kind: 'error', message });
+        onShowToast?.(message);
+        return;
+      } finally {
+        setSavingProfile(false);
+      }
+    } else if (usernameChanged) {
+      claimed = undefined;
+    }
     const profile: UserProfile = {
       name: name.trim() || userProfile.name,
-      email: email.trim(),
+      username: claimed,
       avatarUrl: avatarUrl || undefined,
     };
     saveProfile(profile);
@@ -253,7 +365,6 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     }
   };
 
-  const initials = name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'CB';
 
   const tabs: Array<{ id: SettingsTab; label: string; icon: React.ReactNode }> = [
     { id: 'profile', label: 'Profile', icon: <User className="w-3.5 h-3.5" /> },
@@ -315,11 +426,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                     title="Change profile photo"
                     aria-label="Change profile photo"
                   >
-                    {avatarUrl ? (
-                      <img src={avatarUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
-                    ) : (
-                      <span className="relative z-10">{initials}</span>
-                    )}
+                    <img src={avatarUrl || DEFAULT_AVATAR_URL} alt="" className="absolute inset-0 w-full h-full object-cover" />
                     <span className="absolute inset-0 z-20 flex items-center justify-center bg-black/55 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
                       {avatarBusy ? (
                         <RefreshCw className="w-5 h-5 animate-spin text-white" />
@@ -344,7 +451,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="text-base font-semibold text-white truncate">{name || 'Unnamed'}</h3>
-                  <p className="text-xs text-neutral-400 truncate">{email || 'No email'}</p>
+                  <p className="text-xs text-neutral-400 truncate">{userProfile.username ? `@${userProfile.username}` : 'No username'}</p>
                   <div className="mt-2 flex items-center gap-2 flex-wrap">
                     <button
                       type="button"
@@ -353,7 +460,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                       className="inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-1 rounded-md bg-sky-500/15 text-sky-200 border border-sky-400/25 hover:bg-sky-500/25 disabled:opacity-50 transition-colors"
                     >
                       <ImagePlus className="w-3 h-3" />
-                      {avatarUrl ? 'Change photo' : 'Add photo'}
+                      {avatarUrl ? 'Change photo' : 'Choose photo'}
                     </button>
                     {avatarUrl && (
                       <button
@@ -363,7 +470,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                         className="inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-1 rounded-md bg-white/5 text-neutral-300 border border-white/10 hover:bg-white/10 disabled:opacity-50 transition-colors"
                       >
                         <Trash2 className="w-3 h-3" />
-                        Remove
+                        Use default
                       </button>
                     )}
                   </div>
@@ -386,18 +493,27 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-neutral-300 block mb-1.5">Email</label>
+                  <label className="text-xs font-medium text-neutral-300 block mb-1.5">Username</label>
                   <input
-                    type="email"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
+                    type="text"
+                    value={username}
+                    onChange={e => setUsername(e.target.value)}
+                    maxLength={24}
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    placeholder="e.g. steven.azevedo"
+                    aria-describedby="username-status"
                     className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-sky-400/60"
                   />
+                  <p id="username-status" role="status" className={`mt-1.5 text-[11px] ${usernameStatusClass(usernameState)}`}>
+                    {usernameStatusText(usernameState, userProfile.username)}
+                  </p>
                 </div>
               </div>
               <p className="text-[11px] text-neutral-500 flex items-start gap-1.5">
                 <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                Profile and photo are stored locally on this device. Display name is used for P2P peer identity.
+                Profile and photo are stored locally on this device. Your username is registered on the relay server and is the name people see on your shared folders.
               </p>
             </div>
           )}
@@ -437,8 +553,11 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                 <Toggle on={prefs.showTransferSpeeds} onChange={() => patchPrefs('showTransferSpeeds', !prefs.showTransferSpeeds)} />
               </PrefRow>
 
-              <PrefRow title="Reduce motion" description="Limit animations and pulsing status indicators">
-                <Toggle on={prefs.reduceMotion} onChange={() => patchPrefs('reduceMotion', !prefs.reduceMotion)} />
+              <PrefRow title="Open terminal at launch" description="Show the system terminal in the side panel when the app starts">
+                <Toggle on={prefs.openTerminalAtLaunch} onChange={() => patchPrefs('openTerminalAtLaunch', !prefs.openTerminalAtLaunch)} />
+              </PrefRow>
+              <PrefRow title="Restore terminal sessions" description="Reopen tabs, splits, folders and recent output (kept in the app data folder). Off deletes what was saved">
+                <Toggle on={prefs.restoreTerminalSessions} onChange={() => patchPrefs('restoreTerminalSessions', !prefs.restoreTerminalSessions)} />
               </PrefRow>
 
               <PrefRow title="Native Rust crypto engine" description="Use Tauri AES-GCM when running as a desktop app">
@@ -649,6 +768,52 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                     </button>
                   </div>
 
+                  {isMacLike && (
+                  <div className="p-4 rounded-xl bg-white/5 border border-white/5 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`p-2.5 rounded-xl shrink-0 ${
+                        screenGranted ? 'bg-emerald-500/15 text-emerald-400' : 'bg-sky-500/15 text-sky-400'
+                      }`}>
+                        <Camera className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-xs font-semibold text-white">Screen &amp; System Audio Recording</h4>
+                        <p className="text-[11px] text-neutral-400">
+                          {screenGranted
+                            ? 'Granted — the screenshot (⇧⌘6) and screen recording (⇧⌘7) shortcuts can capture the screen and system audio.'
+                            : 'Required for the screenshot and screen recording shortcuts. Allow it when macOS asks, or enable it in System Settings, then restart the app.'}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={screenBusy || screenGranted === true}
+                      onClick={async () => {
+                        setScreenBusy(true);
+                        try {
+                          const ok = await requestScreenRecording();
+                          setScreenGranted(ok);
+                          if (!ok) onShowToast?.('Enable Cloudbreak Files in Screen & System Audio Recording, then restart the app');
+                          window.setTimeout(() => {
+                            void screenRecordingGranted().then(setScreenGranted);
+                          }, 2500);
+                        } catch (err) {
+                          onShowToast?.(err instanceof Error ? err.message : String(err));
+                        } finally {
+                          setScreenBusy(false);
+                        }
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all shrink-0 disabled:opacity-40 ${
+                        screenGranted
+                          ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/25'
+                          : 'bg-sky-500/20 text-sky-200 border border-sky-400/30 hover:bg-sky-500/30'
+                      }`}
+                    >
+                      {screenBusy ? 'Opening…' : screenGranted ? 'Granted' : 'Allow'}
+                    </button>
+                  </div>
+                  )}
+
                   <div className="p-4 rounded-xl bg-white/5 border border-white/5 space-y-3">
                     <div className="flex items-center gap-2">
                       <FolderOpen className="w-4 h-4 text-sky-400 shrink-0" />
@@ -685,7 +850,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                   <div className="p-3 rounded-xl bg-black/40 border border-white/5 text-[11px] text-neutral-400 flex gap-2">
                     <Info className="w-3.5 h-3.5 text-sky-400 shrink-0 mt-0.5" />
                     <span>
-                      Manage grants anytime in System Settings → Privacy &amp; Security → Files and Folders, Full Disk Access, and Local Network.
+                      Manage grants anytime in System Settings → Privacy &amp; Security → Files and Folders, Full Disk Access, Screen & System Audio Recording, and Local Network.
                     </span>
                   </div>
                 </>
@@ -719,7 +884,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                   </span>
                 </div>
                 <p className="text-[11px] text-neutral-400">
-                  Invite-dial only — no DHT announce, STUN, or public peer discovery. {p2pLibraryCount}{' '}
+                  Invite-dial only — no DHT announce, STUN, relay, or public peer discovery. {p2pLibraryCount}{' '}
                   {p2pLibraryCount === 1 ? 'library' : 'libraries'} on this device.
                 </p>
                 <div>
@@ -741,6 +906,79 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                 </div>
               </div>
 
+              <div className="p-3.5 rounded-xl bg-white/5 border border-white/5 space-y-2">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold text-white">Allow connections from other networks</div>
+                    <div className="text-[11px] text-neutral-400 mt-0.5">
+                      Asks your router (UPnP or NAT-PMP) to open a port, and puts your internet address in invites you copy.
+                      Only people holding a library&rsquo;s invite are served. Off: only your own network.
+                    </div>
+                  </div>
+                  <Toggle on={prefs.p2pRemoteAccess} onChange={() => patchPrefs('p2pRemoteAccess', !prefs.p2pRemoteAccess)} />
+                </div>
+                {prefs.p2pRemoteAccess && remoteStatus?.enabled && (
+                  <div
+                    className={`text-[11px] rounded-lg px-2.5 py-2 border ${
+                      remoteStatus.publicAddress
+                        ? 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20'
+                        : 'bg-amber-500/10 text-amber-200 border-amber-500/20'
+                    }`}
+                  >
+                    {remoteStatus.message}
+                  </div>
+                )}
+                {prefs.p2pRemoteAccess && !remoteStatus?.enabled && (
+                  <div className="text-[11px] text-neutral-500">Takes effect when you click Save &amp; Apply.</div>
+                )}
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-white/5 border border-white/5 space-y-2.5">
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold text-white">Relay server</div>
+                  <div className="text-[11px] text-neutral-400 mt-0.5">
+                    For when your router will not open a port. Your device connects out to a relay you run (see <span className="font-mono">relay/</span>),
+                    and invites you copy carry its address. People you invite need no setup. The relay sees who connects and how much is
+                    transferred, never what is in a library. Leave empty to turn it off.
+                  </div>
+                </div>
+                <input
+                  type="text"
+                  value={prefs.p2pRelayAddress}
+                  onChange={e => patchPrefs('p2pRelayAddress', e.target.value)}
+                  placeholder="relay.example.com:7422"
+                  spellCheck={false}
+                  autoCapitalize="off"
+                  aria-label="Relay server address"
+                  className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-2 text-xs font-mono text-white placeholder:text-neutral-600 focus:outline-none focus:border-sky-400/60"
+                />
+                {prefs.p2pRelayAddress.trim() && (
+                  <input
+                    type="password"
+                    value={prefs.p2pRelayKey}
+                    onChange={e => patchPrefs('p2pRelayKey', e.target.value)}
+                    placeholder="Relay key (only if the relay asks for one)"
+                    spellCheck={false}
+                    autoComplete="off"
+                    aria-label="Relay key"
+                    className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white placeholder:text-neutral-600 focus:outline-none focus:border-sky-400/60"
+                  />
+                )}
+                {prefs.p2pRelayAddress.trim() && relayStatus?.enabled && prefs.p2pRelayAddress.trim() === (preferencesProp ?? loadPreferences()).p2pRelayAddress.trim() ? (
+                  <div
+                    className={`text-[11px] rounded-lg px-2.5 py-2 border ${
+                      relayStatus.connected
+                        ? 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20'
+                        : 'bg-amber-500/10 text-amber-200 border-amber-500/20'
+                    }`}
+                  >
+                    {relayStatus.message}
+                  </div>
+                ) : prefs.p2pRelayAddress.trim() ? (
+                  <div className="text-[11px] text-neutral-500">Connects when you click Save &amp; Apply. The key is stored on this device.</div>
+                ) : null}
+              </div>
+
               <PrefRow title="Show transfer speeds" description="Include bitrate on P2P library banners and share sheets">
                 <Toggle on={prefs.showTransferSpeeds} onChange={() => patchPrefs('showTransferSpeeds', !prefs.showTransferSpeeds)} />
               </PrefRow>
@@ -748,7 +986,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
               <div className="p-3 rounded-xl bg-black/40 border border-white/5 text-[11px] text-neutral-400 flex gap-2">
                 <Globe className="w-3.5 h-3.5 text-sky-400 shrink-0 mt-0.5" />
                 <span>
-                  Cloud providers authenticate with tokens you paste in each account’s integration panel. Credentials are stored in local browser storage under a Cloudbreak key.
+                  Google Drive uses Sign in with Google (desktop OAuth). Other providers use tokens or passwords from each account’s integration panel. On desktop, secrets go in the OS keychain; the browser preview uses local storage.
                 </span>
               </div>
 
@@ -774,10 +1012,11 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => handleSave()}
-              className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-sky-500 hover:bg-sky-400 text-white shadow-lg shadow-sky-500/25 transition-all"
+              onClick={() => { void handleSave(); }}
+              disabled={savingProfile || usernameState.kind === 'checking' || usernameState.kind === 'taken' || usernameState.kind === 'invalid'}
+              className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-sky-500 hover:bg-sky-400 text-white shadow-lg shadow-sky-500/25 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              Save & Apply
+              {savingProfile ? 'Claiming username…' : 'Save & Apply'}
             </button>
           </div>
         </div>

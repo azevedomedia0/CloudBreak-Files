@@ -14,7 +14,7 @@ interface PhotoNavArrowsProps {
 }
 
 export const PhotoNavArrows: React.FC<PhotoNavArrowsProps> = ({ nav, compact = false }) => {
-  const base = `absolute top-1/2 -translate-y-1/2 z-10 flex items-center justify-center rounded-full bg-neutral-900/70 backdrop-blur-md border border-white/15 text-white shadow-lg transition-all hover:bg-neutral-800/90 active:scale-95 disabled:opacity-0 disabled:pointer-events-none ${
+  const base = `absolute top-1/2 -translate-y-1/2 z-10 flex items-center justify-center rounded-full bg-neutral-900/70 backdrop-blur-md border border-white/15 text-white shadow-lg transition-all hover:bg-neutral-800/90 active:scale-95 disabled:opacity-30 disabled:pointer-events-none ${
     compact ? 'w-7 h-7' : 'w-10 h-10'
   }`;
   const icon = compact ? 'w-4 h-4' : 'w-5 h-5';

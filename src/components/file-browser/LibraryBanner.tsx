@@ -75,7 +75,7 @@ export const LibraryBanner: React.FC<LibraryBannerProps> = ({
                         <>
                           Connected to <strong className="text-purple-300 font-semibold">{connected} peer{connected === 1 ? '' : 's'}</strong>
                           {pending > 0 ? <> · {pending} pending invite{pending === 1 ? '' : 's'}</> : null}
-                          {' '}with zero-knowledge encryption.
+                          {' '}using AES-256-GCM encryption.
                         </>
                       );
                     }
@@ -94,7 +94,7 @@ export const LibraryBanner: React.FC<LibraryBannerProps> = ({
             <div className="mt-1.5 flex items-center gap-2 flex-wrap text-[10px] font-mono">
               <span className="text-neutral-400 bg-black/40 border border-white/5 px-2 py-0.5 rounded flex items-center gap-1">
                 <ShieldCheck className="w-3 h-3 text-cyan-400" />
-                <span>Cipher: {selectedLibrary.p2pEncryptionCipher || 'AES-256-GCM Zero-Knowledge'}</span>
+                <span>Cipher: {selectedLibrary.p2pEncryptionCipher || 'AES-256-GCM'}</span>
               </span>
 
               <span className="text-neutral-400 bg-black/40 border border-white/5 px-2 py-0.5 rounded flex items-center gap-1">

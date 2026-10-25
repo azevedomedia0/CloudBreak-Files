@@ -41,9 +41,9 @@ export function useNativeAppMenu(state: NativeAppMenuState) {
         const [
           newFolder,
           upload,
+          joinLibrary,
           sep1,
           open,
-          quickLook,
           sep2,
           getInfo,
           rename,
@@ -57,6 +57,9 @@ export function useNativeAppMenu(state: NativeAppMenuState) {
           sep5,
           selectAll,
           sep6,
+          screenshot,
+          screenRecording,
+          sep7,
           closeWindow,
           checkUpdates,
         ] = await Promise.all([
@@ -72,9 +75,13 @@ export function useNativeAppMenu(state: NativeAppMenuState) {
             accelerator: 'CmdOrCtrl+U',
             action: run('upload'),
           }),
+          MenuItem.new({
+            id: 'file-join-library',
+            text: 'Join Library with Invite…',
+            action: run('join-library'),
+          }),
           PredefinedMenuItem.new({ item: 'Separator' }),
           needsSelection('open', 'Open', 'CmdOrCtrl+Down'),
-          needsSelection('quick-look', 'Quick Look', 'CmdOrCtrl+Y'),
           PredefinedMenuItem.new({ item: 'Separator' }),
           needsSelection('get-info', 'Get Info', 'CmdOrCtrl+I'),
           needsSelection('rename', 'Rename'),
@@ -98,6 +105,19 @@ export function useNativeAppMenu(state: NativeAppMenuState) {
             action: run('select-all'),
           }),
           PredefinedMenuItem.new({ item: 'Separator' }),
+          MenuItem.new({
+            id: 'file-screenshot',
+            text: 'Take Screenshot…',
+            accelerator: 'CmdOrCtrl+Shift+6',
+            action: run('screenshot'),
+          }),
+          MenuItem.new({
+            id: 'file-screen-recording',
+            text: 'Start/Stop Screen Recording',
+            accelerator: 'CmdOrCtrl+Shift+7',
+            action: run('screen-recording'),
+          }),
+          PredefinedMenuItem.new({ item: 'Separator' }),
           PredefinedMenuItem.new({ item: 'CloseWindow' }),
           MenuItem.new({
             id: 'help-check-updates',
@@ -112,7 +132,6 @@ export function useNativeAppMenu(state: NativeAppMenuState) {
 
         itemsRef.current = new Map([
           ['open', open],
-          ['quick-look', quickLook],
           ['get-info', getInfo],
           ['rename', rename],
           ['duplicate', duplicate],
@@ -128,10 +147,10 @@ export function useNativeAppMenu(state: NativeAppMenuState) {
           items: [
             newFolder,
             upload,
+            joinLibrary,
             sep1,
             open,
-            quickLook,
-            sep2,
+              sep2,
             getInfo,
             rename,
             duplicate,
@@ -144,21 +163,21 @@ export function useNativeAppMenu(state: NativeAppMenuState) {
             sep5,
             selectAll,
             sep6,
+            screenshot,
+            screenRecording,
+            sep7,
             closeWindow,
           ],
         });
 
         const menu = await Menu.default();
-        // macOS default: [App, Edit, View, Window, Help] — insert File after App.
-        // Windows default already has a File submenu; replace by inserting ours at 0.
-        const existing = await menu.items();
-        const firstText = existing[0] && 'text' in existing[0]
-          ? await (existing[0] as Submenu).text().catch(() => '')
-          : '';
-        const insertAt = firstText === 'File' ? 0 : Math.min(1, existing.length);
-        if (firstText === 'File') {
-          await menu.remove(existing[0]!);
+        // macOS default: [App, File, Edit, View, Window, Help]. Drop every built-in File menu so ours is the only one.
+        for (const item of await menu.items()) {
+          if (!('text' in item)) continue;
+          const label = await (item as Submenu).text().catch(() => '');
+          if (label === 'File') await menu.remove(item);
         }
+        const insertAt = Math.min(1, (await menu.items()).length);
         await menu.insert(fileMenu, insertAt);
 
         // Help → Check for Updates… (append to existing Help, or add a Help submenu).

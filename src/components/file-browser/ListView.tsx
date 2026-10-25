@@ -41,9 +41,11 @@ export interface ListViewProps {
   onEditPhoto: (file: FileItem) => void;
   onOpenDocument: (file: FileItem) => void;
   onOpenVideo: (file: FileItem) => void;
+  /** Double-click on a video: opens the full player in the center area. */
+  onOpenVideoWindow?: (file: FileItem) => void;
   onOpenAudio: (file: FileItem) => void;
   onShareFile: (file: FileItem) => void;
-  onOpenQuickLook: () => void;
+  onOpenOther: (file: FileItem) => void;
   onFileContextMenu: (file: FileItem, event: React.MouseEvent) => void;
   onFolderContextMenu?: (folder: FolderItem, event: React.MouseEvent) => void;
   toggleSelectOne: (id: string, e: React.MouseEvent) => void;
@@ -53,7 +55,7 @@ export interface ListViewProps {
 
 export const ListView: React.FC<ListViewProps> = ({
   accent, files, folders = [], selectedFileId, selectedIds, scrollParentRef,
-  onSelectFile, onOpenFolder, onEditPhoto, onOpenDocument, onOpenVideo, onOpenAudio, onShareFile, onOpenQuickLook, onFileContextMenu, onFolderContextMenu, toggleSelectOne, toggleSelectAll, getAccount,
+  onSelectFile, onOpenFolder, onEditPhoto, onOpenDocument, onOpenVideo, onOpenVideoWindow, onOpenAudio, onShareFile, onOpenOther, onFileContextMenu, onFolderContextMenu, toggleSelectOne, toggleSelectAll, getAccount,
 }) => {
   const localScrollRef = useRef<HTMLDivElement>(null);
   const rows = useMemo<Row[]>(() => {
@@ -175,17 +177,17 @@ export const ListView: React.FC<ListViewProps> = ({
             <div
               key={file.id}
               draggable
-              onDragStart={e => setFileDragData(e.dataTransfer, file)}
-              onClick={() => onSelectFile(file)}
+              onDragStart={e => setFileDragData(e.dataTransfer, file, selectedIds)}
+              onClick={e => { onSelectFile(file); if (file.category === 'video' && !e.metaKey && !e.ctrlKey && !e.shiftKey) onOpenVideo(file); }}
               onContextMenu={event => onFileContextMenu(file, event)}
               onDoubleClick={() => {
                 if (isMacAppBundle(file) && file.localPath && previewBridge.available()) {
                   void previewBridge.openWithDefault(file.localPath).catch(() => {});
                 } else if (file.category === 'photo') onEditPhoto(file);
-                else if (file.category === 'video') onOpenVideo(file);
+                else if (file.category === 'video') (onOpenVideoWindow ?? onOpenVideo)(file);
                 else if (file.category === 'audio') onOpenAudio(file);
                 else if (isEditableDocument(file)) onOpenDocument(file);
-                else onOpenQuickLook();
+                else onOpenOther(file);
               }}
               className={`group grid items-center px-3 cursor-pointer transition-colors border-b border-white/5 text-xs ${
                 isCurrent

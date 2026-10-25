@@ -18,9 +18,9 @@ type MenuId = 'file' | null;
 
 const FILE_ITEMS: { action: FileMenuAction; shortcut?: string; needsSelection?: boolean; separatorAfter?: boolean }[] = [
   { action: 'new-folder', shortcut: '⇧⌘N', separatorAfter: true },
-  { action: 'upload', shortcut: '⌘U', separatorAfter: true },
-  { action: 'open', shortcut: '⌘↓', needsSelection: true },
-  { action: 'quick-look', shortcut: '␣', needsSelection: true, separatorAfter: true },
+  { action: 'upload', shortcut: '⌘U' },
+  { action: 'join-library', separatorAfter: true },
+  { action: 'open', shortcut: '⌘↓', needsSelection: true, separatorAfter: true },
   { action: 'get-info', shortcut: '⌘I', needsSelection: true },
   { action: 'rename', needsSelection: true },
   { action: 'duplicate', shortcut: '⌘D', needsSelection: true, separatorAfter: true },
@@ -28,7 +28,9 @@ const FILE_ITEMS: { action: FileMenuAction; shortcut?: string; needsSelection?: 
   { action: 'share', needsSelection: true },
   { action: 'encrypt', needsSelection: true, separatorAfter: true },
   { action: 'trash', shortcut: '⌘⌫', needsSelection: true, separatorAfter: true },
-  { action: 'select-all', shortcut: '⌘A' },
+  { action: 'select-all', shortcut: '⌘A', separatorAfter: true },
+  { action: 'screenshot', shortcut: '⇧⌘6' },
+  { action: 'screen-recording', shortcut: '⇧⌘7' },
 ];
 
 export const MacMenuBar: React.FC<MacMenuBarProps> = ({
@@ -157,11 +159,11 @@ export const MacMenuBar: React.FC<MacMenuBarProps> = ({
           type="button"
           onClick={onOpenVaultSecurity}
           className="flex items-center gap-1.5 px-2 py-0.5 rounded hover:bg-white/10 transition-colors group"
-          title="End-to-End Cryptography Engine"
+          title="Vault settings"
         >
           <span className={`w-1.5 h-1.5 rounded-full ${isVaultUnlocked ? 'bg-cyan-400' : 'bg-amber-400'} animate-pulse`} />
           <span className="font-mono text-[11px] text-neutral-400 group-hover:text-cyan-300 transition-colors">
-            {isVaultUnlocked ? 'AES-256 E2EE' : 'Vault Locked'}
+            {isVaultUnlocked ? 'Vault Unlocked' : 'Vault Locked'}
           </span>
           <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
         </button>

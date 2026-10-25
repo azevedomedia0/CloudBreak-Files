@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Image as ImageIcon, Video, FileText, Lock, 
-  Unlock, Download, Trash2, Edit3, Archive,
+  Unlock, Download, Trash2, Edit3, FilePen, Archive,
   Share2, HardDrive, Sparkles, Key,
   ChevronDown, ChevronUp, ChevronRight, Minimize2, Maximize2,
   Play, Pause, RotateCcw, Volume2, VolumeX,
-  Copy, ClipboardPaste, TextCursorInput, FolderInput, FileArchive, FolderPlus,
+  Copy, ClipboardPaste, TextCursorInput, FolderInput, FileArchive, FolderPlus, X,
 } from '@/src/icons';
 import { FileItem, CloudAccount, FolderItem } from '../types';
 import {
@@ -16,6 +16,8 @@ import {
   needsNativeThumbnail,
 } from '../utils/documentKind';
 import { formatBytes, formatDate, formatTimecode } from '../utils/format';
+import { useProbedVideoMeta } from '../hooks/useProbedVideoMeta';
+import { fpsLabel } from '../utils/videoSpecs';
 import { isZipArchive } from '../utils/unzipArchive';
 import { DocumentPreview } from './document-editor/DocumentPreview';
 import { emitFileContextMenu } from '../utils/fileContextMenuBus';
@@ -35,6 +37,8 @@ interface FileInspectorProps {
   onEditPhoto: (file: FileItem) => void;
   onOpenDocument: (file: FileItem) => void;
   onOpenVideo: (file: FileItem, tab?: 'player' | 'trim' | 'convert') => void;
+  /** Double-click on the video preview: the full player in the center area. */
+  onOpenVideoWindow?: (file: FileItem) => void;
   onOpenAudio?: (file: FileItem) => void;
   onShare: (file: FileItem) => void;
   onToggleEncrypt: (file: FileItem) => void;
@@ -48,6 +52,14 @@ interface FileInspectorProps {
   onNewFolder?: () => void;
   canPaste?: boolean;
   width?: number;
+  /** Hide the panel (the close button in the header). */
+  onClose?: () => void;
+  /** Save a cloud file that has to be downloaded first (opens the save dialog when it is ready). */
+  onDownloadRemote?: (file: FileItem) => void;
+  /** True while the full video player is open: any video playing here is paused. */
+  pauseVideo?: boolean;
+  /** Replaces the title in the header: the File Inspector / Playing Next switch. */
+  modeSwitch?: React.ReactNode;
   /** Grow to fill leftover horizontal space (e.g. Columns view). */
   expand?: boolean;
   photoNav?: PhotoNav | null;
@@ -61,6 +73,7 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
   onEditPhoto,
   onOpenDocument,
   onOpenVideo,
+  onOpenVideoWindow,
   onOpenAudio,
   onShare,
   onToggleEncrypt,
@@ -76,13 +89,27 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
   width = 320,
   expand = false,
   photoNav,
+  onClose,
+  onDownloadRemote,
+  pauseVideo = false,
+  modeSwitch,
 }) => {
   const [isBodyCollapsed, setIsBodyCollapsed] = useState<boolean>(false);
+  const specs = useProbedVideoMeta(file);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  // Stop the preview video when the full player takes over, so two videos never play at once.
+  useEffect(() => {
+    if (!pauseVideo || !videoRef.current) return;
+    videoRef.current.pause();
+    setIsPlaying(false);
+  }, [pauseVideo]);
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [duration, setDuration] = useState<number>(file?.videoMeta?.durationSeconds || 15);
   const [isMuted, setIsMuted] = useState<boolean>(false);
+  const [volume, setVolume] = useState<number>(1);
+  const [volumeOpen, setVolumeOpen] = useState(false);
+  const volumeRef = useRef<HTMLDivElement>(null);
   const [movePickerOpen, setMovePickerOpen] = useState(false);
   const [nativePreview, setNativePreview] = useState<string | null>(null);
 
@@ -106,6 +133,26 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
       setDuration(file.videoMeta.durationSeconds);
     }
   }, [file?.id]);
+
+  // Close the volume popover on a click elsewhere, on Escape, or when another file is shown.
+  useEffect(() => {
+    setVolumeOpen(false);
+  }, [file?.id]);
+  useEffect(() => {
+    if (!volumeOpen) return;
+    const onPointer = (e: MouseEvent) => {
+      if (volumeRef.current && !volumeRef.current.contains(e.target as Node)) setVolumeOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setVolumeOpen(false);
+    };
+    document.addEventListener('mousedown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [volumeOpen]);
 
   const togglePlay = () => {
     if (!videoRef.current) return;
@@ -140,9 +187,24 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
   };
 
   const toggleMute = () => {
+    // Unmuting from a slider dragged to zero would stay silent, so restore a level.
+    if (isMuted && volume === 0) {
+      handleVolumeChange(0.5);
+      return;
+    }
     if (videoRef.current) {
       videoRef.current.muted = !isMuted;
       setIsMuted(!isMuted);
+    }
+  };
+
+  // Dragging the slider sets the level; any level above zero unmutes, zero mutes.
+  const handleVolumeChange = (level: number) => {
+    setVolume(level);
+    setIsMuted(level === 0);
+    if (videoRef.current) {
+      videoRef.current.volume = level;
+      videoRef.current.muted = level === 0;
     }
   };
 
@@ -182,10 +244,16 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
         className={panelClass}
       >
         <div className="flex items-center px-3.5 py-2.5 macos-toolbar-glass border-b border-white/8 shrink-0">
-          <div className="flex items-center gap-2 leading-none">
-            <FileInspectorIcon className="w-4 h-4 text-sky-400" title="File Inspector" />
-            <span className="text-xs font-semibold text-neutral-200">File Inspector</span>
-          </div>
+          {modeSwitch ?? (<div className="flex items-center gap-2 leading-none"><FileInspectorIcon className="w-4 h-4 text-sky-400" title="File Inspector" /><span className="text-xs font-semibold text-neutral-200">File Inspector</span></div>)}
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close file inspector"
+            title="Close file inspector"
+            className="ml-auto p-1 rounded-md text-neutral-400 hover:text-neutral-100 hover:bg-white/10 transition-colors"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
         <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6 text-center">
           <div className="p-3 rounded-2xl bg-white/5 border border-white/10 text-neutral-400 inline-flex items-center justify-center">
@@ -205,6 +273,10 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
   const account = accounts.find(a => a.id === file.accountId);
 
   const handleDownload = () => {
+    if (file.remoteFetch && onDownloadRemote) {
+      onDownloadRemote(file);
+      return;
+    }
     const link = document.createElement('a');
     link.href = file.url;
     link.download = file.name;
@@ -219,10 +291,16 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
       
       {/* Inspector Header */}
       <div className="flex items-center px-3.5 py-2.5 macos-toolbar-glass border-b border-white/8 shrink-0">
-        <div className="flex items-center gap-2 leading-none">
-          <FileInspectorIcon className="w-4 h-4 text-sky-400" title="File Inspector" />
-          <span className="text-xs font-semibold text-neutral-200">File Inspector</span>
-        </div>
+        {modeSwitch ?? (<div className="flex items-center gap-2 leading-none"><FileInspectorIcon className="w-4 h-4 text-sky-400" title="File Inspector" /><span className="text-xs font-semibold text-neutral-200">File Inspector</span></div>)}
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close file inspector"
+          title="Close file inspector"
+          className="ml-auto p-1 rounded-md text-neutral-400 hover:text-neutral-100 hover:bg-white/10 transition-colors"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
       </div>
 
       {/* Inspector Body (Collapsible) */}
@@ -296,7 +374,8 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                 <img
                   src={nativePreview || file.thumbnailUrl || file.url}
                   alt={file.name}
-                  className="w-full h-full object-cover"
+                  // Whole photo, centred both ways; the frame's black shows around it.
+                  className="absolute inset-0 w-full h-full object-contain"
                   onContextMenu={event => {
                     event.preventDefault();
                     emitFileContextMenu(file, event.clientX, event.clientY);
@@ -315,6 +394,7 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                     onLoadedMetadata={handleLoadedMetadata}
                     onEnded={() => setIsPlaying(false)}
                     onClick={togglePlay}
+                    onDoubleClick={() => { videoRef.current?.pause(); onOpenVideoWindow?.(file); }}
                     className="w-full h-full object-contain cursor-pointer"
                     playsInline
                     onContextMenu={event => {
@@ -382,14 +462,43 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                       </div>
 
                       <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={toggleMute}
-                          className="p-1 rounded hover:bg-white/10 text-[#ffffff] transition-colors"
-                          title={isMuted ? "Unmute" : "Mute"}
-                        >
-                          {isMuted ? <VolumeX className="w-3.5 h-3.5 text-red-400" /> : <Volume2 className="w-3.5 h-3.5" />}
-                        </button>
+                        <div ref={volumeRef} className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setVolumeOpen(open => !open)}
+                            className={`p-1 rounded hover:bg-white/10 text-[#ffffff] transition-colors ${volumeOpen ? 'bg-white/15' : ''}`}
+                            title="Volume"
+                            aria-label="Volume"
+                            aria-expanded={volumeOpen}
+                          >
+                            {isMuted || volume === 0 ? <VolumeX className="w-3.5 h-3.5 text-red-400" /> : <Volume2 className="w-3.5 h-3.5" />}
+                          </button>
+
+                          {volumeOpen && (
+                            <div className="absolute bottom-full right-1/2 translate-x-1/2 mb-1.5 z-20 flex flex-col items-center gap-2 px-2 py-2.5 rounded-lg bg-neutral-900/95 border border-white/15 shadow-xl backdrop-blur-md">
+                              <input
+                                type="range"
+                                min={0}
+                                max={1}
+                                step={0.05}
+                                value={isMuted ? 0 : volume}
+                                onChange={e => handleVolumeChange(Number(e.target.value))}
+                                aria-label="Volume"
+                                title={`Volume ${Math.round((isMuted ? 0 : volume) * 100)}%`}
+                                className="h-20 w-1.5 accent-white cursor-pointer [writing-mode:vertical-lr] [direction:rtl]"
+                              />
+                              <button
+                                type="button"
+                                onClick={toggleMute}
+                                className="p-1 rounded hover:bg-white/10 text-[#ffffff] transition-colors"
+                                title={isMuted ? 'Unmute' : 'Mute'}
+                                aria-label={isMuted ? 'Unmute' : 'Mute'}
+                              >
+                                {isMuted ? <VolumeX className="w-3.5 h-3.5 text-red-400" /> : <Volume2 className="w-3.5 h-3.5" />}
+                              </button>
+                            </div>
+                          )}
+                        </div>
 
                         <button
                           type="button"
@@ -490,20 +599,13 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                 <span className="font-mono text-[11px] text-neutral-400">{file.folderPath}</span>
               </div>
 
-              <div className="flex items-center gap-2 text-[11px] pt-0.5">
-                {file.encryption.isEncrypted ? (
-                  <>
-                    <Lock className="w-3 h-3 text-cyan-400 shrink-0" />
-                    <span className="text-cyan-300 font-medium">{file.encryption.algorithm}</span>
-                    <span className="font-mono text-neutral-500 truncate">{file.encryption.keyFingerprint}</span>
-                  </>
-                ) : (
-                  <>
-                    <Unlock className="w-3 h-3 text-neutral-500 shrink-0" />
-                    <span className="text-neutral-400">Not encrypted</span>
-                  </>
-                )}
-              </div>
+              {file.encryption.isEncrypted && (
+                <div className="flex items-center gap-2 text-[11px] pt-0.5">
+                  <Lock className="w-3 h-3 text-cyan-400 shrink-0" />
+                  <span className="text-cyan-300 font-medium">{file.encryption.algorithm}</span>
+                  <span className="font-mono text-neutral-500 truncate">{file.encryption.keyFingerprint}</span>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -607,19 +709,19 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
                   }}
                   className="col-span-2 h-9 rounded-lg bg-[#c45c26]/18 hover:bg-[#c45c26]/28 border border-[#e07a45]/40 text-[#e8a070] flex items-center justify-center gap-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer"
                   title={
-                    isPdfDocument(file) ? 'Open document'
-                      : isEditableDocument(file) ? 'Edit document'
+                    isPdfDocument(file) ? 'Edit Document'
+                      : isEditableDocument(file) ? 'Edit Document'
                         : 'Open'
                   }
                   aria-label={
-                    isPdfDocument(file) ? 'Open document'
-                      : isEditableDocument(file) ? 'Edit document'
+                    isPdfDocument(file) ? 'Edit Document'
+                      : isEditableDocument(file) ? 'Edit Document'
                         : 'Open'
                   }
                 >
-                  <Edit3 className="w-3.5 h-3.5" />
+                  <FilePen className="w-3.5 h-3.5" />
                   <span>
-                    {isPdfDocument(file) ? 'Open Document'
+                    {isPdfDocument(file) ? 'Edit Document'
                       : isEditableDocument(file) ? 'Edit Document'
                         : 'Open'}
                   </span>
@@ -760,7 +862,7 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
         </div>
 
         {/* Technical EXIF or Video Info Section */}
-        {file.photoExif && (
+        {file.photoExif && (file.photoExif.camera || file.photoExif.aperture || file.photoExif.shutterSpeed || file.photoExif.iso) && (
           <div className="space-y-2">
             <div 
               onClick={() => toggleSection('specs')}
@@ -776,26 +878,26 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
               <div className="grid grid-cols-2 gap-1.5 text-xs">
                 <div className="p-2 bg-black/30 rounded-lg border border-white/5">
                   <span className="text-neutral-500 text-[9px] block">Sensor / Camera</span>
-                  <span className="text-neutral-200 text-[11px] truncate block">{file.photoExif.camera || 'RAW'}</span>
+                  <span className="text-neutral-200 text-[11px] truncate block">{file.photoExif.camera || '—'}</span>
                 </div>
                 <div className="p-2 bg-black/30 rounded-lg border border-white/5">
                   <span className="text-neutral-500 text-[9px] block">Aperture</span>
-                  <span className="text-neutral-200 text-[11px]">{file.photoExif.aperture || 'f/2.8'}</span>
+                  <span className="text-neutral-200 text-[11px]">{file.photoExif.aperture || '—'}</span>
                 </div>
                 <div className="p-2 bg-black/30 rounded-lg border border-white/5">
                   <span className="text-neutral-500 text-[9px] block">Shutter</span>
-                  <span className="text-neutral-200 text-[11px]">{file.photoExif.shutterSpeed || '1/250s'}</span>
+                  <span className="text-neutral-200 text-[11px]">{file.photoExif.shutterSpeed || '—'}</span>
                 </div>
                 <div className="p-2 bg-black/30 rounded-lg border border-white/5">
                   <span className="text-neutral-500 text-[9px] block">ISO</span>
-                  <span className="text-neutral-200 text-[11px]">{file.photoExif.iso || '100'}</span>
+                  <span className="text-neutral-200 text-[11px]">{file.photoExif.iso || '—'}</span>
                 </div>
               </div>
             )}
           </div>
         )}
 
-        {file.videoMeta && (
+        {specs && (
           <div className="space-y-2">
             <div 
               onClick={() => toggleSection('specs')}
@@ -811,21 +913,21 @@ export const FileInspector: React.FC<FileInspectorProps> = ({
               <div className="grid grid-cols-2 gap-1.5 text-xs">
                 <div className="p-2 bg-black/30 rounded-lg border border-white/5">
                   <span className="text-neutral-500 text-[9px] block">Length</span>
-                  <span className="text-neutral-200 font-mono text-[11px]">{formatTimecode(file.videoMeta.durationSeconds)}</span>
+                  <span className="text-neutral-200 font-mono text-[11px]">{specs.durationSeconds > 0 ? formatTimecode(specs.durationSeconds) : '—'}</span>
                 </div>
                 <div className="p-2 bg-black/30 rounded-lg border border-white/5">
                   <span className="text-neutral-500 text-[9px] block">{file.category === 'audio' ? 'Audio' : 'Frame Rate'}</span>
                   <span className="text-neutral-200 text-[11px]">
-                    {file.category === 'audio' ? file.videoMeta.audioCodec : `${file.videoMeta.framerate} fps`}
+                    {file.category === 'audio' ? specs.audioCodec : fpsLabel(specs) ?? '—'}
                   </span>
                 </div>
                 <div className="p-2 bg-black/30 rounded-lg border border-white/5">
                   <span className="text-neutral-500 text-[9px] block">Codec</span>
-                  <span className="text-neutral-200 text-[11px]">{file.videoMeta.codec}</span>
+                  <span className="text-neutral-200 text-[11px]">{specs.codec}</span>
                 </div>
                 <div className="p-2 bg-black/30 rounded-lg border border-white/5">
                   <span className="text-neutral-500 text-[9px] block">Bitrate</span>
-                  <span className="text-neutral-200 text-[11px]">{file.videoMeta.bitrate}</span>
+                  <span className="text-neutral-200 text-[11px]">{specs.bitrate}</span>
                 </div>
               </div>
             )}

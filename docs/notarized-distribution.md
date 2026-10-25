@@ -106,9 +106,10 @@ Auto-updates: see [`docs/auto-updates.md`](./auto-updates.md).
 
 - Windows installer from the same workflow is **unsigned** (SmartScreen warning).
 - No Linux build in CI.
-- Video tools: `npm run build:mac` fetches and embeds ffmpeg (`scripts/fetch-ffmpeg.sh`). Dev builds without it show a first-run toast and an in-player banner.
+- Video tools: `npm run build:mac` builds and embeds an **LGPL-only** ffmpeg (`scripts/fetch-ffmpeg.sh` calls `scripts/build-ffmpeg-lgpl.sh`). It is compiled from pinned source tarballs with no `--enable-gpl` or `--enable-nonfree`, so it can be redistributed with the notices in `THIRD-PARTY-NOTICES.md` and the license texts in `licenses/`. The first build takes a few minutes per architecture (CI caches it). Never copy Homebrew's ffmpeg into a release: it is GPL. Dev builds without a bundled ffmpeg show a first-run toast and an in-player banner.
+- ffmpeg license rules for a release: keep the build script's pinned versions and configure line in step with `THIRD-PARTY-NOTICES.md`, and keep the source offer there. If you bump a version, update the notice and the SHA-256 pin together.
 
 ## Product limits (wording / support)
 
 - Vault: 32 MB IPC path for small blobs; desktop local files use streaming encrypt. P2P prefers `localPath` ingest / materialize over base64.
-- Video trim/convert: release builds embed ffmpeg; otherwise install via Homebrew or use the in-app message.
+- Video trim/convert: release builds embed an LGPL-only ffmpeg (H.264 through Apple's VideoToolbox, no libx264); otherwise the app uses a Homebrew or PATH ffmpeg, or shows the in-app message.

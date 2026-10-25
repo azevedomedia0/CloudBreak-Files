@@ -1,13 +1,26 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Play } from '@/src/icons';
 import { FileItem, VideoConvertOptions, CloudAccount, FolderItem, isAudioConvertFormat, convertFormatMime } from '../types';
-import { discardTempOutput, getFfmpegStatus, trimAndTranscode, type FfmpegStatus } from '../services/mediaBridge';
+import { discardTempOutput, getFfmpegStatus, probeVideo, trimAndTranscode, type FfmpegStatus } from '../services/mediaBridge';
+import { useProbedVideoMeta } from '../hooks/useProbedVideoMeta';
+import { mergeProbe, unknownVideoMeta } from '../utils/videoSpecs';
 import { localFs } from '../services/localFsBridge';
 import { isTauri } from '@tauri-apps/api/core';
 import { PlayerHeader } from './video-player/PlayerHeader';
 import { TrimPanel } from './video-player/TrimPanel';
 import { ConvertPanel, SaveDestination } from './video-player/ConvertPanel';
 import { PlaybackControls } from './video-player/PlaybackControls';
+import { AUTOPLAY_DELAY_SECONDS, UpNextPanel } from './video-player/UpNextPanel';
+
+const AUTOPLAY_KEY = 'cloudbreak.video.autoplay';
+
+function loadAutoplay(): boolean {
+  try {
+    return localStorage.getItem(AUTOPLAY_KEY) !== 'off';
+  } catch {
+    return true;
+  }
+}
 
 interface LocalDirectoryHandle {
   name: string;
@@ -22,12 +35,18 @@ interface VideoPlayerModalProps {
   onClose: () => void;
   onSaveTrimmedVideo: (newFile: FileItem) => void;
   initialTab?: 'player' | 'trim' | 'convert';
+  /** Where to begin, in seconds (used when expanding the side-panel player). */
+  startAt?: number;
   accounts: CloudAccount[];
   folders: FolderItem[];
   canPreviousMedia?: boolean;
   canNextMedia?: boolean;
+  /** The video that follows this one in the current list, shown in the Up next panel. */
+  nextMedia?: FileItem | null;
   onPreviousMedia?: () => void;
   onNextMedia?: () => void;
+  /** Fill the center pane instead of floating over the app. */
+  embedded?: boolean;
 }
 
 export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
@@ -36,12 +55,15 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   onClose,
   onSaveTrimmedVideo,
   initialTab = 'player',
+  startAt = 0,
   accounts,
   folders,
   canPreviousMedia = false,
   canNextMedia = false,
+  nextMedia = null,
   onPreviousMedia,
   onNextMedia,
+  embedded = false,
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -55,6 +77,9 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const [volume, setVolume] = useState<number>(0.8);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isLooping, setIsLooping] = useState<boolean>(false);
+  const [autoplay, setAutoplay] = useState<boolean>(loadAutoplay);
+  const [ended, setEnded] = useState<boolean>(false);
+  const [countdown, setCountdown] = useState<number | null>(null);
   const [controlsVisible, setControlsVisible] = useState<boolean>(true);
   const [playError, setPlayError] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
@@ -69,12 +94,21 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const [trimEnd, setTrimEnd] = useState<number>(duration);
   const [isPlayingTrimLoop, setIsPlayingTrimLoop] = useState<boolean>(false);
 
+  // Real details of the video: read by ffmpeg for files on this computer, and the player's own size otherwise.
+  const probedMeta = useProbedVideoMeta(file);
+  const [elementSize, setElementSize] = useState<{ width: number; height: number } | null>(null);
+  const meta = (() => {
+    const base = probedMeta ?? unknownVideoMeta();
+    if (base.dimensions.width > 0 || !elementSize) return base;
+    return { ...base, dimensions: elementSize };
+  })();
+
   // Converter states
   const [convertOptions, setConvertOptions] = useState<VideoConvertOptions>({
     format: 'mp4',
-    resolution: '1080p',
+    resolution: 'original',
     quality: 'high',
-    fps: 30,
+    fps: 0,
     trimStart: 0,
     trimEnd: duration,
     includeAudio: true,
@@ -122,6 +156,25 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   }, [file.id, isOpen, initialTab]);
 
   useEffect(() => dropOutput, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(AUTOPLAY_KEY, autoplay ? 'on' : 'off');
+    } catch { /* storage unavailable */ }
+    if (!autoplay) setCountdown(null);
+  }, [autoplay]);
+
+  // Count down to the next video after this one ends.
+  useEffect(() => {
+    if (countdown === null) return;
+    if (countdown <= 0) {
+      setCountdown(null);
+      onNextMedia?.();
+      return;
+    }
+    const timer = setTimeout(() => setCountdown(c => (c === null ? null : c - 1)), 1000);
+    return () => clearTimeout(timer);
+  }, [countdown]);
 
   useEffect(() => {
     if (!isOpen || !isTauri()) {
@@ -190,9 +243,13 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       const raw = videoRef.current.duration;
       const dur = Number.isFinite(raw) && raw > 0 ? raw : file.videoMeta?.durationSeconds || 15;
       setDuration(dur);
+      const { videoWidth, videoHeight } = videoRef.current;
+      setElementSize(videoWidth > 0 && videoHeight > 0 ? { width: videoWidth, height: videoHeight } : null);
       setTrimStart(0);
       setTrimEnd(dur);
       setConvertOptions(prev => ({ ...prev, trimEnd: dur }));
+      videoRef.current.volume = volume;
+      if (startAt > 0 && startAt < dur) videoRef.current.currentTime = startAt;
     }
   };
 
@@ -231,6 +288,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const seek = (time: number) => {
     if (!videoRef.current) return;
     const bounded = Math.max(0, Math.min(duration, time));
+    setEnded(false);
+    setCountdown(null);
     videoRef.current.currentTime = bounded;
     setCurrentTime(bounded);
   };
@@ -247,7 +306,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
   const stepFrame = (frames: number) => {
     if (!videoRef.current) return;
-    const fps = file.videoMeta?.framerate || 30;
+    const fps = meta.framerate || 30;
     const newTime = videoRef.current.currentTime + frames * (1 / fps);
     seek(newTime);
   };
@@ -291,10 +350,19 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const isTrimmed = trimStart > 0.001 || trimEnd < duration - 0.001;
   const clipLength = Math.max(0.1, trimEnd - trimStart);
   const sourceBaseName = file.name.replace(/\.[^/.]+$/, '');
-  const defaultBaseName = `${sourceBaseName}${isTrimmed ? '_clip' : ''}${isAudioConvertFormat(convertOptions.format) ? '' : `_${convertOptions.resolution}`}`;
+  const defaultBaseName = `${sourceBaseName}${isTrimmed ? '_clip' : ''}${isAudioConvertFormat(convertOptions.format) ? '' : convertOptions.resolution === 'original' ? '' : `_${convertOptions.resolution}`}`;
   const outputName = `${customBaseName.trim() || defaultBaseName}.${convertOptions.format}`;
 
   const ffmpegMissing = isTauri() && ffmpegStatus !== null && !ffmpegStatus.available;
+  // ffmpeg is there but cannot encode H.264 (the Linux Flatpak's): MP4, MOV and MKV are not offered.
+  const h264Available = !(isTauri() && ffmpegStatus?.available && !ffmpegStatus.h264);
+
+  // Switch an MP4, MOV or MKV choice to AVI when that choice is not available, so the dialog never sits on one.
+  useEffect(() => {
+    if (!h264Available && (convertOptions.format === 'mp4' || convertOptions.format === 'mkv' || convertOptions.format === 'mov')) {
+      setConvertOptions(prev => ({ ...prev, format: 'avi' }));
+    }
+  }, [h264Available, convertOptions.format]);
 
   // Perform Transcode / Convert (ffmpeg in Tauri, MediaRecorder in browser)
   const startTranscode = async () => {
@@ -352,6 +420,12 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       sizeBytes = (await (await fetch(transcodedResultUrl)).blob()).size;
     } catch { /* keep estimate */ }
 
+    // The details of the file that was made, read from it when ffmpeg made it on this computer.
+    let outputMeta = { ...unknownVideoMeta(parseFloat(clipLength.toFixed(2))) };
+    if (!isAudioConvertFormat(ext) && outputPathRef.current) {
+      outputMeta = mergeProbe(outputMeta, await probeVideo(outputPathRef.current));
+    }
+
     const convertedFile: FileItem = {
       ...file,
       id: `file-conv-${Date.now()}`,
@@ -367,18 +441,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       updatedAt: new Date().toISOString(),
       version: 1,
       tags: [...file.tags.filter(t => t !== 'New Upload'), 'Converted'],
-      videoMeta: isAudioConvertFormat(ext) ? undefined : {
-        ...(file.videoMeta || {
-          dimensions: { width: 1920, height: 1080 },
-          framerate: convertOptions.fps,
-          codec: ext.toUpperCase(),
-          bitrate: '15 Mbps',
-          audioCodec: 'AAC',
-        }),
-        durationSeconds: parseFloat(clipLength.toFixed(2)),
-        framerate: convertOptions.fps,
-        codec: ext.toUpperCase(),
-      },
+      videoMeta: isAudioConvertFormat(ext) ? undefined : outputMeta,
     };
 
     onSaveTrimmedVideo(convertedFile);
@@ -464,11 +527,17 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-2 sm:p-4">
-      <div className="relative flex flex-col w-full h-full bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden shadow-2xl">
+    <div className={embedded
+      ? 'flex-1 min-w-0 min-h-0 flex'
+      : 'fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-2 sm:p-4'}
+    >
+      <div className={embedded
+        ? 'relative flex flex-col w-full h-full min-h-0 bg-neutral-900 overflow-hidden'
+        : 'relative flex flex-col w-full h-full bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden shadow-2xl'}
+      >
         
         {/* Header */}
-        <PlayerHeader file={file} duration={duration} activeTab={activeTab} setActiveTab={setActiveTab} onClose={onClose} />
+        <PlayerHeader file={file} duration={duration} meta={meta} activeTab={activeTab} setActiveTab={setActiveTab} onClose={onClose} />
 
         {ffmpegMissing && (activeTab === 'trim' || activeTab === 'convert') && (
           <div
@@ -482,9 +551,9 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
         )}
 
         {/* Video Viewport & Controls */}
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 min-w-0 min-h-0 overflow-hidden">
           
-          <div ref={stageRef} className="flex-1 flex flex-col bg-neutral-950 relative">
+          <div ref={stageRef} className="flex-1 min-w-0 flex flex-col bg-neutral-950 relative">
             
             {/* Main Video Screen */}
             <div 
@@ -499,7 +568,13 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                 className="w-full max-h-full rounded object-contain shadow-2xl"
                 onLoadedMetadata={handleLoadedMetadata}
                 onTimeUpdate={handleTimeUpdate}
-                onPlay={() => setIsPlaying(true)}
+                autoPlay={autoplay && initialTab === 'player'}
+                onPlay={() => {
+                  setIsPlaying(true);
+                  setEnded(false);
+                  setCountdown(null);
+                  revealControls();
+                }}
                 onPause={() => setIsPlaying(false)}
                 onError={() => setPlayError("This video couldn't be loaded. Its format may not be supported yet.")}
                 onEnded={() => {
@@ -508,6 +583,10 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                     startPlayback();
                   } else {
                     setIsPlaying(false);
+                    setEnded(true);
+                    if (autoplay && nextMedia && onNextMedia && activeTab === 'player') {
+                      setCountdown(AUTOPLAY_DELAY_SECONDS);
+                    }
                   }
                 }}
                 playsInline
@@ -547,6 +626,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                   volume={volume}
                   isMuted={isMuted}
                   isLooping={isLooping}
+                  autoplay={autoplay}
+                  onToggleAutoplay={() => setAutoplay(a => !a)}
                   playbackRate={playbackRate}
                   isFullscreen={isFullscreen}
                   onTogglePlay={togglePlay}
@@ -568,7 +649,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                 <TrimPanel
                   duration={duration}
                   currentTime={currentTime}
-                  fps={file.videoMeta?.framerate || 30}
+                  fps={meta.framerate || 30}
                   isPlaying={isPlaying}
                   onTogglePlay={togglePlay}
                   onSeek={seek}
@@ -580,6 +661,21 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                   onContinue={activeTab === 'trim' ? continueToConvert : undefined}
                 />
               )}
+
+              {activeTab === 'player' && nextMedia && (
+                <UpNextPanel
+                  next={nextMedia}
+                  // Hidden while the pointer is moving over the player; shown when idle or finished.
+                  visible={!playError && (ended || !(controlsVisible || !isPlaying))}
+                  interactive={ended}
+                  countdown={countdown}
+                  onPlayNow={() => {
+                    setCountdown(null);
+                    onNextMedia?.();
+                  }}
+                  onCancel={() => setCountdown(null)}
+                />
+              )}
             </div>
 
           </div>
@@ -589,7 +685,9 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
             <div className="w-80 md:w-96 flex flex-col border-l border-neutral-800 bg-neutral-900/95 overflow-y-auto p-5">
               <ConvertPanel
                 file={file}
+                h264Available={h264Available}
                 duration={duration}
+                sourceHeight={meta.dimensions.height || undefined}
                 convertOptions={convertOptions}
                 setConvertOptions={setConvertOptions}
                 isTranscoding={isTranscoding}

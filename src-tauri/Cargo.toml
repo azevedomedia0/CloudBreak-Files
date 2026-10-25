@@ -30,6 +30,9 @@ rand = "0.8"
 base64 = "0.22"
 hex = "0.4"
 
+# Opt-in router port mapping for P2P (UPnP IGD; NAT-PMP is in p2p/port_mapping.rs)
+igd-next = { version = "0.18", default-features = false, features = ["aio_tokio"] }
+
 # Image processing & metadata
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 
@@ -70,3 +73,7 @@ opt-level = 3
 opt-level = 3
 [profile.dev.package.aes-gcm]
 opt-level = 3
+
+[dev-dependencies]
+# The relay server, run in-process by the tests that join two devices through it.
+cloudbreak-relay = { path = "../relay" }

@@ -1,12 +1,19 @@
+pub mod capture;
 pub mod cloud_http;
 pub mod commands;
 pub mod credentials_store;
+pub mod oauth_google;
+pub mod oauth_pkce;
+pub mod rclone;
+pub mod window_controls;
 pub mod crypto;
 pub mod local_fs;
 pub mod macos_full_disk_access;
+pub mod macos_screen_recording;
 #[cfg(target_os = "macos")]
 pub mod macos_local_network;
 pub mod mounted_volumes;
+pub mod network_discovery;
 pub mod media;
 pub mod preview;
 pub mod p2p;
@@ -17,6 +24,7 @@ pub mod terminal;
 pub mod tray;
 pub mod vault_store;
 
+use capture::CaptureState;
 use commands::{AppState, VaultState};
 use tauri::Manager;
 use local_fs::LocalRoots;
@@ -38,8 +46,11 @@ pub fn run() {
         .manage(P2pState::default())
         .manage(TerminalState::default())
         .manage(LocalRoots::default())
+        .manage(CaptureState::default())
         .setup(|app| {
             local_fs::restore_roots(app.handle(), &app.state::<LocalRoots>());
+            // Copies of Google Drive files left by a session that did not exit cleanly.
+            rclone::sweep_staged_downloads(app.handle());
             // Build the tray after the event loop starts so the main window can appear first.
             #[cfg(desktop)]
             {
@@ -78,6 +89,12 @@ pub fn run() {
                         write_marker("files_folders_nudged.flag");
                     }
 
+                    // Screen & System Audio Recording (screenshot and recording shortcuts): one system prompt.
+                    if !has_marker("screen_recording_nudged.flag") {
+                        macos_screen_recording::request_screen_recording_access();
+                        write_marker("screen_recording_nudged.flag");
+                    }
+
                     macos_local_network::request_access();
                     // Short-lived helpers can miss the Local Network alert; linger briefly.
                     std::thread::sleep(std::time::Duration::from_secs(2));
@@ -105,14 +122,29 @@ pub fn run() {
             commands::list_cloud_accounts,
             commands::unlock_sovereign_vault,
             commands::lock_sovereign_vault,
+            commands::vault_is_configured,
             commands::check_vault_status,
             commands::process_photo_render,
             commands::ffmpeg_status,
             commands::trim_video_stream,
+            commands::media_probe_video,
             commands::media_stage_temp,
             commands::media_read_temp,
             commands::media_cleanup_temp,
             cloud_http::cloud_http,
+            oauth_google::google_oauth_sign_in,
+            oauth_google::google_oauth_refresh,
+            oauth_pkce::oauth_sign_in,
+            oauth_pkce::oauth_refresh,
+            oauth_pkce::nextcloud_login_flow,
+            window_controls::set_window_controls_hidden,
+            capture::capture_screenshot,
+            capture::capture_recording_toggle,
+            rclone::rclone_status,
+            rclone::rclone_google_authorize,
+            rclone::rclone_drive_info,
+            rclone::rclone_drive_list,
+            rclone::rclone_drive_fetch,
             credentials_store::credentials_list,
             credentials_store::credentials_get,
             credentials_store::credentials_save,
@@ -129,16 +161,19 @@ pub fn run() {
             selftest::selftest_window_buttons,
             local_fs::local_pick_folder,
             local_fs::local_pick_save_folder,
+            local_fs::local_pick_share_folder,
             local_fs::local_trash_file,
             local_fs::local_save_from_temp,
             local_fs::local_list_folders,
             local_fs::local_remember_folder,
+            local_fs::local_allow_session_folder,
             local_fs::local_ensure_standard_folders,
             local_fs::local_forget_folder,
             local_fs::local_scan_folder,
             local_fs::local_read_file,
             local_fs::local_write_file,
             local_fs::local_write_text,
+            local_fs::local_save_new_file,
             local_fs::local_rename_file,
             preview::local_file_thumbnail,
             preview::local_file_raster,
@@ -149,25 +184,49 @@ pub fn run() {
             mounted_volumes::probe_network_server,
             mounted_volumes::open_network_share,
             mounted_volumes::eject_volume,
+            network_discovery::discover_network_servers,
             macos_full_disk_access::macos_full_disk_access_status,
             macos_full_disk_access::macos_request_full_disk_access,
+            macos_screen_recording::macos_screen_recording_status,
+            macos_screen_recording::macos_request_screen_recording,
             p2p::commands::p2p_get_identity,
             p2p::commands::p2p_create_library,
             p2p::commands::p2p_accept_invite,
             p2p::commands::p2p_export_invite,
             p2p::commands::p2p_list_libraries,
+            p2p::commands::p2p_refresh_incoming,
             p2p::commands::p2p_start_seeding,
             p2p::commands::p2p_swarm_status,
             p2p::commands::p2p_read_file,
             p2p::commands::p2p_stream_chunk,
             p2p::commands::p2p_materialize_file,
             p2p::commands::p2p_fetch_manifest,
+            p2p::commands::p2p_set_remote_access,
+            p2p::commands::p2p_remote_access_status,
+            p2p::commands::p2p_set_relay,
+            p2p::commands::p2p_relay_status,
+            p2p::commands::p2p_username_check,
+            p2p::commands::p2p_username_claim,
             tray::tray_refresh_status,
             terminal::terminal_create,
             terminal::terminal_write,
+            terminal::terminal_write_binary,
+            terminal::terminal_cwd,
+            terminal::terminal_open_url,
             terminal::terminal_resize,
             terminal::terminal_kill,
+            terminal::terminal_session_save,
+            terminal::terminal_session_load,
+            terminal::terminal_session_clear,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Cloudbreak Files");
+        .build(tauri::generate_context!())
+        .expect("error while building Cloudbreak Files")
+        .run(|app, event| {
+            // Downloaded Google Drive copies are only for this session; leave none behind.
+            if let tauri::RunEvent::Exit = event {
+                rclone::sweep_staged_downloads(app);
+                // An opened router port should not outlive the app.
+                p2p::commands::release_remote_access(app);
+            }
+        });
 }

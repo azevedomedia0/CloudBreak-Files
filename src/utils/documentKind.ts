@@ -200,7 +200,7 @@ export function isSystemPreviewDocument(file: Pick<FileItem, 'name' | 'mimeType'
   return isSystemPreviewMime(file.mimeType);
 }
 
-/** PDF — opens in the document editor as a read-only viewer. */
+/** PDF — opens in the document editor (the PDF editor). */
 export function isPdfDocument(file: Pick<FileItem, 'name' | 'mimeType'>): boolean {
   if (fileExtension(file.name) === 'pdf') return true;
   return file.mimeType.toLowerCase().includes('pdf');

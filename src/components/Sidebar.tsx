@@ -31,7 +31,7 @@ interface SidebarProps {
   onOpenVaultSecurity: () => void;
   onOpenProfileSettings?: () => void;
   onOpenAccountSettings?: (account: CloudAccount) => void;
-  userProfile?: { name: string; email: string; avatarUrl?: string };
+  userProfile?: { name: string; username?: string; avatarUrl?: string };
   onOpenShareModal: (library: SharedLibrary) => void;
   isVaultUnlocked: boolean;
   width?: number;
@@ -43,6 +43,8 @@ interface SidebarProps {
   isRescanningLocal?: boolean;
   onAddNewSharedLibrary?: () => void;
   onAddNewIncomingLibrary?: () => void;
+  onRefreshIncoming?: () => void;
+  isRefreshingIncoming?: boolean;
   onAddNewOutgoingLibrary?: () => void;
   onAddNetworkServer?: () => void;
   networkServers?: NetworkServerEntry[];
@@ -75,7 +77,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenAccountSettings,
   userProfile = {
     name: 'User',
-    email: 'you@example.com',
   },
   onOpenShareModal,
   isVaultUnlocked,
@@ -88,6 +89,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isRescanningLocal = false,
   onAddNewSharedLibrary,
   onAddNewIncomingLibrary,
+  onRefreshIncoming,
+  isRefreshingIncoming,
   onAddNewOutgoingLibrary,
   onAddNetworkServer,
   networkServers = [],
@@ -124,7 +127,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const onlineServerCount = networkServers.filter(s => s.online).length;
   const totalServerCount = networkServers.length;
   const visibleFolders = sortLocalRootFolders(
-    folders.filter(f => f.accountId === 'all' && !f.parentId),
+    folders.filter(f => f.accountId === 'all' && !f.parentId && !f.sourceId),
   );
 
   // Map section keys to their component rendering
@@ -167,6 +170,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         onSelectLibrary={onSelectLibrary}
         onAddNewSharedLibrary={onAddNewSharedLibrary}
         onAddNewIncomingLibrary={onAddNewIncomingLibrary}
+        onRefreshIncoming={onRefreshIncoming}
+        isRefreshingIncoming={isRefreshingIncoming}
         collapsed={collapsed}
         toggleSection={toggleSection}
         incomingLibraries={incomingLibraries}
@@ -215,7 +220,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         totalServerCount={totalServerCount}
       />
     ),
-  }), [accounts, selectedAccountId, onSelectAccount, selectedFolderId, onSelectFolder, selectedLibraryId, onSelectLibrary, onAddFavorite, customFavorites, collapsed, visibleFolders, incomingLibraries, outgoingLibraries, onAddNewFolder, onRescanLocalFolders, isRescanningLocal, onAddNewSharedLibrary, onAddNewIncomingLibrary, onAddNewOutgoingLibrary, onOpenAddAccount, onOpenAccountSettings, onAddNetworkServer, networkServers, removableDevices, onEjectDevice, onSelectRemovableDevice, selectedRemovableDeviceId, onSelectNetworkServer, selectedNetworkServerId, onlineServerCount, totalServerCount, selectedSourceId, onSelectFavoriteSource]);
+  }), [accounts, selectedAccountId, onSelectAccount, selectedFolderId, onSelectFolder, selectedLibraryId, onSelectLibrary, onAddFavorite, customFavorites, collapsed, visibleFolders, incomingLibraries, outgoingLibraries, onAddNewFolder, onRescanLocalFolders, isRescanningLocal, onAddNewSharedLibrary, onAddNewIncomingLibrary, onRefreshIncoming, isRefreshingIncoming, onAddNewOutgoingLibrary, onOpenAddAccount, onOpenAccountSettings, onAddNetworkServer, networkServers, removableDevices, onEjectDevice, onSelectRemovableDevice, selectedRemovableDeviceId, onSelectNetworkServer, selectedNetworkServerId, onlineServerCount, totalServerCount, selectedSourceId, onSelectFavoriteSource]);
 
   if (isCollapsed) {
     return null;
@@ -248,7 +253,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Always pinned to the bottom of the sidebar viewport */}
-      <ProfileFooter onOpenVaultSecurity={onOpenVaultSecurity} onOpenProfileSettings={onOpenProfileSettings} userProfile={userProfile} incomingLibraries={incomingLibraries} outgoingLibraries={outgoingLibraries} onlineServerCount={onlineServerCount} totalServerCount={totalServerCount} swarmStatus={swarmStatus} />
+      <ProfileFooter onOpenVaultSecurity={onOpenVaultSecurity} onOpenProfileSettings={onOpenProfileSettings} onConnectServer={onAddNetworkServer} userProfile={userProfile} incomingLibraries={incomingLibraries} outgoingLibraries={outgoingLibraries} onlineServerCount={onlineServerCount} totalServerCount={totalServerCount} swarmStatus={swarmStatus} />
 
     </aside>
   );

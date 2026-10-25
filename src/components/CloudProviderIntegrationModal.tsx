@@ -11,7 +11,24 @@ import {
   defaultEndpoint,
   credentialStore,
 } from '../services/cloud';
+import {
+  credentialsFromGoogleTokens,
+  isGoogleOAuthAvailable,
+  isGoogleOAuthConfigured,
+  signInWithGoogle,
+} from '../services/cloud/oauth/google';
+import {
+  credentialsFromOAuthTokens,
+  isOAuthAvailable,
+  isOAuthConfigured,
+  isPkceProvider,
+  oauthEnvName,
+  signInWithProvider,
+} from '../services/cloud/oauth/pkce';
+import { isNextcloudLoginAvailable, signInWithNextcloud } from '../services/cloud/oauth/nextcloud';
+import { rcloneStatus, signInWithRclone } from '../services/cloud/rclone';
 import { AccessTokenGuide, isTokenProvider } from './cloud/AccessTokenGuide';
+import { PROVIDER_LOGOS } from '../assets/providerLogos';
 
 export interface CloudSyncPayload {
   account: CloudAccount;
@@ -69,6 +86,7 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
   const [autoSync, setAutoSync] = useState(true);
   const [isTesting, setIsTesting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [rcloneReady, setRcloneReady] = useState(false);
   const [testResult, setTestResult] = useState<'idle' | 'success' | 'failed'>('idle');
   const [testError, setTestError] = useState<string | null>(null);
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
@@ -94,22 +112,114 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
     return () => { cancelled = true; };
   }, [account?.id]);
 
+  React.useEffect(() => {
+    if (!isOpen || kind !== 'Google Drive') return;
+    let cancelled = false;
+    void rcloneStatus()
+      .then(s => { if (!cancelled) setRcloneReady(s.available); })
+      .catch(() => { if (!cancelled) setRcloneReady(false); });
+    return () => { cancelled = true; };
+  }, [isOpen, kind]);
+
   if (!isOpen || !account) return null;
+
+  const signInBrand = kind === 'Google Drive' ? 'Google' : kind === 'OneDrive' ? 'Microsoft' : (kind ?? '');
+  const isOAuthConfiguredFor = (k: CloudProviderKind) =>
+    k === 'Google Drive' ? isGoogleOAuthConfigured() : isPkceProvider(k) && isOAuthConfigured(k);
+  const signInEnvName = (k: CloudProviderKind) =>
+    isPkceProvider(k) ? oauthEnvName(k) : 'VITE_GOOGLE_OAUTH_CLIENT_ID';
+  const browserSignInReady = kind === 'Google Drive'
+    ? isGoogleOAuthAvailable()
+    : kind && isPkceProvider(kind)
+    ? isOAuthAvailable(kind)
+    : kind === 'Nextcloud' && isNextcloudLoginAvailable();
+  const signedInViaBrowser = Boolean(existing?.refreshToken) || Boolean(existing?.rcloneToken) || (kind === 'Nextcloud' && Boolean(existing?.password));
 
   const buildCreds = () => {
     if (!kind) throw new Error(`Unsupported provider: ${account.provider}`);
     const tokenOrPass = apiKey.trim() || existing?.accessToken || existing?.password || '';
+    // Keep the saved refresh token unless the user pasted a different token.
+    const keepRefresh = !apiKey.trim() && (kind === 'Google Drive' || kind === 'Dropbox' || kind === 'OneDrive');
     return {
       accountId: account.id,
       provider: kind,
       endpoint: serverEndpoint.trim() || defaultEndpoint(kind),
       accessToken: kind === 'Nextcloud' || kind === 'MEGA Drive' ? undefined : tokenOrPass,
+      rcloneToken: kind === 'Google Drive' && !apiKey.trim() ? existing?.rcloneToken : undefined,
+      refreshToken: keepRefresh ? existing?.refreshToken : undefined,
+      expiresAt: keepRefresh ? existing?.expiresAt : undefined,
       username: kind === 'Nextcloud' || kind === 'MEGA Drive'
         ? (username.trim() || accountEmail.trim())
         : undefined,
       password: kind === 'Nextcloud' || kind === 'MEGA Drive' ? tokenOrPass : undefined,
       updatedAt: new Date().toISOString(),
     };
+  };
+
+  /** Finish a browser sign-in: sync, then update the account row. */
+  const completeSignIn = async (input: Parameters<typeof cloudService.connectAndSync>[0], endpoint: string) => {
+    const { info, library, note } = await cloudService.connectAndSync({ accountId: account.id, ...input });
+    const updated: CloudAccount = {
+      ...account,
+      name: accountName.trim() || account.name,
+      email: info.email || accountEmail.trim() || account.email,
+      usedBytes: info.usedBytes || account.usedBytes,
+      totalBytes: info.totalBytes || account.totalBytes,
+      status: 'connected',
+      liveConnected: true,
+      endpoint,
+    };
+    onSyncLibrary?.({ account: updated, folders: library.folders, files: library.files, note });
+    onUpdateAccount?.(updated);
+    onShowToast?.(note || `Signed in to ${account.provider} as ${info.email}`);
+    onClose();
+  };
+
+  const handleRcloneSignIn = async () => {
+    setIsSyncing(true);
+    setTestError(null);
+    try {
+      const rcloneToken = await signInWithRclone();
+      await completeSignIn(
+        { provider: 'Google Drive', rcloneToken, endpoint: defaultEndpoint('Google Drive') },
+        defaultEndpoint('Google Drive'),
+      );
+    } catch (err) {
+      setTestResult('failed');
+      setTestError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleBrowserSignIn = async () => {
+    if (!kind) return;
+    setIsSyncing(true);
+    setTestError(null);
+    try {
+      const endpoint = serverEndpoint.trim() || defaultEndpoint(kind);
+      if (kind === 'Google Drive') {
+        const tokens = await signInWithGoogle();
+        const oauth = credentialsFromGoogleTokens(tokens, endpoint);
+        await completeSignIn({ provider: kind, ...oauth }, oauth.endpoint || endpoint);
+      } else if (isPkceProvider(kind)) {
+        const tokens = await signInWithProvider(kind);
+        const oauth = credentialsFromOAuthTokens(tokens, endpoint);
+        await completeSignIn({ provider: kind, ...oauth }, endpoint);
+      } else if (kind === 'Nextcloud') {
+        const login = await signInWithNextcloud(serverEndpoint);
+        setServerEndpoint(login.endpoint);
+        await completeSignIn(
+          { provider: kind, username: login.username, password: login.appPassword, endpoint: login.endpoint },
+          login.endpoint,
+        );
+      }
+    } catch (err) {
+      setTestResult('failed');
+      setTestError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const handleTestConnection = async () => {
@@ -260,7 +370,7 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
                     {account.provider === 'Google Drive' && 'Connected via Google Cloud OAuth 2.0 with Drive Rest API v3 integration.'}
                     {account.provider === 'Dropbox' && 'Connected via Dropbox Studio App Gateway with realtime webhook event listening.'}
                     {account.provider === 'OneDrive' && 'Connected via Microsoft Graph Drive API with multi-tenant Azure AD security.'}
-                    {account.provider === 'MEGA Drive' && 'Connected via MEGA zero-knowledge authenticated cryptographic session gateway.'}
+                    {account.provider === 'MEGA Drive' && 'Connected to MEGA with your account login. File listing is not available yet.'}
                   </p>
                 </div>
               </div>
@@ -319,6 +429,45 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
                 </div>
               )}
 
+              {(kind === 'Google Drive' || kind === 'Dropbox' || kind === 'OneDrive' || kind === 'Nextcloud') && (
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    disabled={isSyncing || !browserSignInReady}
+                    onClick={() => void handleBrowserSignIn()}
+                    className="w-full px-3 py-2.5 rounded-lg bg-white hover:bg-neutral-100 text-neutral-900 text-xs font-semibold disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isSyncing ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <img src={PROVIDER_LOGOS[kind]} alt="" className="w-4 h-4 object-contain" />
+                    )}
+                    {signedInViaBrowser ? `Re-authorize with ${signInBrand}` : `Sign in with ${signInBrand}`}
+                  </button>
+                  {kind === 'Google Drive' && (
+                    <button
+                      type="button"
+                      disabled={isSyncing || !rcloneReady}
+                      onClick={() => void handleRcloneSignIn()}
+                      title={rcloneReady ? 'Uses the bundled rclone and its shared Google app' : 'rclone was not found'}
+                      className="w-full px-3 py-2.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-100 text-xs font-semibold disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      Quick sign-in (no setup){existing?.rcloneToken ? ' — re-authorize' : ''}
+                    </button>
+                  )}
+                  {kind !== 'Nextcloud' && !isOAuthConfiguredFor(kind) && (
+                    <p className="text-[10px] text-amber-200/90">
+                      Set <span className="font-mono">{signInEnvName(kind)}</span> to enable sign-in. See the cloud OAuth docs.
+                    </p>
+                  )}
+                  {signedInViaBrowser && kind !== 'Nextcloud' && (
+                    <p className="text-[10px] text-emerald-400/80">
+                      Refresh token on file — Cloudbreak renews access automatically.
+                    </p>
+                  )}
+                </div>
+              )}
+
               {/* API Token / Credentials */}
               <div className="space-y-2.5">
                 <div>
@@ -327,6 +476,8 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
                       ? 'App Password'
                       : account.provider === 'MEGA Drive'
                       ? 'Password'
+                      : account.provider === 'Google Drive' || account.provider === 'Dropbox' || account.provider === 'OneDrive'
+                      ? 'Access token (advanced)'
                       : 'OAuth Access Token'}
                   </label>
                   <div className="relative">
@@ -346,7 +497,9 @@ export const CloudProviderIntegrationModal: React.FC<CloudProviderIntegrationMod
                     <p className="text-[10px] text-emerald-400/80 mt-1.5">Live credentials on file for this account.</p>
                   )}
                 </div>
-                {isTokenProvider(account.provider) && <AccessTokenGuide provider={account.provider} />}
+                {isTokenProvider(account.provider) && apiKey.trim() && (
+                  <AccessTokenGuide provider={account.provider} />
+                )}
               </div>
 
               {/* Test Connection Button */}

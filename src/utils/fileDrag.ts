@@ -8,6 +8,8 @@ export type DraggedFilePayload = {
   name: string;
   /** Logical path for the terminal (folderPath/name). */
   path: string;
+  /** Everything being dragged when the dragged item is part of a multi-selection (includes `id`). */
+  ids?: string[];
 };
 
 export function fileTerminalPath(file: FileItem): string {
@@ -22,15 +24,35 @@ export function quoteShellPath(path: string): string {
   return `'${path.replace(/'/g, `'\\''`)}'`;
 }
 
-export function setFileDragData(dataTransfer: DataTransfer, file: FileItem): void {
+/** `selectedIds` is the current selection; it travels with the drag only when the dragged item is one of several. */
+export function setFileDragData(dataTransfer: DataTransfer, file: FileItem, selectedIds?: Set<string>): void {
   const payload: DraggedFilePayload = {
     id: file.id,
     name: file.name,
     path: fileTerminalPath(file),
   };
+  if (selectedIds && selectedIds.size > 1 && selectedIds.has(file.id)) payload.ids = [...selectedIds];
   dataTransfer.setData(CLOUDBREAK_FILE_MIME, JSON.stringify(payload));
   dataTransfer.setData('text/plain', payload.path);
   dataTransfer.effectAllowed = 'copy';
+}
+
+/** True while an in-app file drag is over a target (the data itself is only readable on drop). */
+export function isCloudbreakFileDrag(dataTransfer: DataTransfer): boolean {
+  return Array.from(dataTransfer.types).includes(CLOUDBREAK_FILE_MIME);
+}
+
+/** File ids from an in-app drag: the whole selection when there was one, else the dragged file. */
+export function readDroppedFileIds(dataTransfer: DataTransfer): string[] {
+  const raw = dataTransfer.getData(CLOUDBREAK_FILE_MIME);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as DraggedFilePayload;
+    if (Array.isArray(parsed.ids) && parsed.ids.length) return parsed.ids;
+    return parsed.id ? [parsed.id] : [];
+  } catch {
+    return [];
+  }
 }
 
 export function readDroppedPaths(dataTransfer: DataTransfer): string[] {

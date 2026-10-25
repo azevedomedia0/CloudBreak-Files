@@ -16,6 +16,8 @@ import {
   hasEncryptedPayload,
 } from '../utils/fileEncryption';
 import { isZipArchive, unzipArchiveToFileItems } from '../utils/unzipArchive';
+import { uniqueName, zipFiles } from '../utils/zipFiles';
+import { formatBytes } from '../utils/format';
 import { prepareDocumentBodyForOpen } from '../utils/contentSafety';
 import { rustBridge } from '../services/rustBridge';
 import { dataUrlToBytes, localFs } from '../services/localFsBridge';
@@ -74,7 +76,6 @@ export function useFileActions({
   showToast,
   isVaultUnlocked = false,
 }: Options) {
-  const [isDraggingOver, setIsDraggingOver] = useState<boolean>(false);
   const [clipboardFileIds, setClipboardFileIds] = useState<string[]>([]);
 
   // Photo Version Save
@@ -390,41 +391,76 @@ export function useFileActions({
     showToast(`Moved to ${folder.name}`);
   };
 
-  const handleCompressFile = (file: FileItem) => {
-    const base = file.name.replace(/\.[^.]+$/, '') || file.name;
-    const zipName = `${base}.zip`;
-    const id = `file-zip-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const archive: FileItem = {
-      ...file,
-      id,
-      name: zipName,
-      category: 'archive',
-      mimeType: 'application/zip',
-      sizeBytes: Math.max(1024, Math.round(file.sizeBytes * 0.72)),
-      thumbnailUrl: undefined,
-      url: file.url,
-      updatedAt: new Date().toISOString(),
-      version: 1,
-      starred: false,
-      tags: [...file.tags.filter(t => t.toLowerCase() !== 'zip'), 'zip'],
-      encryption: {
-        ...file.encryption,
-        isEncrypted: false,
-        zeroKnowledgeVerified: false,
-      },
-      photoExif: undefined,
-      videoMeta: undefined,
-      documentBody: undefined,
-    };
-    setFiles(prev => {
-      const idx = prev.findIndex(f => f.id === file.id);
-      const next = [...prev];
-      next.splice(idx >= 0 ? idx + 1 : 0, 0, archive);
-      return next;
-    });
-    setSelectedFileId(id);
-    showToast(`Compressed to “${zipName}” (local preview archive)`);
+  /** Zip the files. Local files get a real .zip next to them on disk; others get an in-session archive. */
+  const handleCompressFiles = async (sources: FileItem[]) => {
+    if (!sources.length) return;
+    const label = sources.length === 1 ? sources[0].name : `${sources.length} items`;
+    showToast(`Compressing ${label}…`);
+    try {
+      const result = await zipFiles(sources);
+      if (!result.added) {
+        showToast(`Couldn’t compress ${label}: the file data isn’t available here`);
+        return;
+      }
+      const first = sources[0];
+      const dir = first.localPath ? directoryOf(first.localPath) : null;
+      const onDisk = !!dir && localFs.available()
+        && sources.every(f => f.localPath && directoryOf(f.localPath) === dir);
+
+      const base: FileItem = {
+        ...first,
+        name: result.name,
+        category: 'archive',
+        mimeType: 'application/zip',
+        thumbnailUrl: undefined,
+        version: 1,
+        starred: false,
+        tags: [...first.tags.filter(t => t.toLowerCase() !== 'zip'), 'zip'],
+        encryption: { ...first.encryption, isEncrypted: false, zeroKnowledgeVerified: false },
+        photoExif: undefined,
+        videoMeta: undefined,
+        documentBody: undefined,
+      };
+      let archive: FileItem;
+      if (onDisk && dir) {
+        const info = await localFs.saveNewFile(dir, result.name, result.bytes);
+        archive = {
+          ...base,
+          id: `file-local-${info.path}`,
+          name: info.name,
+          localPath: info.path,
+          url: localFs.assetUrl(info.path),
+          sizeBytes: info.sizeBytes,
+          updatedAt: new Date(info.modifiedMs).toISOString(),
+        };
+      } else {
+        const taken = new Set(files.map(f => f.name));
+        archive = {
+          ...base,
+          id: `file-zip-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          name: uniqueName(result.name, taken),
+          localPath: undefined,
+          url: URL.createObjectURL(new Blob([result.bytes as BlobPart], { type: 'application/zip' })),
+          sizeBytes: result.bytes.length,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      const lastSourceId = sources[sources.length - 1].id;
+      setFiles(prev => {
+        const idx = prev.findIndex(f => f.id === lastSourceId);
+        const next = [...prev];
+        next.splice(idx >= 0 ? idx + 1 : 0, 0, archive);
+        return next;
+      });
+      setSelectedFileId(archive.id);
+      const skippedNote = result.skipped.length ? ` · skipped ${result.skipped.length} unreadable` : '';
+      showToast(`Created “${archive.name}” (${formatBytes(result.originalBytes)} → ${formatBytes(archive.sizeBytes)})${skippedNote}${onDisk ? '' : ' — kept in this session'}`);
+    } catch (err) {
+      showToast(`Could not compress: ${err instanceof Error ? err.message : String(err)}`);
+    }
   };
+
+  const handleCompressFile = (file: FileItem) => handleCompressFiles([file]);
 
   const handleToggleTag = (fileIds: string[], tag: string) => {
     setFiles(prev => {
@@ -469,8 +505,10 @@ export function useFileActions({
   };
 
   // Upload Files — encrypt with the vault session key when the vault is unlocked.
-  const handleUploadFiles = async (fileList: FileList) => {
-    const targetAccountId: CloudProviderId = selectedAccountId === 'all' ? 's3' : selectedAccountId;
+  const handleUploadFiles = async (fileList: ArrayLike<File>) => {
+    // A drop is a local preview, not an upload. Under "All" (Local Files) it stays local; in a cloud
+    // account's view it appears there, where it was dropped.
+    const targetAccountId: CloudProviderId = selectedAccountId;
     const newItems: FileItem[] = [];
     const unlocked = isVaultUnlocked || (await rustBridge.isVaultUnlocked());
     let encryptedCount = 0;
@@ -543,6 +581,8 @@ export function useFileActions({
         id: `file-upl-${Date.now()}-${i}`,
         name: file.name,
         accountId: targetAccountId,
+        // In the folder it was dropped on, so it shows up there and not only in search.
+        folderId: selectedFolder?.id,
         folderPath: selectedFolder ? `/${selectedFolder.name}` : '/Uploads',
         sizeBytes,
         category,
@@ -557,19 +597,12 @@ export function useFileActions({
         encryption,
         videoMeta: isVideo
           ? {
-              durationSeconds: 15,
-              dimensions: { width: 1920, height: 1080 },
-              framerate: 30,
-              codec: 'H.264',
-              bitrate: '24 Mbps',
-              audioCodec: 'AAC',
-            }
-          : undefined,
-        photoExif: isImage
-          ? {
-              camera: 'Direct Upload',
-              dimensions: { width: 3840, height: 2160 },
-              colorSpace: 'sRGB',
+              durationSeconds: 0,
+              dimensions: { width: 0, height: 0 },
+              framerate: 0,
+              codec: '—',
+              bitrate: '—',
+              audioCodec: '—',
             }
           : undefined,
       };
@@ -607,29 +640,36 @@ export function useFileActions({
     }
   };
 
-  // Drag and Drop
+  // Files dropped from outside the app wait here until the person confirms in UploadConfirmModal.
+  const [pendingDrop, setPendingDrop] = useState<File[] | null>(null);
+
+  // Files dropped from outside the app are added as a local preview. There is no drop overlay.
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
-    setIsDraggingOver(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDraggingOver(false);
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    setIsDraggingOver(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleUploadFiles(e.dataTransfer.files);
+      // Copy now: the browser's FileList is only valid during this event.
+      setPendingDrop(Array.from(e.dataTransfer.files));
     }
   };
 
+  const confirmPendingDrop = () => {
+    const files = pendingDrop;
+    setPendingDrop(null);
+    if (files?.length) void handleUploadFiles(files);
+  };
+
+  const cancelPendingDrop = () => setPendingDrop(null);
+
   return {
-    isDraggingOver,
     handleSavePhotoVersion,
     handleSaveDocument,
+    pendingDrop,
+    confirmPendingDrop,
+    cancelPendingDrop,
     handleSaveTrimmedVideo,
     handleToggleEncrypt,
     handleDeleteFile,
@@ -639,6 +679,7 @@ export function useFileActions({
     handlePasteFiles,
     handleMoveFile,
     handleCompressFile,
+    handleCompressFiles,
     clipboardFileIds,
     handleToggleTag,
     handleBatchRestore,
@@ -646,7 +687,6 @@ export function useFileActions({
     handleUploadFiles,
     handleUnzipFile,
     handleDragOver,
-    handleDragLeave,
     handleDrop,
   };
 }

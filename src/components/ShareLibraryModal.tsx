@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   X, Share2, Users, Shield, Copy, Check, Lock, UserPlus,
-  Mail, Clock, Key, Globe, Eye, Sparkles, ChevronDown, Trash2,
+  Mail, Clock, Key, Globe, Eye, ChevronDown, Trash2,
   Radio, Wifi, ArrowUpRight, ArrowDownLeft, ShieldCheck, Play, Pause, FolderDown, Unlink,
 } from '@/src/icons';
 import { SharedLibrary, SharedMember, P2PPeer } from '../types';
@@ -80,7 +80,7 @@ export const ShareLibraryModal: React.FC<ShareLibraryModalProps> = ({
     });
 
     if (!addedPeers.length) {
-      setShowNotification(skipped ? 'Those peers are already authorized.' : 'Enter at least one email or node ID.');
+      setShowNotification(skipped ? 'Those peers are already authorized.' : 'Enter at least one username or node ID.');
       setTimeout(() => setShowNotification(null), 3000);
       return;
     }
@@ -128,14 +128,6 @@ export const ShareLibraryModal: React.FC<ShareLibraryModalProps> = ({
     onUpdateLibrary(updated);
     setShowNotification(nextState ? 'P2P seeding resumed to specified peers' : 'P2P seeding paused');
     setTimeout(() => setShowNotification(null), 3000);
-  };
-
-  const p2pDirectLink = `p2p://vault.mesh/${library.id}#key=0x8f2a:e2ee:cipher=aes256gcm`;
-
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(p2pDirectLink);
-    setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 2000);
   };
 
   const handleDisconnectIncoming = () => {
@@ -191,9 +183,8 @@ export const ShareLibraryModal: React.FC<ShareLibraryModalProps> = ({
 
         {/* Status Notification */}
         {showNotification && (
-          <div className="bg-sky-950/60 border-b border-sky-500/30 px-6 py-2.5 text-xs text-sky-200 flex items-center gap-2">
-            <Sparkles className="w-3.5 h-3.5 text-sky-400" />
-            <span>{showNotification}</span>
+          <div role="status" className="bg-sky-950/60 border-b border-sky-500/30 px-6 py-2.5 text-xs text-sky-200">
+            {showNotification}
           </div>
         )}
 
@@ -234,7 +225,7 @@ export const ShareLibraryModal: React.FC<ShareLibraryModalProps> = ({
             }`}
           >
             <Globe className="w-3.5 h-3.5" />
-            <span>Encrypted P2P Magnet Link</span>
+            <span>Invite links</span>
           </button>
 
           <button
@@ -246,7 +237,7 @@ export const ShareLibraryModal: React.FC<ShareLibraryModalProps> = ({
             }`}
           >
             <Shield className="w-3.5 h-3.5" />
-            <span>Zero-Knowledge Cipher Specs</span>
+            <span>Encryption details</span>
           </button>
         </div>
 
@@ -295,13 +286,13 @@ export const ShareLibraryModal: React.FC<ShareLibraryModalProps> = ({
                 </div>
               </div>
 
-              {/* Add Specified Peers Form — supports multiple emails */}
+              {/* Add Specified Peers Form — supports multiple usernames */}
               <form onSubmit={handleAddSpecifiedPeer} className="space-y-3 p-4 rounded-xl bg-black/40 border border-white/10">
                 <label className="text-xs font-semibold text-neutral-200 block">
                   Add Specified P2P Users
                 </label>
                 <p className="text-[11px] text-neutral-400 -mt-1 mb-2">
-                  Enter one email or node ID, or paste several separated by commas / new lines.
+                  Enter one username or node ID, or paste several separated by commas / new lines.
                 </p>
                 <div className="relative">
                   <Mail className="absolute left-3 top-2.5 w-4 h-4 text-neutral-500" />
@@ -350,13 +341,13 @@ export const ShareLibraryModal: React.FC<ShareLibraryModalProps> = ({
               <div className="space-y-2 pt-1">
                 <h4 className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wider flex items-center justify-between">
                   <span>Specified Recipients ({library.seedingPeers?.length || 0})</span>
-                  <span className="font-mono text-[10px] text-sky-400">Zero-Knowledge Peer ACL</span>
+                  <span className="font-mono text-[10px] text-sky-400">Invited peers</span>
                 </h4>
                 
                 <div className="divide-y divide-white/5 border border-white/10 rounded-xl bg-neutral-950/60 overflow-hidden">
                   {(library.seedingPeers || []).length === 0 ? (
                     <div className="p-4 text-center text-xs text-neutral-400 italic">
-                      No recipients yet. Add emails above — they stay pending until a peer connects.
+                      No recipients yet. Add usernames above — they stay pending until a peer connects.
                     </div>
                   ) : (
                     (library.seedingPeers || []).map(peer => (
@@ -424,9 +415,9 @@ export const ShareLibraryModal: React.FC<ShareLibraryModalProps> = ({
                   <ShieldCheck className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-xs font-semibold text-white">Verified Incoming Encrypted P2P Media Library</h3>
+                  <h3 className="text-xs font-semibold text-white">Incoming encrypted library</h3>
                   <p className="text-[11px] text-neutral-300 mt-0.5">
-                    This media library is received directly from other users via end-to-end encrypted peer-to-peer protocols without passing through unencrypted intermediaries.
+                    This library was received directly from another person's device. Its files are encrypted with AES-256-GCM.
                   </p>
                 </div>
               </div>
@@ -442,19 +433,19 @@ export const ShareLibraryModal: React.FC<ShareLibraryModalProps> = ({
                 </div>
                 <div className="flex justify-between items-center p-3 rounded-xl bg-neutral-950 border border-white/10">
                   <span className="text-neutral-400">Sender P2P Node ID:</span>
-                  <span className="font-mono text-neutral-300">{library.senderPeerNodeId || 'peer-cph-node-042'}</span>
+                  <span className="font-mono text-neutral-300">{library.senderPeerNodeId || 'Unknown'}</span>
                 </div>
                 <div className="flex justify-between items-center p-3 rounded-xl bg-neutral-950 border border-white/10">
                   <span className="text-neutral-400">Encrypted P2P Protocol:</span>
-                  <span className="font-mono text-cyan-300">{library.p2pProtocol || 'Encrypted P2P (Noise XX + AES-256-GCM)'}</span>
+                  <span className="font-mono text-cyan-300">{library.p2pProtocol || 'Encrypted P2P (AES-256-GCM)'}</span>
                 </div>
                 <div className="flex justify-between items-center p-3 rounded-xl bg-neutral-950 border border-white/10">
-                  <span className="text-neutral-400">Active Relay Swarm Nodes:</span>
-                  <span className="font-mono text-emerald-400 font-semibold">{library.p2pSwarmPeers || 3} Relay Peers</span>
+                  <span className="text-neutral-400">Connected peers:</span>
+                  <span className="font-mono text-emerald-400 font-semibold">{library.p2pSwarmPeers ?? 0}</span>
                 </div>
                 <div className="flex justify-between items-center p-3 rounded-xl bg-neutral-950 border border-white/10">
                   <span className="text-neutral-400">P2P Stream Download Speed:</span>
-                  <span className="font-mono text-emerald-400 font-semibold">{library.transferSpeed || '42.8 MB/s'}</span>
+                  <span className="font-mono text-emerald-400 font-semibold">{library.transferSpeed || '—'}</span>
                 </div>
               </div>
 
@@ -493,7 +484,7 @@ export const ShareLibraryModal: React.FC<ShareLibraryModalProps> = ({
                       className="w-full sm:w-auto px-4 py-2 rounded-xl bg-red-950/40 hover:bg-red-900/50 border border-red-800/50 text-red-300 hover:text-red-100 text-xs font-medium transition-all flex items-center justify-center gap-1.5"
                     >
                       <Unlink className="w-3.5 h-3.5" />
-                      Disconnect from Incoming Library
+                      Disconnect from this shared folder
                     </button>
                   )}
                 </div>
@@ -506,52 +497,32 @@ export const ShareLibraryModal: React.FC<ShareLibraryModalProps> = ({
             <div className="space-y-5">
               <div className="p-4 bg-black/40 rounded-xl border border-white/10 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-white">P2P Swarm Magnet Link</span>
-                  <span className="text-[11px] text-sky-400 font-mono">End-to-End Cryptographic Fragment</span>
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    readOnly
-                    value={p2pDirectLink}
-                    className="flex-1 bg-neutral-950 border border-white/10 rounded-xl px-3 py-2 text-xs font-mono text-neutral-300 select-all focus:outline-none"
-                  />
-                  <button
-                    onClick={copyToClipboard}
-                    className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors ${
-                      copiedLink
-                        ? 'bg-emerald-500 text-neutral-950'
-                        : 'bg-sky-500 hover:bg-sky-400 text-white'
-                    }`}
-                  >
-                    {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copiedLink ? 'Copied' : 'Copy'}</span>
-                  </button>
+                  <span className="text-xs font-semibold text-white">Invite links</span>
                 </div>
                 <p className="text-[11px] text-neutral-400">
-                  Chunks are authenticated and verified with client-side SHA-256 block signatures.
+                  Invite links are created when you add a recipient to a library, not on this screen. This screen used to show a placeholder link that did not work.
                 </p>
               </div>
             </div>
           )}
 
-          {/* TAB 3: CIPHER & ZERO-KNOWLEDGE POLICIES */}
+          {/* TAB 3: Encryption details */}
           {activeTab === 'protocol' && isOutgoing && (
             <div className="space-y-4">
               <div className="p-4 bg-sky-950/20 border border-sky-500/30 rounded-xl space-y-2">
                 <div className="flex items-center gap-2 text-sky-300 text-xs font-semibold">
                   <ShieldCheck className="w-4 h-4" />
-                  <span>Zero-Knowledge P2P Seeding Architecture</span>
+                  <span>How sharing is encrypted</span>
                 </div>
                 <p className="text-xs text-neutral-300">
-                  Your media files are chunked into 4MB encrypted segments. Only specified P2P peer users with authorized public keys can decrypt the stream.
+                  Files are split into 1 MiB chunks, each encrypted with AES-256-GCM. The library key is wrapped for each invited peer.
                 </p>
               </div>
 
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between p-3 rounded-xl bg-neutral-950 border border-white/10">
                   <span className="text-neutral-400">Stream Cipher:</span>
-                  <span className="font-mono text-neutral-200">AES-256-GCM + Noise XX Handshake</span>
+                  <span className="font-mono text-neutral-200">AES-256-GCM (chunked)</span>
                 </div>
                 <div className="flex justify-between p-3 rounded-xl bg-neutral-950 border border-white/10">
                   <span className="text-neutral-400">Seeder Bandwidth Limit:</span>
@@ -560,7 +531,7 @@ export const ShareLibraryModal: React.FC<ShareLibraryModalProps> = ({
                 <div className="flex justify-between p-3 rounded-xl bg-neutral-950 border border-white/10">
                   <span className="text-neutral-400">Peer Authorization:</span>
                   <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                    <Check className="w-3.5 h-3.5" /> Specified Users Only (Strict ACL)
+                    <Check className="w-3.5 h-3.5" /> Invite-based
                   </span>
                 </div>
               </div>

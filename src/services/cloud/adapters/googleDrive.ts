@@ -1,4 +1,6 @@
 import { cloudJson, cloudRequest } from '../http';
+import { syncRcloneDrive, testRcloneDrive } from '../rclone';
+import { ensureGoogleAccessToken } from '../oauth/google';
 import { ProviderAccountInfo, ProviderCredentials, ProviderSyncResult, RemoteEntry } from '../types';
 
 interface DriveAbout {
@@ -32,11 +34,17 @@ function base(creds: ProviderCredentials): string {
   return (creds.endpoint || 'https://www.googleapis.com/drive/v3').replace(/\/+$/, '');
 }
 
+async function withFreshCreds(creds: ProviderCredentials): Promise<ProviderCredentials> {
+  return ensureGoogleAccessToken(creds);
+}
+
 export async function testGoogleDrive(creds: ProviderCredentials): Promise<ProviderAccountInfo> {
-  const token = requireToken(creds);
+  if (creds.rcloneToken) return testRcloneDrive(creds);
+  const fresh = await withFreshCreds(creds);
+  const token = requireToken(fresh);
   const about = await cloudJson<DriveAbout>({
     method: 'GET',
-    url: `${base(creds)}/about?fields=user,storageQuota`,
+    url: `${base(fresh)}/about?fields=user,storageQuota`,
     headers: { Authorization: `Bearer ${token}` },
   });
   return {
@@ -48,8 +56,10 @@ export async function testGoogleDrive(creds: ProviderCredentials): Promise<Provi
 }
 
 export async function syncGoogleDrive(creds: ProviderCredentials): Promise<ProviderSyncResult> {
-  const token = requireToken(creds);
-  const account = await testGoogleDrive(creds);
+  if (creds.rcloneToken) return syncRcloneDrive(creds);
+  const fresh = await withFreshCreds(creds);
+  const token = requireToken(fresh);
+  const account = await testGoogleDrive(fresh);
   const entries: RemoteEntry[] = [];
   let pageToken: string | undefined;
 
@@ -65,7 +75,7 @@ export async function syncGoogleDrive(creds: ProviderCredentials): Promise<Provi
 
     const page = await cloudJson<DriveList>({
       method: 'GET',
-      url: `${base(creds)}/files?${params}`,
+      url: `${base(fresh)}/files?${params}`,
       headers: { Authorization: `Bearer ${token}` },
     });
 
@@ -89,7 +99,7 @@ export async function syncGoogleDrive(creds: ProviderCredentials): Promise<Provi
   // Touch token once more so failed auth surfaces even on empty drives.
   await cloudRequest({
     method: 'GET',
-    url: `${base(creds)}/about?fields=user`,
+    url: `${base(fresh)}/about?fields=user`,
     headers: { Authorization: `Bearer ${token}` },
   });
 

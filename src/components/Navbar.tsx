@@ -82,18 +82,18 @@ export const Navbar: React.FC<NavbarProps> = ({
         })}
       </div>
 
-      {/* Actions and E2EE Status */}
+      {/* Actions and vault status */}
       <div className="flex items-center gap-3">
         
-        {/* E2EE Engine Status Indicator */}
+        {/* Vault status indicator */}
         <button
           onClick={onOpenVaultSecurity}
           className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-neutral-900 border border-neutral-800 hover:border-cyan-500/40 transition-colors text-xs text-neutral-300 group"
-          title="Click to view Cryptographic & Key settings"
+          title="Open vault settings"
         >
-          <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+          <span className={`w-2 h-2 rounded-full ${isVaultUnlocked ? 'bg-cyan-400' : 'bg-amber-400'}`} />
           <span className="font-mono text-[11px] text-neutral-400 group-hover:text-cyan-300 transition-colors">
-            AES-256 E2EE Active
+            {isVaultUnlocked ? 'Vault Unlocked' : 'Vault Locked'}
           </span>
           <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
         </button>

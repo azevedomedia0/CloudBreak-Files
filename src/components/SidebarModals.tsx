@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   X, Folder, FolderPlus, Server, Star,
   HardDrive, Radio, Shield, FolderDown, RefreshCw,
 } from '@/src/icons';
 import type { RemovableDevice } from '../types';
+import { discoverNetworkServers, type NearbyServerDto } from '../services/volumesBridge';
+import { buildLibraryDraft, describeDraft, MAX_LIBRARY_FILES, type LibraryDraft } from '../utils/libraryItems';
+import { pickLocalFolderFromDisk } from '../utils/importLocalFolder';
 
 function generateInvitePassphrase(length = 20): string {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%*-_';
@@ -156,15 +159,24 @@ function parseRecipientTokens(raw: string): string[] {
 interface NewSharedLibraryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreateLibrary: (form: CreateP2pLibraryForm) => void | Promise<void>;
+  /** Files and folders the user picked with "Share as Library"; undefined from the sidebar "+" button. */
+  draft?: LibraryDraft | null;
+  /** `draft` is what to share: the one handed in, or the folder chosen with Browse. */
+  onCreateLibrary: (form: CreateP2pLibraryForm, draft: LibraryDraft | null) => void | Promise<void>;
 }
 
 export const NewSharedLibraryModal: React.FC<NewSharedLibraryModalProps> = ({
   isOpen,
   onClose,
+  draft = null,
   onCreateLibrary,
 }) => {
   const [libName, setLibName] = useState('');
+  // The folder chosen with Browse (from the sidebar "+"): what is inside it, read when it is chosen.
+  const [pickedDraft, setPickedDraft] = useState<LibraryDraft | null>(null);
+  const [pickedPath, setPickedPath] = useState<string | null>(null);
+  const [reading, setReading] = useState(false);
+  const [readError, setReadError] = useState<string | null>(null);
   const [description, setDescription] = useState('');
   const [recipientDraft, setRecipientDraft] = useState('');
   const [recipients, setRecipients] = useState<string[]>([]);
@@ -176,6 +188,37 @@ export const NewSharedLibraryModal: React.FC<NewSharedLibraryModalProps> = ({
   const [showPassphrase, setShowPassphrase] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setLibName(draft?.suggestedName ?? '');
+      setPickedDraft(null);
+      setPickedPath(null);
+      setReadError(null);
+    }
+  }, [isOpen, draft]);
+
+  // Browse opens the system's folder picker. The folder is only allowed for this session (it is not added to
+  // Local Files), and what is inside it is read now so the dialog can say how much will be shared.
+  const browseForFolder = async () => {
+    setReadError(null);
+    setReading(true);
+    try {
+      const imported = await pickLocalFolderFromDisk({ sessionOnly: true });
+      if (!imported) return;
+      setPickedDraft(buildLibraryDraft({ files: [], folders: [imported.rootFolder] }, imported.files, imported.folders));
+      setPickedPath(imported.path ?? null);
+      setLibName(imported.rootFolder.name);
+    } catch (err) {
+      setReadError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setReading(false);
+    }
+  };
+
+  const effectiveDraft = draft ?? pickedDraft;
+  const choosingFolder = !draft;
+  const nothingInside = choosingFolder && !!pickedDraft && pickedDraft.fileCount === 0;
 
   if (!isOpen) return null;
 
@@ -225,8 +268,10 @@ export const NewSharedLibraryModal: React.FC<NewSharedLibraryModalProps> = ({
         invitePassphrase: invitePassphrase.trim(),
         expiresInDays,
         allowDownloads,
-      });
+      }, effectiveDraft);
       setLibName('');
+      setPickedDraft(null);
+      setPickedPath(null);
       setDescription('');
       setRecipientDraft('');
       setRecipients([]);
@@ -259,7 +304,7 @@ export const NewSharedLibraryModal: React.FC<NewSharedLibraryModalProps> = ({
               <Radio className="w-4 h-4 animate-pulse" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-purple-300">Seed Media Library to P2P Users</h3>
+              <h3 className="text-sm font-semibold text-purple-300">Share Folder</h3>
               <p className="text-[10px] text-neutral-400">Publish and seed encrypted media to specified P2P recipients</p>
             </div>
           </div>
@@ -271,20 +316,68 @@ export const NewSharedLibraryModal: React.FC<NewSharedLibraryModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-neutral-300 mb-1.5">
-              Media Library Name
-            </label>
-            <input
-              type="text"
-              autoFocus
-              value={libName}
-              onChange={e => setLibName(e.target.value)}
-              placeholder="e.g. Commercial 4K Master Seeding Reel"
-              className="w-full px-3.5 py-2 rounded-xl bg-black/40 border border-white/15 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400/50 transition-all font-sans"
-            />
+        {draft && (
+          <div className="mx-5 mt-4 px-3 py-2.5 rounded-xl bg-purple-500/10 border border-purple-400/20">
+            <div className="text-xs font-medium text-purple-100">{describeDraft(draft)}</div>
+            <div className="mt-0.5 text-[11px] text-purple-200/70 truncate">
+              {draft.sources.slice(0, 3).map(s => s.name).join(', ')}
+              {draft.sources.length > 3 ? ` and ${draft.sources.length - 3} more` : ''}
+            </div>
+            {draft.truncated && (
+              <div className="mt-1 text-[11px] text-amber-200">
+                Only the first {MAX_LIBRARY_FILES} files are included.
+              </div>
+            )}
           </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          {choosingFolder ? (
+            <div>
+              <span className="block text-xs font-medium text-neutral-300 mb-1.5">Folder to share</span>
+              <div className="flex items-center gap-2">
+                <div
+                  className="flex-1 min-w-0 px-3.5 py-2 rounded-xl bg-black/40 border border-white/15 text-xs truncate"
+                  title={pickedPath ?? undefined}
+                >
+                  {pickedDraft && libName
+                    ? <span className="text-white">{libName}</span>
+                    : <span className="text-neutral-500">No folder chosen</span>}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void browseForFolder()}
+                  disabled={reading}
+                  className="h-[34px] px-3.5 shrink-0 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-xs font-medium text-white flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                >
+                  <Folder className="w-3.5 h-3.5 text-purple-300" />
+                  <span>{reading ? 'Reading…' : 'Browse Files…'}</span>
+                </button>
+              </div>
+              {readError && <p className="mt-1.5 text-[11px] text-amber-200">Could not read that folder: {readError}</p>}
+              {pickedDraft && !reading && (
+                <p className={`mt-1.5 text-[11px] ${nothingInside ? 'text-amber-200' : 'text-neutral-400'}`}>
+                  {nothingInside
+                    ? 'This folder has no files in it yet, so there is nothing to share.'
+                    : `${describeDraft(pickedDraft)} · everything inside it is shared${pickedDraft.truncated ? `, up to the first ${MAX_LIBRARY_FILES} files` : ''}.`}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div>
+              <label className="block text-xs font-medium text-neutral-300 mb-1.5">
+                Shared folder name
+              </label>
+              <input
+                type="text"
+                autoFocus
+                value={libName}
+                onChange={e => setLibName(e.target.value)}
+                placeholder="e.g. Commercial 4K Master Seeding Reel"
+                className="w-full px-3.5 py-2 rounded-xl bg-black/40 border border-white/15 text-white placeholder-neutral-500 text-xs focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400/50 transition-all font-sans"
+              />
+            </div>
+          )}
 
           <div>
             <label className="block text-xs font-medium text-neutral-300 mb-1.5">
@@ -442,7 +535,7 @@ export const NewSharedLibraryModal: React.FC<NewSharedLibraryModalProps> = ({
 
           <div>
             <label className="block text-xs font-medium text-neutral-300 mb-1.5">
-              Invite passphrase (E2EE wrap, min 8 chars)
+              Invite passphrase (min 8 chars)
             </label>
             <div className="flex items-center gap-2">
               <input
@@ -486,7 +579,7 @@ export const NewSharedLibraryModal: React.FC<NewSharedLibraryModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={!libName.trim() || busy}
+              disabled={!libName.trim() || busy || reading || (choosingFolder && (!pickedDraft || nothingInside))}
               className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-purple-500 hover:bg-purple-400 text-white shadow-lg shadow-purple-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
             >
               {busy ? 'Encrypting…' : 'Start Seeding Library'}
@@ -751,8 +844,31 @@ export const ConnectServerModal: React.FC<ConnectServerModalProps> = ({
   const [serverName, setServerName] = useState('');
   const [serverAddress, setServerAddress] = useState('');
   const [protocol, setProtocol] = useState<'smb' | 'nfs' | 'sftp' | 'webdav'>('smb');
+  const [nearby, setNearby] = useState<NearbyServerDto[]>([]);
+  const [searching, setSearching] = useState(false);
+
+  // Look for SMB shares on the network each time the panel opens.
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    setSearching(true);
+    setNearby([]);
+    discoverNetworkServers()
+      .then(found => { if (!cancelled) setNearby(found); })
+      .catch(() => { if (!cancelled) setNearby([]); })
+      .finally(() => { if (!cancelled) setSearching(false); });
+    return () => { cancelled = true; };
+  }, [isOpen]);
 
   if (!isOpen) return null;
+
+  // Fill the form from a nearby server; the person still confirms with Add.
+  const pickNearby = (server: NearbyServerDto) => {
+    setServerName(server.name);
+    const portPart = server.port && server.port !== 445 ? `:${server.port}` : '';
+    setServerAddress(`smb://${server.host}${portPart}`);
+    setProtocol('smb');
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -786,6 +902,37 @@ export const ConnectServerModal: React.FC<ConnectServerModalProps> = ({
           >
             <X className="w-4 h-4" />
           </button>
+        </div>
+
+        <div className="px-5 pt-4 space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium text-neutral-300">Nearby on this network</p>
+            {searching && <RefreshCw className="w-3.5 h-3.5 text-neutral-500 animate-spin" />}
+          </div>
+          {!searching && nearby.length === 0 && (
+            <p className="text-[11px] text-neutral-500 leading-relaxed">
+              No SMB shares answered on this network. Connect by address below.
+            </p>
+          )}
+          {nearby.length > 0 && (
+            <ul className="max-h-36 overflow-y-auto space-y-1">
+              {nearby.map(server => (
+                <li key={`${server.name}-${server.host}`}>
+                  <button
+                    type="button"
+                    onClick={() => pickNearby(server)}
+                    className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-sky-400/40 text-left transition-colors"
+                  >
+                    <span className="min-w-0">
+                      <span className="block text-xs font-medium text-neutral-100 truncate">{server.name}</span>
+                      <span className="block text-[10px] font-mono text-neutral-500 truncate">{server.host}</span>
+                    </span>
+                    <span className="text-[10px] font-mono text-sky-300 shrink-0">SMB</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
@@ -872,19 +1019,27 @@ interface JoinIncomingLibraryModalProps {
   isOpen: boolean;
   onClose: () => void;
   onJoinLibrary: (form: JoinP2pLibraryForm) => void | Promise<void>;
+  /** An invite to fill in when the dialog opens. */
+  initialInvite?: string;
 }
 
 export const JoinIncomingLibraryModal: React.FC<JoinIncomingLibraryModalProps> = ({
   isOpen,
   onClose,
   onJoinLibrary,
+  initialInvite = '',
 }) => {
   const [libraryName, setLibraryName] = useState('');
-  const [inviteCode, setInviteCode] = useState('');
+  const [inviteCode, setInviteCode] = useState(initialInvite);
   const [ownerName, setOwnerName] = useState('');
   const [p2pPassphrase, setP2pPassphrase] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Opening with an invite (from a notification) fills it in.
+  useEffect(() => {
+    if (isOpen && initialInvite) setInviteCode(initialInvite);
+  }, [isOpen, initialInvite]);
 
   if (!isOpen) return null;
 

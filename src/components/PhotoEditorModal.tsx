@@ -2,12 +2,14 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   X, RotateCw, RotateCcw, FlipHorizontal, FlipVertical,
   Wand2, Download, Save, Undo2, Redo2, Check,
-  Sparkles, ZoomIn, ZoomOut, Maximize2, Minimize2, Crop
+  ZoomIn, ZoomOut, Maximize2, Minimize2, Crop
 } from '@/src/icons';
 import { FileItem, PhotoAdjustments } from '../types';
 import { photoResultToDataUrl, renderPhotoNative } from '../services/mediaBridge';
 import { PhotoNav, PhotoNavArrows } from './PhotoNavArrows';
 import { EditPhotoIcon } from './file-browser/EditPhotoIcon';
+import { renderPhoto } from '../utils/photoPipeline';
+import { isTauri } from '@tauri-apps/api/core';
 
 interface PhotoEditorModalProps {
   file: FileItem;
@@ -15,7 +17,24 @@ interface PhotoEditorModalProps {
   onClose: () => void;
   onSaveAsVersion: (updatedFile: FileItem, dataUrl: string) => void;
   photoNav?: PhotoNav | null;
+  /** Fill the center pane instead of floating over the app. */
+  embedded?: boolean;
+  /** Whether the adjustments sidebar is showing. It stays mounted when hidden, so edits and state are kept. */
+  showAdjustments?: boolean;
 }
+
+const ZOOM_MIN = 25;
+const ZOOM_MAX = 300;
+const ZOOM_STEP = 25;
+
+/** Photo toolbar buttons: a 40px target with a 22px icon. */
+const TOOL_BTN = 'flex items-center justify-center w-10 h-10 rounded-full active:scale-95 transition';
+const TOOL_ICON = 'w-[22px] h-[22px]';
+const TOOL_BTN_OFF = 'text-neutral-200 hover:text-white hover:bg-white/10';
+const TOOL_BTN_ON = 'text-cyan-400 bg-cyan-400/15 hover:bg-cyan-400/25';
+
+/** Longest side of the on-screen preview. Exports always use the original size. */
+const PREVIEW_MAX_EDGE = 1600;
 
 const DEFAULT_ADJUSTMENTS: PhotoAdjustments = {
   exposure: 0,
@@ -60,11 +79,16 @@ function clampCrop(rect: CropRect): CropRect {
   return { x, y, w, h };
 }
 
-/** Largest centered rect of the given aspect that fits in the frame. */
-function cropForAspect(ratio: number | null, current?: CropRect): CropRect {
-  if (ratio == null) {
+/**
+ * Largest centered rect of the given picture aspect (width / height in pixels) that fits in the frame.
+ * Rects are stored as fractions of the frame, so the aspect is divided by the frame's own aspect first;
+ * otherwise "1:1" on a 3:2 photo would come out 3:2.
+ */
+function cropForAspect(pixelRatio: number | null, current?: CropRect, frameAspect = 1): CropRect {
+  if (pixelRatio == null) {
     return current ? clampCrop(current) : { x: 0.1, y: 0.1, w: 0.8, h: 0.8 };
   }
+  const ratio = pixelRatio / frameAspect;
   // Frame is 1×1 in normalized space; pick max area with aspect (width/height = ratio).
   let w: number;
   let h: number;
@@ -232,6 +256,8 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
   onClose,
   onSaveAsVersion,
   photoNav = null,
+  embedded = false,
+  showAdjustments = true,
 }) => {
   const [adjustments, setAdjustments] = useState<PhotoAdjustments>(DEFAULT_ADJUSTMENTS);
   const [activeTab, setActiveTab] = useState<'adjust' | 'presets' | 'geometry'>('adjust');
@@ -255,7 +281,13 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
     origin: CropRect;
   } | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
+  // Zooming enlarges the canvas itself (not a transform), so the scroller around it gets scroll bars.
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const [viewport, setViewport] = useState({ w: 0, h: 0 });
+  const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
   const imgRef = useRef<HTMLImageElement | null>(null);
+  // The photo's own size in pixels, once it has loaded.
+  const [photoSize, setPhotoSize] = useState<{ width: number; height: number } | null>(null);
   const histogramCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const adjustmentsRef = useRef<PhotoAdjustments>(DEFAULT_ADJUSTMENTS);
   const presetRef = useRef('natural');
@@ -273,18 +305,64 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
     return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
   }, []);
 
+  // WKWebView in the desktop app often refuses element fullscreen, so fall back to the native window.
+  const windowFullscreenRef = useRef(false);
+
+  const setNativeFullscreen = async (on: boolean): Promise<boolean> => {
+    if (!isTauri()) return false;
+    try {
+      const { getCurrentWindow } = await import('@tauri-apps/api/window');
+      await getCurrentWindow().setFullscreen(on);
+      windowFullscreenRef.current = on;
+      setIsFullscreen(on);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  // Keep the button in step when the user leaves native fullscreen with Esc or the green window button.
+  useEffect(() => {
+    if (!isTauri()) return;
+    const onResize = async () => {
+      if (!windowFullscreenRef.current) return;
+      try {
+        const { getCurrentWindow } = await import('@tauri-apps/api/window');
+        if (!(await getCurrentWindow().isFullscreen())) {
+          windowFullscreenRef.current = false;
+          setIsFullscreen(false);
+        }
+      } catch { /* leave the state as it is */ }
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  // Leave native fullscreen when the editor closes.
+  useEffect(() => () => {
+    if (windowFullscreenRef.current) void setNativeFullscreen(false);
+  }, []);
+
   const toggleFullscreen = async () => {
     const stage = stageRef.current;
     if (!stage) return;
     try {
       if (document.fullscreenElement) {
         await document.exitFullscreen();
-      } else {
+        return;
+      }
+      if (windowFullscreenRef.current) {
+        await setNativeFullscreen(false);
+        return;
+      }
+      if (stage.requestFullscreen) {
         await stage.requestFullscreen();
+        if (document.fullscreenElement) return;
       }
     } catch {
-      // Fullscreen may be blocked by the browser or embedding context.
+      // Fullscreen may be blocked by the web view; try the native window below.
     }
+    await setNativeFullscreen(true);
   };
 
   // Load image on file change. Reopening or switching photos clears history.
@@ -305,11 +383,13 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
     setDraftCrop({ x: 0, y: 0, w: 1, h: 1 });
     setDraftAspect('free');
 
+    setPhotoSize(null);
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.src = file.url;
     img.onload = () => {
       imgRef.current = img;
+      setPhotoSize({ width: img.naturalWidth, height: img.naturalHeight });
       renderImage();
     };
   }, [file.id, file.url, isOpen]);
@@ -456,10 +536,18 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [isOpen, photoNav]);
 
+  /** Width / height of the whole frame as it is now, after any rotation. */
+  const frameAspect = (): number => {
+    const img = imgRef.current;
+    if (!img || !img.naturalWidth || !img.naturalHeight) return 1;
+    const quarter = adjustmentsRef.current.rotation === 90 || adjustmentsRef.current.rotation === 270;
+    return quarter ? img.naturalHeight / img.naturalWidth : img.naturalWidth / img.naturalHeight;
+  };
+
   const enterCropMode = () => {
     const adj = adjustmentsRef.current;
     const next = isFullFrameCrop(adj)
-      ? cropForAspect(CROP_ASPECT_OPTIONS.find(o => o.id === adj.cropAspect)?.ratio ?? null)
+      ? cropForAspect(CROP_ASPECT_OPTIONS.find(o => o.id === adj.cropAspect)?.ratio ?? null, undefined, frameAspect())
       : clampCrop({ x: adj.cropX, y: adj.cropY, w: adj.cropW, h: adj.cropH });
     setDraftAspect(adj.cropAspect);
     setDraftCrop(next);
@@ -512,94 +600,32 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
   const setCropAspectOption = (id: CropAspect) => {
     const ratio = CROP_ASPECT_OPTIONS.find(o => o.id === id)?.ratio ?? null;
     setDraftAspect(id);
-    setDraftCrop(prev => cropForAspect(ratio, id === 'free' ? prev : undefined));
+    setDraftCrop(prev => cropForAspect(ratio, id === 'free' ? prev : undefined, frameAspect()));
   };
 
-  // Render Image onto canvas with CSS filter & pixel transformations
+  // Draw the picture with the same math the desktop render uses (src/utils/photoPipeline.ts).
+  // The preview is capped in size so dragging a slider stays smooth; exports render at full size.
   const renderImage = () => {
     const canvas = canvasRef.current;
     const img = imgRef.current;
     if (!canvas || !img) return;
-
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return;
 
-    const adj = adjustmentsRef.current;
-    // Handle rotation dimensions
-    const isRotated90or270 = adj.rotation === 90 || adj.rotation === 270;
-    const targetWidth = isRotated90or270 ? img.naturalHeight : img.naturalWidth;
-    const targetHeight = isRotated90or270 ? img.naturalWidth : img.naturalHeight;
-
-    const offscreen = document.createElement('canvas');
-    offscreen.width = targetWidth;
-    offscreen.height = targetHeight;
-    const octx = offscreen.getContext('2d', { willReadFrequently: true });
-    if (!octx) return;
-
-    octx.save();
-    octx.clearRect(0, 0, targetWidth, targetHeight);
-    octx.translate(targetWidth / 2, targetHeight / 2);
-    octx.rotate((adj.rotation * Math.PI) / 180);
-    octx.scale(adj.flipH ? -1 : 1, adj.flipV ? -1 : 1);
-
-    const exp = 1 + adj.exposure / 100;
-    const bright = Math.max(0, 1 + adj.brightness / 100);
-    const cont = Math.max(0, 1 + adj.contrast / 100);
-    const sat = Math.max(0, 1 + adj.saturation / 100);
-
-    let filterString = `brightness(${bright * exp}) contrast(${cont}) saturate(${sat})`;
-    if (adj.warmth !== 0) {
-      if (adj.warmth > 0) {
-        filterString += ` sepia(${adj.warmth * 0.4}%)`;
-      } else {
-        filterString += ` hue-rotate(${adj.warmth * 0.4}deg)`;
-      }
-    }
-    if (adj.tint !== 0) {
-      filterString += ` hue-rotate(${adj.tint * 0.5}deg)`;
-    }
-
-    octx.filter = filterString;
-    octx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
-    octx.restore();
-
-    if (adj.vignette > 0) {
-      const gradient = octx.createRadialGradient(
-        targetWidth / 2,
-        targetHeight / 2,
-        (Math.min(targetWidth, targetHeight) / 2) * (1 - adj.vignette / 120),
-        targetWidth / 2,
-        targetHeight / 2,
-        Math.max(targetWidth, targetHeight) * 0.8,
-      );
-      const alpha = (adj.vignette / 100) * 0.8;
-      gradient.addColorStop(0, 'rgba(0,0,0,0)');
-      gradient.addColorStop(1, `rgba(0,0,0,${alpha})`);
-      octx.fillStyle = gradient;
-      octx.fillRect(0, 0, targetWidth, targetHeight);
-    }
-
     // In crop mode show the full frame so the overlay can be edited.
-    const applyCrop = !cropMode && !isFullFrameCrop(adj);
-    if (applyCrop) {
-      const cw = Math.max(1, Math.round(adj.cropW * targetWidth));
-      const ch = Math.max(1, Math.round(adj.cropH * targetHeight));
-      const cx = Math.min(targetWidth - 1, Math.max(0, Math.round(adj.cropX * targetWidth)));
-      const cy = Math.min(targetHeight - 1, Math.max(0, Math.round(adj.cropY * targetHeight)));
-      const width = Math.min(cw, targetWidth - cx);
-      const height = Math.min(ch, targetHeight - cy);
-      canvas.width = width;
-      canvas.height = height;
-      ctx.clearRect(0, 0, width, height);
-      ctx.drawImage(offscreen, cx, cy, width, height, 0, 0, width, height);
-    } else {
-      canvas.width = targetWidth;
-      canvas.height = targetHeight;
-      ctx.clearRect(0, 0, targetWidth, targetHeight);
-      ctx.drawImage(offscreen, 0, 0);
-    }
-
+    const rendered = renderPhoto(img, adjustmentsRef.current, { maxEdge: PREVIEW_MAX_EDGE, applyCrop: !cropMode });
+    canvas.width = rendered.width;
+    canvas.height = rendered.height;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(rendered, 0, 0);
     drawHistogram(ctx, canvas);
+  };
+
+  /** Full-size render with the crop applied, for browser exports. */
+  const renderForExport = (): HTMLCanvasElement => {
+    const img = imgRef.current;
+    if (!img) throw new Error('The photo is not loaded yet');
+    return renderPhoto(img, adjustmentsRef.current, { applyCrop: true });
   };
 
   // Draw real-time RGB histogram
@@ -708,12 +734,12 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
         }
       }
       // Canvas fallback (browser, BMP, or native unavailable)
-      const dataUrl = canvasToExportDataUrl(canvas, selectedExportFormat, exportQuality);
+      const dataUrl = canvasToExportDataUrl(renderForExport(), selectedExportFormat, exportQuality);
       finishSave(dataUrl, Math.round(file.sizeBytes * 1.05));
     } catch (err) {
       // Fall back to canvas if native render fails
       try {
-        const dataUrl = canvasToExportDataUrl(canvas, selectedExportFormat, exportQuality);
+        const dataUrl = canvasToExportDataUrl(renderForExport(), selectedExportFormat, exportQuality);
         finishSave(dataUrl, Math.round(file.sizeBytes * 1.05));
       } catch {
         setIsProcessing(false);
@@ -742,15 +768,49 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
     } catch {
       /* canvas fallback */
     }
-    link.href = canvasToExportDataUrl(canvas, selectedExportFormat, exportQuality);
+    link.href = canvasToExportDataUrl(renderForExport(), selectedExportFormat, exportQuality);
     link.click();
   };
+
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const measure = () => setViewport({ w: el.clientWidth, h: el.clientHeight });
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [isOpen, showAdjustments]);
+
+  // The canvas is redrawn at a new size after a crop or rotate; follow it.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (canvas && (canvas.width !== canvasSize.w || canvas.height !== canvasSize.h)) {
+      setCanvasSize({ w: canvas.width, h: canvas.height });
+    }
+  });
+
+  // Shown size: the picture fitted into the viewport (never enlarged past its own size at 100%), times the zoom.
+  const stagePadding = 32;
+  const fitScale = canvasSize.w > 0 && viewport.w > 0
+    ? Math.min(1, (viewport.w - stagePadding) / canvasSize.w, (viewport.h - stagePadding) / canvasSize.h)
+    : 1;
+  const shownScale = Math.max(0.01, fitScale) * (zoomLevel / 100);
+  const canvasStyle: React.CSSProperties | undefined = canvasSize.w > 0 && viewport.w > 0
+    ? { width: canvasSize.w * shownScale, height: canvasSize.h * shownScale }
+    : undefined;
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-2 sm:p-4">
-      <div className="app-modal-panel relative flex flex-col w-full h-[95vh] max-w-7xl bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden shadow-2xl">
+    <div className={embedded
+      ? 'flex-1 min-w-0 min-h-0 flex'
+      : 'fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-2 sm:p-4'}
+    >
+      <div className={embedded
+        ? 'relative flex flex-col w-full h-full min-h-0 bg-neutral-900 overflow-hidden'
+        : 'app-modal-panel relative flex flex-col w-full h-[95vh] max-w-7xl bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden shadow-2xl'}
+      >
         
         {/* Top Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-neutral-800 bg-neutral-950/80">
@@ -765,7 +825,7 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
                 </h2>
               </div>
               <p className="text-xs text-neutral-500">
-                Studio Grading Suite · {file.photoExif?.dimensions?.width || '4K'}×{file.photoExif?.dimensions?.height || 'HD'} · {file.photoExif?.camera || 'Pro RAW'}
+                {['Studio Grading Suite', photoSize && `${photoSize.width}×${photoSize.height}`, file.photoExif?.camera].filter(Boolean).join(' · ')}
               </p>
             </div>
           </div>
@@ -822,53 +882,53 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
 
         {/* Status Toast */}
         {statusMessage && (
-          <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 px-4 py-2 bg-neutral-950 border border-cyan-500/40 rounded-lg shadow-xl text-xs font-medium text-cyan-300 flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-cyan-400 animate-spin" />
-            <span>{statusMessage}</span>
+          <div role="status" className="absolute top-16 left-1/2 -translate-x-1/2 z-30 px-4 py-2 bg-neutral-950 border border-cyan-500/40 rounded-lg shadow-xl text-xs font-medium text-cyan-300">
+            {statusMessage}
           </div>
         )}
 
         {/* Main Body */}
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 min-w-0 min-h-0 overflow-hidden">
           
           {/* Canvas Viewport Area */}
           <div
             ref={stageRef}
-            className="flex-1 flex flex-col items-center justify-center p-4 bg-neutral-950/60 relative overflow-hidden select-none"
+            className="flex-1 min-w-0 flex flex-col items-center justify-center p-4 bg-neutral-950/60 relative overflow-hidden select-none"
           >
             {photoNav && <PhotoNavArrows nav={photoNav} />}
 
-            {/* Canvas Container with dynamic zoom */}
-            <div
-              className="flex items-center justify-center w-full h-full transition-transform duration-100 ease-out"
-              style={{ transform: `scale(${zoomLevel / 100})` }}
-            >
-              <div className="relative inline-block max-w-full max-h-full">
+            {/* Canvas scroller: scroll bars appear once the zoomed picture is larger than the viewport */}
+            <div ref={scrollerRef} className="photo-scroller flex-1 min-h-0 w-full overflow-auto">
+              <div className="min-w-full min-h-full flex p-4">
+                <div className="relative m-auto shrink-0">
                 <canvas
                   ref={canvasRef}
-                  className="max-w-full max-h-full object-contain rounded shadow-2xl border border-neutral-800/80 block"
+                  style={canvasStyle}
+                  className="max-w-none rounded shadow-2xl border border-neutral-800/80 block"
                 />
                 {cropMode && (
                   <CropOverlay
                     rect={draftCrop}
                     aspect={draftAspect}
+                    frameAspect={frameAspect()}
                     onChange={setDraftCrop}
                     dragRef={cropDragRef}
                   />
                 )}
+                </div>
               </div>
             </div>
 
             {/* Crop mode toolbar */}
             {cropMode ? (
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 z-20">
-                <div className="flex items-center gap-1 px-2 py-1.5 bg-neutral-900/95 border border-neutral-700 rounded-full backdrop-blur-md text-xs text-neutral-300 shadow-xl">
+              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3 z-20">
+                <div className="flex items-center gap-1.5 px-3 py-2 bg-neutral-900/95 border border-neutral-700 rounded-full backdrop-blur-md text-sm text-neutral-300 shadow-2xl">
                   {CROP_ASPECT_OPTIONS.map(opt => (
                     <button
                       key={opt.id}
                       type="button"
                       onClick={() => setCropAspectOption(opt.id)}
-                      className={`px-2 py-1 rounded-md font-medium transition-colors ${
+                      className={`px-3.5 py-2 rounded-full font-medium transition-colors ${
                         draftAspect === opt.id
                           ? 'bg-cyan-500/25 text-cyan-300'
                           : 'hover:bg-white/10 hover:text-white'
@@ -878,18 +938,18 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
                     </button>
                   ))}
                 </div>
-                <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-neutral-900/95 border border-neutral-700 rounded-full backdrop-blur-md text-xs shadow-xl">
+                <div className="flex items-center gap-2 px-3 py-2 bg-neutral-900/95 border border-neutral-700 rounded-full backdrop-blur-md text-sm shadow-2xl">
                   <button
                     type="button"
                     onClick={cancelCropMode}
-                    className="px-3 py-1 rounded-md text-neutral-300 hover:text-white hover:bg-white/10"
+                    className="px-4 py-2 rounded-full text-neutral-300 hover:text-white hover:bg-white/10"
                   >
                     Cancel
                   </button>
                   <button
                     type="button"
                     onClick={clearCrop}
-                    className="px-3 py-1 rounded-md text-neutral-300 hover:text-white hover:bg-white/10"
+                    className="px-4 py-2 rounded-full text-neutral-300 hover:text-white hover:bg-white/10"
                     title="Reset to full frame"
                   >
                     Reset
@@ -897,85 +957,101 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
                   <button
                     type="button"
                     onClick={applyCropMode}
-                    className="px-3 py-1 rounded-md font-semibold text-neutral-950 bg-cyan-400 hover:bg-cyan-300"
+                    className="px-5 py-2 rounded-full font-semibold text-neutral-950 bg-cyan-400 hover:bg-cyan-300"
                   >
                     Apply Crop
                   </button>
                 </div>
               </div>
             ) : (
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-2.5 py-1 bg-neutral-900/90 border border-neutral-800 rounded-full backdrop-blur-md text-xs text-neutral-300 shadow-xl">
-                <div className="flex items-center gap-0 pr-1.5 border-r border-neutral-800">
+              <div
+                role="toolbar"
+                aria-label="Photo tools"
+                className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2.5 px-3.5 py-2 bg-neutral-900/90 border border-neutral-700 rounded-full backdrop-blur-md text-sm text-neutral-300 shadow-2xl"
+              >
+                <div className="flex items-center gap-0.5 pr-2.5 border-r border-neutral-700">
                   <button
                     type="button"
                     onClick={enterCropMode}
-                    className={`p-0.5 rounded-md ${
-                      !isFullFrameCrop(adjustments) ? 'text-cyan-400' : 'hover:text-white'
-                    }`}
+                    className={`${TOOL_BTN} ${!isFullFrameCrop(adjustments) ? TOOL_BTN_ON : TOOL_BTN_OFF}`}
                     title="Crop"
+                    aria-label="Crop"
                   >
-                    <Crop className="w-4.5 h-4.5" />
+                    <Crop className={TOOL_ICON} />
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      if (cropMode) return;
-                      updateAdj('rotation', (adjustmentsRef.current.rotation + 90) % 360);
-                    }}
-                    className="p-0.5 hover:text-white rounded-md"
-                    title="Rotate CW 90°"
+                    onClick={() => updateAdj('rotation', (adjustmentsRef.current.rotation + 90) % 360)}
+                    className={`${TOOL_BTN} ${adjustments.rotation !== 0 ? TOOL_BTN_ON : TOOL_BTN_OFF}`}
+                    title="Rotate clockwise 90°"
+                    aria-label="Rotate clockwise 90 degrees"
                   >
-                    <RotateCw className="w-4.5 h-4.5" />
+                    <RotateCw className={TOOL_ICON} />
                   </button>
                   <button
                     type="button"
                     onClick={() => updateAdj('flipH', !adjustmentsRef.current.flipH)}
-                    className={`p-0.5 rounded-md ${adjustments.flipH ? 'text-cyan-400' : 'hover:text-white'}`}
-                    title="Flip Horizontal"
+                    className={`${TOOL_BTN} ${adjustments.flipH ? TOOL_BTN_ON : TOOL_BTN_OFF}`}
+                    title="Flip horizontal"
+                    aria-label="Flip horizontal"
+                    aria-pressed={adjustments.flipH}
                   >
-                    <FlipHorizontal className="w-4.5 h-4.5" />
+                    <FlipHorizontal className={TOOL_ICON} />
                   </button>
                   <button
                     type="button"
                     onClick={() => updateAdj('flipV', !adjustmentsRef.current.flipV)}
-                    className={`p-0.5 rounded-md ${adjustments.flipV ? 'text-cyan-400' : 'hover:text-white'}`}
-                    title="Flip Vertical"
+                    className={`${TOOL_BTN} ${adjustments.flipV ? TOOL_BTN_ON : TOOL_BTN_OFF}`}
+                    title="Flip vertical"
+                    aria-label="Flip vertical"
+                    aria-pressed={adjustments.flipV}
                   >
-                    <FlipVertical className="w-4.5 h-4.5" />
+                    <FlipVertical className={TOOL_ICON} />
                   </button>
                 </div>
 
                 <div className="flex items-center gap-0.5">
                   <button
                     type="button"
-                    onClick={() => setZoomLevel(Math.max(25, zoomLevel - 25))}
-                    className="p-0.5 hover:text-white rounded-md"
+                    onClick={() => setZoomLevel(z => Math.max(ZOOM_MIN, z - ZOOM_STEP))}
+                    disabled={zoomLevel <= ZOOM_MIN}
+                    className={`${TOOL_BTN} ${TOOL_BTN_OFF} disabled:opacity-35 disabled:pointer-events-none`}
+                    title="Zoom out"
+                    aria-label="Zoom out"
                   >
-                    <ZoomOut className="w-4.5 h-4.5" />
+                    <ZoomOut className={TOOL_ICON} />
                   </button>
-                  <span className="w-9 text-center font-mono text-neutral-300 text-[11px]">{zoomLevel}%</span>
+                  <span className="w-14 text-center font-mono text-neutral-200 text-[13px] tabular-nums" aria-live="polite">
+                    {zoomLevel}%
+                  </span>
                   <button
                     type="button"
-                    onClick={() => setZoomLevel(Math.min(300, zoomLevel + 25))}
-                    className="p-0.5 hover:text-white rounded-md"
+                    onClick={() => setZoomLevel(z => Math.min(ZOOM_MAX, z + ZOOM_STEP))}
+                    disabled={zoomLevel >= ZOOM_MAX}
+                    className={`${TOOL_BTN} ${TOOL_BTN_OFF} disabled:opacity-35 disabled:pointer-events-none`}
+                    title="Zoom in"
+                    aria-label="Zoom in"
                   >
-                    <ZoomIn className="w-4.5 h-4.5" />
+                    <ZoomIn className={TOOL_ICON} />
                   </button>
                   <button
                     type="button"
                     onClick={() => setZoomLevel(100)}
-                    className="text-[11px] font-medium text-cyan-400 hover:underline px-0.5"
+                    disabled={zoomLevel === 100}
+                    className="h-10 px-3 rounded-full text-[13px] font-semibold text-cyan-400 hover:bg-cyan-400/10 active:scale-95 transition disabled:opacity-40 disabled:pointer-events-none"
+                    title="Fit to window"
+                    aria-label="Fit to window"
                   >
                     Fit
                   </button>
                   <button
                     type="button"
                     onClick={() => void toggleFullscreen()}
-                    className="p-0.5 hover:text-white rounded-md"
-                    title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
-                    aria-label={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                    className={`${TOOL_BTN} ${isFullscreen ? TOOL_BTN_ON : TOOL_BTN_OFF}`}
+                    title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+                    aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
                   >
-                    {isFullscreen ? <Minimize2 className="w-4.5 h-4.5" /> : <Maximize2 className="w-4.5 h-4.5" />}
+                    {isFullscreen ? <Minimize2 className={TOOL_ICON} /> : <Maximize2 className={TOOL_ICON} />}
                   </button>
                 </div>
               </div>
@@ -983,7 +1059,7 @@ export const PhotoEditorModal: React.FC<PhotoEditorModalProps> = ({
           </div>
 
           {/* Right Adjustments & Presets Sidebar */}
-          <div className="w-84 md:w-96 h-full min-h-0 flex flex-col border-l border-neutral-800 bg-neutral-900/95 overflow-y-auto">
+          <div className={`w-84 md:w-96 h-full min-h-0 flex-col border-l border-neutral-800 bg-neutral-900/95 overflow-y-auto ${showAdjustments ? 'flex' : 'hidden'}`}>
             
             {/* Live RGB Histogram */}
             <div className="p-4 border-b border-neutral-800 bg-neutral-950/40">
@@ -1260,6 +1336,8 @@ type CropHandle = 'move' | 'nw' | 'ne' | 'sw' | 'se' | 'n' | 's' | 'e' | 'w';
 interface CropOverlayProps {
   rect: CropRect;
   aspect: CropAspect;
+  /** Width / height of the whole frame, to turn the aspect into a fraction-of-frame ratio. */
+  frameAspect: number;
   onChange: (rect: CropRect) => void;
   dragRef: React.MutableRefObject<{
     handle: CropHandle;
@@ -1269,8 +1347,9 @@ interface CropOverlayProps {
   } | null>;
 }
 
-const CropOverlay: React.FC<CropOverlayProps> = ({ rect, aspect, onChange, dragRef }) => {
-  const ratio = CROP_ASPECT_OPTIONS.find(o => o.id === aspect)?.ratio ?? null;
+const CropOverlay: React.FC<CropOverlayProps> = ({ rect, aspect, frameAspect, onChange, dragRef }) => {
+  const pixelRatio = CROP_ASPECT_OPTIONS.find(o => o.id === aspect)?.ratio ?? null;
+  const ratio = pixelRatio == null ? null : pixelRatio / frameAspect;
 
   const onPointerDown = (handle: CropHandle) => (e: React.PointerEvent) => {
     e.preventDefault();

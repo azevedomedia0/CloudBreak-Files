@@ -12,10 +12,12 @@ import { dataUrlToBytes, localFs } from './services/localFsBridge';
 import { discardTempOutput, trimAndTranscode } from './services/mediaBridge';
 import { importLocalFolderAtPath } from './utils/importLocalFolder';
 import { localFileContents } from './utils/documentKind';
+import { openPdf, renderPage } from './services/pdfEngine';
+import { buildEditedPdf } from './utils/pdfEdit';
 import type { FileItem } from './types';
 
 interface Fixtures {
-  dir: string; text: string; html: string; markdown: string; word: string; png: string; video: string; audio: string;
+  dir: string; text: string; html: string; markdown: string; word: string; png: string; video: string; audio: string; pdf: string;
 }
 
 const lines: string[] = [];
@@ -110,11 +112,11 @@ async function run(fx: Fixtures) {
     expect(listed.some(f => f.path.endsWith('/files')), 'folder not listed as remembered');
     const imported = await importLocalFolderAtPath(listed.find(f => f.path.endsWith('/files'))!);
     const names = imported.files.map(f => f.name).sort();
-    expect(names.join(',') === 'clip.mp4,inner.md,notes.txt,page.html,photo.png,report.docx,song.wav', `files: ${names.join(',')}`);
+    expect(names.join(',') === 'clip.mp4,doc.pdf,inner.md,notes.txt,page.html,photo.png,report.docx,song.wav', `files: ${names.join(',')}`);
     expect(imported.folders.length === 2, `folders: ${imported.folders.length}`);
     const byName = (n: string) => imported.files.find(f => f.name === n)!;
-    expect(byName('notes.txt').documentBody === 'line one\nline two\n', 'notes.txt body not read');
-    expect(byName('page.html').documentBody?.includes('<h1>'), 'page.html body not read');
+    // Text is read when a file is opened (from its path), not at import.
+    expect(byName('notes.txt').documentBody === undefined && !!byName('notes.txt').localPath, 'text should load on open, with its path kept');
     expect(byName('photo.png').category === 'photo' && byName('clip.mp4').category === 'video' && byName('song.wav').category === 'audio', 'categories wrong');
     expect(byName('report.docx').documentBody === undefined, 'docx should not have an editable body');
     (globalThis as { __imported?: FileItem[] }).__imported = imported.files;
@@ -143,6 +145,51 @@ async function run(fx: Fixtures) {
     const d = await loadMediaDuration('video', localFs.assetUrl(fx.video));
     expect(d > 2 && d < 4, `duration ${d}`);
     return `${d.toFixed(1)}s`;
+  });
+  // pdf.js and pdf-lib run in the desktop web view: draw the fixture PDF, then save an annotated copy and draw that.
+  const darkPixels = (canvas: HTMLCanvasElement) => {
+    const px = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data;
+    let n = 0;
+    for (let i = 0; i < px.length; i += 4) if (px[i] < 100 && px[i + 1] < 100 && px[i + 2] < 100) n++;
+    return n;
+  };
+  await check('pdf.js opens and draws a PDF in the desktop web view', async () => {
+    const opened = await openPdf(await localFs.readBytes(fx.pdf));
+    try {
+      expect(opened.doc.numPages === 1, `pages ${opened.doc.numPages}`);
+      const canvas = document.createElement('canvas');
+      await renderPage(await opened.doc.getPage(1), canvas, 1, 0).done;
+      const dark = darkPixels(canvas);
+      expect(dark > 50, `only ${dark} dark pixels: the text was not drawn`);
+      return `${canvas.width}x${canvas.height}, ${dark} dark pixels`;
+    } finally {
+      opened.destroy();
+    }
+  });
+  await check('an edited PDF is saved next to the original and draws with its annotation', async () => {
+    const bytes = await localFs.readBytes(fx.pdf);
+    const edited = await buildEditedPdf(
+      [{ id: 'base', bytes }],
+      [{ id: 'p0', srcId: 'base', srcIndex: 0, rotation: 90 }],
+      { p0: [{ id: 'h', kind: 'highlight', x: 30, y: 30, w: 200, h: 60, color: '#ffeb33' }] },
+    );
+    const info = await localFs.saveNewFile(fx.dir, 'edited.pdf', edited);
+    expect(info.name === 'edited.pdf' && info.sizeBytes === edited.length, `saved ${JSON.stringify(info)}`);
+    expect(decode(await localFs.readBytes(fx.pdf)).startsWith('%PDF'), 'the original changed');
+    const opened = await openPdf(await localFs.readBytes(info.path));
+    try {
+      const page = await opened.doc.getPage(1);
+      expect(page.rotate === 90, `rotation ${page.rotate}`);
+      const canvas = document.createElement('canvas');
+      await renderPage(page, canvas, 1, 0).done;
+      expect(canvas.width === 792 && canvas.height === 612, `turned page is ${canvas.width}x${canvas.height}`);
+      // Content (30..230, 30..90) on a 612x792 page, turned 90 degrees clockwise, lands at x = 792-90..792-30, y = 30..230.
+      const px = canvas.getContext('2d')!.getImageData(792 - 60, 130, 1, 1).data;
+      expect(px[0] > 235 && px[1] > 225 && px[2] > 120 && px[2] < 200, `highlight pixel ${[...px.slice(0, 3)]}`);
+      return `${info.sizeBytes} bytes`;
+    } finally {
+      opened.destroy();
+    }
   });
   await check('audio loads from the asset URL', async () => {
     const d = await loadMediaDuration('audio', localFs.assetUrl(fx.audio));

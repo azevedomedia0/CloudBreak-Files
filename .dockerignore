@@ -1,0 +1,4 @@
+# The Flatpak builder image only needs its entrypoint; the repo itself is bind-mounted when it runs.
+# Without this, docker build would send node_modules and everything else as build context.
+*
+!flatpak/docker-entrypoint.sh

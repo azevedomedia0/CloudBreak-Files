@@ -1,0 +1,43 @@
+# systemd unit for the Cloudbreak relay. Install with deploy/install-systemd.sh, or by hand:
+#   sudo install -m 0755 cloudbreak-relay /usr/local/bin/cloudbreak-relay
+#   sudo install -d -m 0750 /etc/cloudbreak-relay
+#   sudo install -m 0600 deploy/relay.env.example /etc/cloudbreak-relay/relay.env   # then set the key
+#   sudo install -m 0644 deploy/cloudbreak-relay.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now cloudbreak-relay
+
+[Unit]
+Description=Cloudbreak Files relay (P2P between networks)
+Documentation=https://github.com/azevedomedia0/CloudBreak-Files/tree/main/relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# The key (CLOUDBREAK_RELAY_HOST_KEY) and any other settings live in this file, readable by root only.
+EnvironmentFile=/etc/cloudbreak-relay/relay.env
+StateDirectory=cloudbreak-relay
+ExecStart=/usr/local/bin/cloudbreak-relay --listen 0.0.0.0:7422 --names-file /var/lib/cloudbreak-relay/names.json
+Restart=always
+RestartSec=5
+
+# Run as a throwaway user with no access to the rest of the system.
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

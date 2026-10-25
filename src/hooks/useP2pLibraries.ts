@@ -1,4 +1,5 @@
-import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import { summarizeIncomingRefresh } from '../utils/incomingRefresh';
 import type { FileItem, SharedLibrary } from '../types';
 import { p2pBridge, recordToSharedLibrary, type SwarmStatus } from '../services/p2pBridge';
 import type { CreateP2pLibraryForm, JoinP2pLibraryForm } from '../components/SidebarModals';
@@ -7,8 +8,23 @@ import { localFs } from '../services/localFsBridge';
 import { isTauri } from '@tauri-apps/api/core';
 import { whenIdle } from '../utils/deferWork';
 import { desktopScanReady } from '../utils/startupGate';
+import { isLibraryExpired, type LibraryDraft, type LibrarySource } from '../utils/libraryItems';
 
 const MAX_BASE64_P2P_BYTES = 32 * 1024 * 1024;
+const SOURCES_KEY = 'cloudbreak.librarySources.v1';
+/** Longest wait before re-checking expiry, so a 30-day timer never overflows setTimeout. */
+const MAX_EXPIRY_WAIT_MS = 6 * 60 * 60 * 1000;
+
+/** Which app files went into which outgoing library (library id -> file ids). */
+function loadLibrarySources(): Record<string, string[]> {
+  try {
+    const raw = localStorage.getItem(SOURCES_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
 
 interface UseP2pLibrariesOptions {
   userName: string;
@@ -26,7 +42,54 @@ export function useP2pLibraries({
   userName, files, selectedFileId, selectedLibraryId,
   setFiles, setSelectedFileId, setSelectedLibraryId, showToast,
 }: UseP2pLibrariesOptions) {
-  const [sharedLibraries, setSharedLibraries] = useState<SharedLibrary[]>([]);
+  const [allLibraries, setSharedLibraries] = useState<SharedLibrary[]>([]);
+  const [librarySources, setLibrarySources] = useState<Record<string, string[]>>(loadLibrarySources);
+  const [now, setNow] = useState(() => Date.now());
+
+  // An outgoing library leaves the sidebar when it expires; incoming ones are never hidden here.
+  const sharedLibraries = useMemo(
+    () => allLibraries.filter(l => l.direction === 'incoming' || !isLibraryExpired(l, now)),
+    [allLibraries, now],
+  );
+  useEffect(() => {
+    const upcoming = allLibraries
+      .filter(l => l.direction !== 'incoming' && l.expiresAt && !isLibraryExpired(l, now))
+      .map(l => Date.parse(l.expiresAt as string))
+      .filter(Number.isFinite);
+    if (!upcoming.length) return;
+    const wait = Math.min(Math.min(...upcoming) - Date.now() + 250, MAX_EXPIRY_WAIT_MS);
+    const timer = setTimeout(() => setNow(Date.now()), Math.max(wait, 1000));
+    return () => clearTimeout(timer);
+  }, [allLibraries, now]);
+
+  const rememberLibrarySources = (libraryId: string, fileIds: string[]) => {
+    setLibrarySources(prev => {
+      const next = { ...prev, [libraryId]: fileIds };
+      try {
+        localStorage.setItem(SOURCES_KEY, JSON.stringify(next));
+      } catch { /* storage unavailable */ }
+      return next;
+    });
+  };
+
+  /** File id -> names of the active outgoing libraries it is seeded in. */
+  const seedingByFile = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const lib of sharedLibraries) {
+      if (lib.direction === 'incoming' || lib.seedingStatus === 'paused') continue;
+      for (const id of librarySources[lib.id] ?? []) {
+        map.set(id, [...(map.get(id) ?? []), lib.name]);
+      }
+    }
+    return map;
+  }, [sharedLibraries, librarySources]);
+
+  /** Mark files that are being seeded so thumbnails can show a badge. */
+  const markSeeding = useCallback((list: FileItem[]): FileItem[] => (
+    seedingByFile.size
+      ? list.map(f => (seedingByFile.has(f.id) ? { ...f, seedingLibraries: seedingByFile.get(f.id) } : f))
+      : list
+  ), [seedingByFile]);
   const [swarmStatus, setSwarmStatus] = useState<SwarmStatus | null>(null);
 
   useEffect(() => {
@@ -49,7 +112,7 @@ export function useP2pLibraries({
             // Resume seeding off the critical path — identity/list already painted the sidebar.
             for (const rec of records) {
               if (cancelled) return;
-              if (rec.direction === 'outgoing' && rec.isSeeding) {
+              if (rec.direction === 'outgoing' && rec.isSeeding && !isLibraryExpired({ expiresAt: rec.expiresAt ?? undefined })) {
                 try {
                   await p2pBridge.startSeeding(rec.libraryId);
                 } catch {
@@ -79,6 +142,31 @@ export function useP2pLibraries({
     };
   }, [userName]);
 
+  const [isRefreshingIncoming, setIsRefreshingIncoming] = useState(false);
+
+  /** Re-dial the senders of incoming libraries that are missing files, then reload the list and peers. */
+  const refreshIncomingLibraries = async () => {
+    if (isRefreshingIncoming) return;
+    setIsRefreshingIncoming(true);
+    try {
+      const results = await p2pBridge.refreshIncoming();
+      const records = await p2pBridge.listLibraries();
+      setSharedLibraries(prev => {
+        const byId = new Map(prev.map(l => [l.id, l]));
+        for (const rec of records) byId.set(rec.libraryId, recordToSharedLibrary(rec));
+        return [...byId.values()];
+      });
+      const status = await p2pBridge.swarmStatus();
+      setSwarmStatus(status);
+      setSharedLibraries(prev => mergeSwarmPeersIntoLibraries(prev, status));
+      showToast(summarizeIncomingRefresh(results));
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsRefreshingIncoming(false);
+    }
+  };
+
   const refreshSwarm = async () => {
     try {
       if (selectedLibraryId) {
@@ -102,41 +190,51 @@ export function useP2pLibraries({
     try {
       const invite = await p2pBridge.exportInvite(selectedLibraryId);
       await navigator.clipboard.writeText(invite);
-      showToast('P2P invite copied to clipboard');
+      // Say how far the invite reaches: it carries an address for other networks only when the router
+      // opened a port or this device is connected to a relay server.
+      const remote = await p2pBridge.remoteAccessStatus().catch(() => null);
+      const relay = await p2pBridge.relayStatus().catch(() => null);
+      showToast(
+        !remote ? 'P2P invite copied to clipboard'
+          : remote.publicAddress || relay?.connected ? 'P2P invite copied · works from other networks'
+            : remote.enabled || relay?.enabled
+              ? 'P2P invite copied · works on your network only (no port opened and no relay connected, see Preferences → Network)'
+              : 'P2P invite copied · works on your network only. To share it elsewhere, turn on "Allow connections from other networks" or set a relay server in Preferences → Network',
+      );
     } catch (err) {
       showToast(err instanceof Error ? err.message : String(err));
     }
   };
 
-  const handleCreateLibrary = async (form: CreateP2pLibraryForm) => {
+  const handleCreateLibrary = async (form: CreateP2pLibraryForm, draft?: LibraryDraft | null) => {
     await p2pBridge.getIdentity(userName);
-    const selected = files.filter(f => f.id === selectedFileId).slice(0, 1);
+    // From "Share as Library" this is everything the user picked; from the sidebar "+" it is the selected file.
+    const picked: LibrarySource[] = draft?.sources.length
+      ? draft.sources
+      : files.filter(f => f.id === selectedFileId).slice(0, 1).map(file => ({ file, name: file.name }));
     const payloadFiles: Array<{
       name: string;
       mimeType: string;
       contentBase64?: string;
       localPath?: string;
     }> = [];
-    for (const f of selected) {
+    const includedIds: string[] = [];
+    const skipped: string[] = [];
+    for (const { file: f, name } of picked) {
       try {
         if (f.localPath && isTauri()) {
-          payloadFiles.push({
-            name: f.name,
-            mimeType: f.mimeType,
-            localPath: f.localPath,
-          });
+          payloadFiles.push({ name, mimeType: f.mimeType, localPath: f.localPath });
+          includedIds.push(f.id);
           continue;
         }
         if (f.sizeBytes > MAX_BASE64_P2P_BYTES) {
-          showToast(
-            `“${f.name}” is too large for the browser bridge (max ${MAX_BASE64_P2P_BYTES / (1024 * 1024)} MB). Add it as a local file in the desktop app.`,
-          );
+          skipped.push(f.name);
           continue;
         }
         const res = await fetch(f.url);
         const buf = new Uint8Array(await res.arrayBuffer());
         if (buf.byteLength > MAX_BASE64_P2P_BYTES) {
-          showToast(`“${f.name}” exceeds the ${MAX_BASE64_P2P_BYTES / (1024 * 1024)} MB bridge limit`);
+          skipped.push(f.name);
           continue;
         }
         let binary = '';
@@ -144,16 +242,23 @@ export function useP2pLibraries({
         for (let i = 0; i < buf.length; i += chunk) {
           binary += String.fromCharCode(...buf.subarray(i, i + chunk));
         }
-        payloadFiles.push({
-          name: f.name,
-          mimeType: f.mimeType,
-          contentBase64: btoa(binary),
-        });
+        payloadFiles.push({ name, mimeType: f.mimeType, contentBase64: btoa(binary) });
+        includedIds.push(f.id);
       } catch {
-        // skip files that cannot be read
+        skipped.push(f.name);
       }
     }
+    if (skipped.length) {
+      showToast(
+        skipped.length === 1
+          ? `Left out “${skipped[0]}”: too large for the browser bridge (${MAX_BASE64_P2P_BYTES / (1024 * 1024)} MB) or unreadable. Add it as a local file in the desktop app.`
+          : `Left out ${skipped.length} files that were unreadable or too large for the browser bridge.`,
+      );
+    }
     if (!payloadFiles.length) {
+      if (draft?.sources.length) {
+        throw new Error('None of the selected files could be read, so there is nothing to share.');
+      }
       const note = `Cloudbreak P2P library: ${form.name}\n${form.description}\n`;
       payloadFiles.push({
         name: 'LIBRARY.txt',
@@ -173,6 +278,7 @@ export function useP2pLibraries({
       files: payloadFiles,
     });
     const newLib = recordToSharedLibrary(result.record);
+    rememberLibrarySources(newLib.id, includedIds);
     newLib.expiresAt = form.expiresInDays > 0
       ? new Date(Date.now() + form.expiresInDays * 86400000).toISOString()
       : undefined;
@@ -210,7 +316,7 @@ export function useP2pLibraries({
         : '';
     try {
       await navigator.clipboard.writeText(result.invite);
-      showToast(`Seeding “${form.name}”${peerNote} — invite copied to clipboard`);
+      showToast(`Seeding “${form.name}” (${payloadFiles.length} file${payloadFiles.length === 1 ? '' : 's'})${peerNote} — invite copied to clipboard`);
     } catch {
       showToast(`Seeding “${form.name}”${peerNote} — export invite from Share`);
     }
@@ -291,7 +397,7 @@ export function useP2pLibraries({
             url,
             localPath,
             thumbnailUrl: mimeType.startsWith('image/') ? url : undefined,
-            tags: ['P2P', 'E2EE'],
+            tags: ['P2P', 'Encrypted'],
             encryption: {
               isEncrypted: true,
               algorithm: 'AES-256-GCM',
@@ -324,7 +430,8 @@ export function useP2pLibraries({
 
 
   return {
-    sharedLibraries, setSharedLibraries, swarmStatus,
+    sharedLibraries, setSharedLibraries, swarmStatus, markSeeding,
     refreshSwarm, copyLibraryInvite, handleCreateLibrary, handleJoinIncomingLibrary,
+    refreshIncomingLibraries, isRefreshingIncoming,
   };
 }

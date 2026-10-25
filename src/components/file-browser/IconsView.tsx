@@ -37,8 +37,10 @@ export interface IconsViewProps {
   onEditPhoto: (file: FileItem) => void;
   onOpenDocument: (file: FileItem) => void;
   onOpenVideo: (file: FileItem) => void;
+  /** Double-click on a video: opens the full player in the center area. */
+  onOpenVideoWindow?: (file: FileItem) => void;
   onOpenAudio: (file: FileItem) => void;
-  onOpenQuickLook: () => void;
+  onOpenOther: (file: FileItem) => void;
   onFileContextMenu: (file: FileItem, event: React.MouseEvent) => void;
   onFolderContextMenu?: (folder: FolderItem, event: React.MouseEvent) => void;
   toggleSelectOne: (id: string, e: React.MouseEvent) => void;
@@ -46,7 +48,7 @@ export interface IconsViewProps {
 
 export const IconsView: React.FC<IconsViewProps> = ({
   accent, files, folders = [], selectedFileId, selectedIds, iconScale,
-  onSelectFile, onOpenFolder, onEditPhoto, onOpenDocument, onOpenVideo, onOpenAudio, onOpenQuickLook, onFileContextMenu, onFolderContextMenu, toggleSelectOne,
+  onSelectFile, onOpenFolder, onEditPhoto, onOpenDocument, onOpenVideo, onOpenVideoWindow, onOpenAudio, onOpenOther, onFileContextMenu, onFolderContextMenu, toggleSelectOne,
 }) => {
   // Large folders (Applications) must not mount every tile in one paint.
   const { visible: visibleFiles, hasMore, showMore, shownCount, totalCount } = useProgressiveItems(
@@ -99,17 +101,17 @@ export const IconsView: React.FC<IconsViewProps> = ({
           <div
             key={file.id}
             draggable
-            onDragStart={e => setFileDragData(e.dataTransfer, file)}
-            onClick={() => onSelectFile(file)}
+            onDragStart={e => setFileDragData(e.dataTransfer, file, selectedIds)}
+            onClick={e => { onSelectFile(file); if (file.category === 'video' && !e.metaKey && !e.ctrlKey && !e.shiftKey) onOpenVideo(file); }}
             onContextMenu={event => onFileContextMenu(file, event)}
             onDoubleClick={() => {
               if (isApp && file.localPath && previewBridge.available()) {
                 void previewBridge.openWithDefault(file.localPath).catch(() => {});
               } else if (file.category === 'photo') onEditPhoto(file);
-              else if (file.category === 'video') onOpenVideo(file);
+              else if (file.category === 'video') (onOpenVideoWindow ?? onOpenVideo)(file);
               else if (file.category === 'audio') onOpenAudio(file);
               else if (isEditableDocument(file)) onOpenDocument(file);
-              else onOpenQuickLook();
+              else onOpenOther(file);
             }}
             className={`group relative rounded-xl px-2 pt-3 pb-2 transition-all cursor-pointer [content-visibility:auto] [contain-intrinsic-size:180px] ${
               isCurrent

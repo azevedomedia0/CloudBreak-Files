@@ -17,6 +17,12 @@ rsync -a --delete \
   --exclude .git \
   /src/ /work/
 
+# `flatpak run org.flatpak.Builder` needs a system D-Bus socket, which a bare container does not have
+# ("error: Could not connect: No such file or directory").
+mkdir -p /run/dbus
+rm -f /run/dbus/pid
+dbus-daemon --system --fork
+
 cd /work
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/tmp/cloudbreak-cargo-target}"
 export FLATPAK_BUNDLE="${FLATPAK_BUNDLE:-/out/com.cloudbreak.files.flatpak}"

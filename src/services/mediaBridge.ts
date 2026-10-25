@@ -5,6 +5,7 @@
 
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import type { PhotoAdjustments, VideoConvertOptions } from '../types';
+import type { VideoProbe } from '../utils/videoSpecs';
 
 export interface PhotoRenderResult {
   imageBase64: string;
@@ -54,10 +55,22 @@ export interface FfmpegStatus {
   /** bundled | env | homebrew | path | missing */
   source: string;
   installHint: string;
+  /** Whether this ffmpeg can encode H.264. The Linux Flatpak's cannot, so MP4 and MKV are not offered. */
+  h264: boolean;
 }
 
 const FFMPEG_INSTALL_HINT =
   'Install ffmpeg with Homebrew: brew install ffmpeg. Release builds of Cloudbreak Files ship a bundled copy.';
+
+/** Real details of a video on this computer, read by ffmpeg. Null in the browser or when it cannot be read. */
+export async function probeVideo(path: string): Promise<VideoProbe | null> {
+  if (!isTauri()) return null;
+  try {
+    return await invoke<VideoProbe>('media_probe_video', { path });
+  } catch {
+    return null;
+  }
+}
 
 /** Desktop: whether ffmpeg is available for trim / convert. Browser always reports unavailable. */
 export async function getFfmpegStatus(): Promise<FfmpegStatus> {
@@ -67,6 +80,7 @@ export async function getFfmpegStatus(): Promise<FfmpegStatus> {
       path: null,
       source: 'missing',
       installHint: 'Open the desktop app to trim and convert video with ffmpeg.',
+      h264: false,
     };
   }
   try {
@@ -77,6 +91,7 @@ export async function getFfmpegStatus(): Promise<FfmpegStatus> {
       path: null,
       source: 'missing',
       installHint: FFMPEG_INSTALL_HINT,
+      h264: false,
     };
   }
 }
@@ -101,7 +116,7 @@ function mimeForFormat(format: string): string {
   switch (format) {
     case 'gif': return 'image/gif';
     case 'mp3': return 'audio/mpeg';
-    case 'aac': return 'audio/aac';
+    case 'mov': return 'video/quicktime';
     case 'wav': return 'audio/wav';
     case 'flac': return 'audio/flac';
     case 'mkv': return 'video/x-matroska';
@@ -195,6 +210,11 @@ export async function trimAndTranscode(
 }
 
 /** Delete a finished output kept in the app's temp folder (see `trimAndTranscode`). Safe to call twice. */
+/** Put bytes in the app's temp folder (for the native Save dialog, which takes a temp file). */
+export async function stageTempBytes(bytes: Uint8Array, extension: string): Promise<string> {
+  return (await invoke('media_stage_temp', { req: { dataBase64: bytesToBase64(bytes), extension } })) as string;
+}
+
 export async function discardTempOutput(path: string | null | undefined): Promise<void> {
   if (!path || !isTauri()) return;
   try {
@@ -276,7 +296,7 @@ async function trimWithMediaRecorder(
   opts: TrimTranscodeOptions,
   onProgress?: (pct: number) => void
 ): Promise<{ blobUrl: string; mimeType: string; sizeBytes: number; engine: string }> {
-  if (['mp3', 'aac', 'wav', 'flac', 'gif', 'mkv', 'avi'].includes(opts.format)) {
+  if (['mp3', 'wav', 'flac', 'gif', 'mkv', 'mov', 'avi'].includes(opts.format)) {
     throw new Error(
       `Browser mode can’t export ${opts.format}. Open the desktop app (with ffmpeg) or pick MP4.`
     );

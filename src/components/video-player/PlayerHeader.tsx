@@ -1,18 +1,21 @@
 import React from 'react';
 import { X, RefreshCw, ShieldCheck, Film, Play } from '@/src/icons';
-import { FileItem } from '../../types';
+import { FileItem, VideoMetadata } from '../../types';
+import { fpsLabel, knownText, sizeLabel } from '../../utils/videoSpecs';
 import { formatTimecode } from '../../utils/format';
 import { VideoTrimIcon } from './VideoTrimIcon';
 
 export interface PlayerHeaderProps {
   file: FileItem;
   duration: number;
+  /** The video's details as far as they are known. */
+  meta?: VideoMetadata;
   activeTab: 'player' | 'trim' | 'convert';
   setActiveTab: (tab: 'player' | 'trim' | 'convert') => void;
   onClose: () => void;
 }
 
-export const PlayerHeader: React.FC<PlayerHeaderProps> = ({ file, duration, activeTab, setActiveTab, onClose }) => (
+export const PlayerHeader: React.FC<PlayerHeaderProps> = ({ file, duration, meta, activeTab, setActiveTab, onClose }) => (
     <div className="flex items-center justify-between px-5 py-3 border-b border-neutral-800 bg-neutral-950/80">
       <div className="flex items-center gap-3">
         <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400">
@@ -25,12 +28,12 @@ export const PlayerHeader: React.FC<PlayerHeaderProps> = ({ file, duration, acti
             </h2>
             {file.encryption.isEncrypted && (
               <span className="flex items-center gap-1 text-[11px] text-cyan-400 bg-cyan-950/40 border border-cyan-800/50 px-2 py-0.5 rounded">
-                <ShieldCheck className="w-3 h-3" /> E2EE Stream
+                <ShieldCheck className="w-3 h-3" /> Encrypted file
               </span>
             )}
           </div>
           <p className="text-xs text-neutral-500">
-            {file.videoMeta?.codec || 'H.264'} · {file.videoMeta?.dimensions?.width}×{file.videoMeta?.dimensions?.height} · {file.videoMeta?.framerate} fps · {formatTimecode(duration)}
+            {[knownText(meta?.codec), sizeLabel(meta), fpsLabel(meta), formatTimecode(duration)].filter(Boolean).join(' · ')}
           </p>
         </div>
       </div>

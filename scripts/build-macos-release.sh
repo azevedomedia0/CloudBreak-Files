@@ -78,10 +78,33 @@ if [[ "$TARGET" == "universal-apple-darwin" && "$BUNDLE_FFMPEG" -eq 1 ]]; then
   fi
 fi
 
+# Embed rclone for the "Quick sign-in (no setup)" Google Drive option.
+echo "Fetching rclone sidecars…"
+if bash "$ROOT/scripts/fetch-rclone.sh"; then
+  BUNDLE_RCLONE=1
+else
+  echo "warn: rclone sidecars missing — build continues; Quick sign-in will ask users to install rclone." >&2
+  BUNDLE_RCLONE=0
+fi
+
+if [[ "$TARGET" == "universal-apple-darwin" && "$BUNDLE_RCLONE" -eq 1 ]]; then
+  for arch in x86_64 aarch64; do
+    if [[ ! -x "$ROOT/src-tauri/binaries/rclone-$arch-apple-darwin" ]]; then
+      echo "error: $arch rclone sidecar missing; universal builds need both architectures." >&2
+      exit 1
+    fi
+  done
+fi
+
+EXTERNAL_BIN=()
+[[ "$BUNDLE_FFMPEG" -eq 1 ]] && EXTERNAL_BIN+=('"binaries/ffmpeg"')
+[[ "$BUNDLE_RCLONE" -eq 1 ]] && EXTERNAL_BIN+=('"binaries/rclone"')
+
 EXTRA_CONFIG=()
-if [[ "$BUNDLE_FFMPEG" -eq 1 ]]; then
+if [[ "${#EXTERNAL_BIN[@]}" -gt 0 ]]; then
   # Only enable externalBin when the binaries exist so `tauri build` does not fail.
-  EXTRA_CONFIG+=(--config '{"bundle":{"externalBin":["binaries/ffmpeg"]}}')
+  EXTERNAL_JSON="$(IFS=,; echo "${EXTERNAL_BIN[*]}")"
+  EXTRA_CONFIG+=(--config "{\"bundle\":{\"externalBin\":[${EXTERNAL_JSON}]}}")
 fi
 
 echo "Building for ${TARGET} (MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET}, CARGO_TARGET_DIR=${CARGO_TARGET_DIR})"

@@ -46,6 +46,10 @@ pub struct LibraryRecord {
     /// Recipients may download originals (vs stream-only).
     #[serde(default = "default_true")]
     pub allow_downloads: bool,
+    /// The library's access token: the owner's own, or the one from the invite this Mac accepted.
+    /// Peers must present it to be served. None for libraries made before tokens existed.
+    #[serde(default)]
+    pub access_token: Option<String>,
 }
 
 fn default_true() -> bool {

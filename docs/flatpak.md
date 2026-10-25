@@ -34,12 +34,27 @@ npm run build:flatpak:docker
 # → dist-flatpak/com.cloudbreak.files.flatpak
 ```
 
+Set `FLATPAK_OUT_DIR` to write the bundle somewhere else, for example outside a synced folder:
+
+```bash
+FLATPAK_OUT_DIR="$HOME/CloudbreakBuilds/flatpak" npm run build:flatpak:docker
+```
+
 ## Install and run
 
 ```bash
 flatpak install --user --bundle dist-flatpak/com.cloudbreak.files.flatpak
 flatpak run com.cloudbreak.files
 ```
+
+## ffmpeg and rclone
+
+The manifest builds both into `/app/bin`, where the app looks for them next to its own binary:
+
+- **rclone** (Google Drive "Quick sign-in"): the official v1.75.2 Linux zip, pinned by SHA-256, for x86_64 and aarch64.
+- **ffmpeg** (video trim and convert): FFmpeg 7.1.1 built from source, **LGPL-only** (no `--enable-gpl` or `--enable-nonfree`; the build fails otherwise), with libmp3lame, libopus and libvpx from the Freedesktop SDK. `--enable-vaapi` builds the `h264_vaapi` encoder (libva, MIT), which encodes H.264 on the GPU through Intel or AMD VA-API drivers. There is no libx264 (GPL) and no VideoToolbox on Linux, so H.264 comes only from the GPU. **MP4 and MKV are offered only when a graphics device can encode:** the app runs a one-frame test encode on `/dev/dri` when it reads its status, and the Convert dialog hides MP4 and MKV when that fails. On a machine with no working GPU, or no VA-API driver in the Flatpak, AVI, GIF and the audio formats still work. The VA-API drivers come from the Flatpak GL and VAAPI extensions, which this build does not add; a machine's own drivers are used when they are present. The GPU path has not been run on real hardware.
+
+Both are downloaded by `flatpak-builder` while it builds, so the first build needs network access.
 
 ## Manifest permissions
 
